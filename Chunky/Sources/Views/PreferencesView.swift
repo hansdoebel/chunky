@@ -33,12 +33,6 @@ struct PreferencesView: View {
                     Label("Qdrant", systemImage: "externaldrive.connected.to.line.below")
                 }
                 .tag(2)
-
-            exportTab
-                .tabItem {
-                    Label("Export", systemImage: "square.and.arrow.up")
-                }
-                .tag(3)
         }
         .frame(width: 500, height: 420)
         .onAppear {
@@ -224,34 +218,65 @@ struct PreferencesView: View {
     private var qdrantTab: some View {
         Form {
             Section {
-                HStack {
-                    TextField(
-                        "Server URL", text: $settings.qdrantURL,
-                        prompt: Text("https://xxx.cloud.qdrant.io:6334")
-                    )
-                    .textFieldStyle(.roundedBorder)
+                TextField(
+                    "Server URL", text: $settings.qdrantURL,
+                    prompt: Text("https://xxx.cloud.qdrant.io:6334")
+                )
+                .textFieldStyle(.roundedBorder)
 
+                HStack {
+                    Text("API Key")
+                    SecureInputField(
+                        text: $settings.qdrantAPIKey, placeholder: "Enter your Qdrant API key"
+                    )
+                    .frame(height: 22)
+                }
+
+                HStack {
                     Button(action: { Task { await checkQdrant() } }) {
+                        HStack(spacing: 6) {
+                            if qdrantStatus == .checking {
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                                    .frame(width: 14, height: 14)
+                            }
+                            Text("Test Connection")
+                        }
+                    }
+                    .disabled(qdrantStatus == .checking || settings.qdrantURL.isEmpty)
+
+                    Spacer()
+
+                    HStack(spacing: 6) {
                         switch qdrantStatus {
                         case .unknown:
-                            Image(systemName: "circle")
+                            Circle()
+                                .fill(Color.secondary.opacity(0.5))
+                                .frame(width: 8, height: 8)
+                            Text("Not tested")
                                 .foregroundColor(.secondary)
                         case .checking:
-                            ProgressView()
-                                .scaleEffect(0.7)
+                            Circle()
+                                .fill(Color.orange)
+                                .frame(width: 8, height: 8)
+                            Text("Checking...")
+                                .foregroundColor(.secondary)
                         case .connected:
-                            Image(systemName: "checkmark.circle.fill")
+                            Circle()
+                                .fill(Color.green)
+                                .frame(width: 8, height: 8)
+                            Text("Connected")
                                 .foregroundColor(.green)
                         case .failed:
-                            Image(systemName: "xmark.circle.fill")
+                            Circle()
+                                .fill(Color.red)
+                                .frame(width: 8, height: 8)
+                            Text("Connection failed")
                                 .foregroundColor(.red)
                         }
                     }
-                    .buttonStyle(.plain)
+                    .font(.caption)
                 }
-
-                SecureInputField(text: $settings.qdrantAPIKey, placeholder: "Your Qdrant API key")
-                    .frame(height: 22)
             } header: {
                 Text("Connection")
             }
@@ -272,45 +297,6 @@ struct PreferencesView: View {
                 }
             } header: {
                 Text("Upload")
-            }
-        }
-        .formStyle(.grouped)
-        .padding()
-    }
-
-    private var exportTab: some View {
-        Form {
-            Section {
-                Picker("Format", selection: $settings.exportFormat) {
-                    ForEach(ExportFormat.allCases, id: \.rawValue) { format in
-                        Text(format.displayName).tag(format.rawValue)
-                    }
-                }
-            } header: {
-                Text("Export Format")
-            }
-
-            if settings.exportFormat != "none" {
-                Section {
-                    HStack {
-                        if settings.exportFolder.isEmpty {
-                            Text("No folder selected")
-                                .foregroundColor(.secondary)
-                        } else {
-                            Text(settings.exportFolder)
-                                .lineLimit(1)
-                                .truncationMode(.middle)
-                        }
-
-                        Spacer()
-
-                        Button("Choose...") {
-                            selectExportFolder()
-                        }
-                    }
-                } header: {
-                    Text("Output Folder")
-                }
             }
         }
         .formStyle(.grouped)
@@ -403,20 +389,6 @@ struct PreferencesView: View {
             }
         } catch {
             qdrantStatus = .failed
-        }
-    }
-
-    private func selectExportFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseFiles = false
-        panel.canChooseDirectories = true
-        panel.allowsMultipleSelection = false
-        panel.canCreateDirectories = true
-        panel.prompt = "Select"
-        panel.message = "Choose a folder to save exported documents"
-
-        if panel.runModal() == .OK, let url = panel.url {
-            settings.exportFolder = url.path
         }
     }
 

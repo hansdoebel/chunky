@@ -538,9 +538,33 @@ struct BottomBarView: View {
                     .frame(height: 32)
                     .opacity(0.5)
 
+                // Export format selector
+                VStack(alignment: .leading, spacing: 2) {
+                    Text("Format")
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
+                    Picker(
+                        "",
+                        selection: Binding(
+                            get: { appState.settings.exportFormat },
+                            set: { newValue in
+                                appState.settings.exportFormat = newValue
+                                appState.settings.save()
+                            }
+                        )
+                    ) {
+                        ForEach(ExportFormat.allCases, id: \.rawValue) { format in
+                            Text(format.displayName).tag(format.rawValue)
+                        }
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 100)
+                }
+
                 // Export folder with label
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("Export")
+                    Text("Folder")
                         .font(.caption2)
                         .foregroundStyle(.tertiary)
                     Button(action: selectExportFolder) {

@@ -26,13 +26,21 @@ actor QdrantService {
             FileManager.default.currentDirectoryPath + "/qdrant-up/target/release/qdrant-up",
         ]
         self.qdrantUpPath = paths.first { FileManager.default.fileExists(atPath: $0) } ?? paths[0]
-        self.qdrantURL = qdrantURL
+        self.qdrantURL = QdrantService.normalizeURL(qdrantURL)
         self.apiKey = apiKey
         self.timeout = timeout
         self.poolSize = poolSize
         self.batchSize = batchSize
         self.compression = compression
         self.dimensions = dimensions
+    }
+
+    private static func normalizeURL(_ url: String) -> String {
+        guard let parsed = URL(string: url) else { return url }
+        if parsed.port == nil {
+            return url.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + ":6334"
+        }
+        return url
     }
 
     func upload(
@@ -78,8 +86,11 @@ actor QdrantService {
             "--dimensions", String(dimensions),
         ]
 
-        print(
-            "[Qdrant] Running: \(qdrantUpPath) \(process.arguments?.joined(separator: " ") ?? "")")
+        let safeArgs =
+            process.arguments?.map { arg in
+                arg == apiKey ? "[REDACTED]" : arg
+            }.joined(separator: " ") ?? ""
+        print("[Qdrant] Running: \(qdrantUpPath) \(safeArgs)")
 
         let outputPipe = Pipe()
         let errorPipe = Pipe()
