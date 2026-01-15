@@ -1,0 +1,30 @@
+# Claude
+.claude/
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Swift/Xcode
+.build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+*.xcworkspace/xcuserdata/
+DerivedData/
+build/
+
+# macOS
+.DS_Store
+*.app
+
+# Rust
+qdrant-up/target/
+
+# Temporary files
+*.tmp
+*.log
+
+# Tests build artifacts
+Chunky/Tests/.build/
