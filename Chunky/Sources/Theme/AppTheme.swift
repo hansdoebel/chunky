@@ -10,69 +10,80 @@ enum AppTheme {
 
     /// Fallback accent when asset not available
     static var accentFallback: Color {
-        Color(light: Color(hue: 0.52, saturation: 0.45, brightness: 0.65),
-              dark: Color(hue: 0.52, saturation: 0.35, brightness: 0.80))
+        Color(
+            light: Color(hue: 0.52, saturation: 0.45, brightness: 0.65),
+            dark: Color(hue: 0.52, saturation: 0.35, brightness: 0.80))
     }
 
     // MARK: - Status Colors
 
     static var statusGreen: Color {
-        Color(light: Color(hue: 0.35, saturation: 0.65, brightness: 0.55),
-              dark: Color(hue: 0.35, saturation: 0.50, brightness: 0.70))
+        Color(
+            light: Color(hue: 0.35, saturation: 0.65, brightness: 0.55),
+            dark: Color(hue: 0.35, saturation: 0.50, brightness: 0.70))
     }
 
     static var statusRed: Color {
-        Color(light: Color(hue: 0.0, saturation: 0.65, brightness: 0.65),
-              dark: Color(hue: 0.0, saturation: 0.50, brightness: 0.75))
+        Color(
+            light: Color(hue: 0.0, saturation: 0.65, brightness: 0.65),
+            dark: Color(hue: 0.0, saturation: 0.50, brightness: 0.75))
     }
 
     static var statusOrange: Color {
-        Color(light: Color(hue: 0.08, saturation: 0.70, brightness: 0.70),
-              dark: Color(hue: 0.08, saturation: 0.55, brightness: 0.80))
+        Color(
+            light: Color(hue: 0.08, saturation: 0.70, brightness: 0.70),
+            dark: Color(hue: 0.08, saturation: 0.55, brightness: 0.80))
     }
 
     // MARK: - Surface Colors
 
     /// Elevated surface background (cards, panels)
     static var surfaceElevated: Color {
-        Color(light: .white,
-              dark: Color(white: 0.15))
+        Color(
+            light: .white,
+            dark: Color(white: 0.15))
     }
 
     /// Subtle background for grouped content
     static var surfaceGrouped: Color {
-        Color(light: Color(white: 0.97),
-              dark: Color(white: 0.10))
+        Color(
+            light: Color(white: 0.97),
+            dark: Color(white: 0.10))
     }
 
     /// Glass-like overlay background
     static var surfaceGlass: Color {
-        Color(light: Color.white.opacity(0.70),
-              dark: Color.white.opacity(0.08))
+        Color(
+            light: Color.white.opacity(0.70),
+            dark: Color.white.opacity(0.08))
     }
 
     // MARK: - Badge/Tag Colors
 
     static var badgeBackground: Color {
-        Color(light: Color.primary.opacity(0.08),
-              dark: Color.primary.opacity(0.12))
+        Color(
+            light: Color.primary.opacity(0.08),
+            dark: Color.primary.opacity(0.12))
     }
 
     static var badgeBackgroundActive: Color {
-        Color(light: accentFallback.opacity(0.15),
-              dark: accentFallback.opacity(0.25))
+        Color(
+            light: accentFallback.opacity(0.15),
+            dark: accentFallback.opacity(0.25))
     }
 
     // MARK: - Border Colors
 
     static var borderSubtle: Color {
-        Color(light: Color.primary.opacity(0.08),
-              dark: Color.primary.opacity(0.15))
+        Color(
+            light: Color.primary.opacity(0.08),
+            dark: Color.primary.opacity(0.15))
     }
 
     static var borderMedium: Color {
-        Color(light: Color.primary.opacity(0.15),
-              dark: Color.primary.opacity(0.25))
+        Color(
+            light: Color.primary.opacity(0.15),
+            dark: Color.primary.opacity(0.25))
     }
 }
 
@@ -81,14 +92,15 @@ enum AppTheme {
 extension Color {
     /// Creates a color that adapts to light/dark mode
     init(light: Color, dark: Color) {
-        self.init(nsColor: NSColor(name: nil) { appearance in
-            switch appearance.bestMatch(from: [.aqua, .darkAqua]) {
-            case .darkAqua:
-                return NSColor(dark)
-            default:
-                return NSColor(light)
-            }
-        })
+        self.init(
+            nsColor: NSColor(name: nil) { appearance in
+                switch appearance.bestMatch(from: [.aqua, .darkAqua]) {
+                case .darkAqua:
+                    return NSColor(dark)
+                default:
+                    return NSColor(light)
+                }
+            })
     }
 }
 
@@ -159,10 +171,74 @@ struct TintedButtonStyle: ButtonStyle {
         configuration.label
             .padding(.horizontal, 14)
             .padding(.vertical, 8)
-            .background(tint.opacity(configuration.isPressed ? 0.9 : 1.0), in: RoundedRectangle(cornerRadius: 8))
+            .background(
+                tint.opacity(configuration.isPressed ? 0.9 : 1.0),
+                in: RoundedRectangle(cornerRadius: 8)
+            )
             .foregroundStyle(.white)
             .opacity(isEnabled ? 1.0 : 0.5)
             .scaleEffect(configuration.isPressed ? 0.98 : 1.0)
             .animation(.easeInOut(duration: 0.15), value: configuration.isPressed)
+    }
+}
+
+// MARK: - Secure Input Field (no copy/paste)
+
+class NoCopySecureTextField: NSSecureTextField, NSMenuItemValidation {
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
+        let commandKey = event.modifierFlags.contains(.command)
+        let key = event.charactersIgnoringModifiers ?? ""
+
+        // Block Cmd+C (copy) and Cmd+X (cut) - allow paste for convenience
+        if commandKey && (key == "c" || key == "x") {
+            return true
+        }
+
+        return super.performKeyEquivalent(with: event)
+    }
+
+    func validateMenuItem(_ menuItem: NSMenuItem) -> Bool {
+        let action = menuItem.action
+        if action == #selector(NSText.copy(_:)) || action == #selector(NSText.cut(_:)) {
+            return false
+        }
+        return true
+    }
+}
+
+struct SecureInputField: NSViewRepresentable {
+    @Binding var text: String
+    var placeholder: String
+
+    func makeNSView(context: Context) -> NSSecureTextField {
+        let field = NoCopySecureTextField()
+        field.placeholderString = placeholder
+        field.delegate = context.coordinator
+        field.bezelStyle = .roundedBezel
+        field.isBordered = true
+        return field
+    }
+
+    func updateNSView(_ nsView: NSSecureTextField, context: Context) {
+        if nsView.stringValue != text {
+            nsView.stringValue = text
+        }
+    }
+
+    func makeCoordinator() -> Coordinator {
+        Coordinator(self)
+    }
+
+    class Coordinator: NSObject, NSTextFieldDelegate {
+        var parent: SecureInputField
+
+        init(_ parent: SecureInputField) {
+            self.parent = parent
+        }
+
+        func controlTextDidChange(_ obj: Notification) {
+            guard let field = obj.object as? NSTextField else { return }
+            parent.text = field.stringValue
+        }
     }
 }

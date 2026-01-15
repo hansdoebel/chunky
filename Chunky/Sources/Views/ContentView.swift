@@ -30,7 +30,6 @@ struct SidebarView: View {
                 }
                 .pickerStyle(.segmented)
                 .labelsHidden()
-                .tint(AppTheme.accentFallback)
             }
 
             Section {

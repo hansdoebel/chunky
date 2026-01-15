@@ -11,6 +11,7 @@ struct ChunkyApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .tint(AppTheme.accentFallback)
                 .onChange(of: appState.overallProgress) { _, newValue in
                     updateDockBadge(progress: newValue)
                 }
@@ -34,7 +35,9 @@ struct ChunkyApp: App {
                         appState.clearState()
                     }
                 } message: {
-                    Text("Found \(pendingResume?.jobs.count ?? 0) pending job(s) from a previous session.")
+                    Text(
+                        "Found \(pendingResume?.jobs.count ?? 0) pending job(s) from a previous session."
+                    )
                 }
         }
         .windowStyle(.automatic)

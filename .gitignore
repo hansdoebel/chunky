@@ -26,5 +26,8 @@ qdrant-up/target/
 *.tmp
 *.log
 
+# Local build script with signing identity
+build-app-local.sh
+
 # Tests build artifacts
 Chunky/Tests/.build/

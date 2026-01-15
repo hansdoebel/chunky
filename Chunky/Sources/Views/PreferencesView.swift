@@ -250,10 +250,8 @@ struct PreferencesView: View {
                     .buttonStyle(.plain)
                 }
 
-                SecureField(
-                    "API Key", text: $settings.qdrantAPIKey, prompt: Text("Your Qdrant API key")
-                )
-                .textFieldStyle(.roundedBorder)
+                SecureInputField(text: $settings.qdrantAPIKey, placeholder: "Your Qdrant API key")
+                    .frame(height: 22)
             } header: {
                 Text("Connection")
             }

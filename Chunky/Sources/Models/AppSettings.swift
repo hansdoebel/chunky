@@ -95,7 +95,7 @@ struct AppSettings: Codable {
 
     // Qdrant
     var qdrantURL: String = ""
-    var qdrantAPIKey: String = ""
+    var qdrantAPIKey: String = ""  // Stored in Keychain, not UserDefaults
     var defaultCollection: String = "documents"
     var qdrantTimeout: Int = 30
     var qdrantPoolSize: Int = 3
@@ -121,16 +121,38 @@ struct AppSettings: Codable {
         EmbeddingModelInfo.getDimensions(for: embeddingModel)
     }
 
+    private enum CodingKeys: String, CodingKey {
+        case ollamaURL, embeddingModel, embeddingBatchSize, embeddingConcurrency
+        case qdrantURL, defaultCollection, qdrantTimeout, qdrantPoolSize, qdrantBatchSize,
+            qdrantCompression
+        case doclingModel, doclingWorkers, doclingAccelerator, doclingTimeout, doclingMaxPages
+        case maxTokensPerChunk, doTableExtraction, tableMode, doOCR
+        case exportFormat, exportFolder
+        // Note: qdrantAPIKey is excluded - stored in Keychain
+    }
+
     static func load() -> AppSettings {
-        guard let data = UserDefaults.standard.data(forKey: "appSettings"),
-            let settings = try? JSONDecoder().decode(AppSettings.self, from: data)
-        else {
-            return AppSettings()
+        var settings: AppSettings
+        if let data = UserDefaults.standard.data(forKey: "appSettings"),
+            let decoded = try? JSONDecoder().decode(AppSettings.self, from: data)
+        {
+            settings = decoded
+        } else {
+            settings = AppSettings()
         }
+        // Load API key from Keychain
+        settings.qdrantAPIKey = KeychainService.load(key: "qdrantAPIKey") ?? ""
         return settings
     }
 
     func save() {
+        // Save API key to Keychain
+        if !qdrantAPIKey.isEmpty {
+            try? KeychainService.save(key: "qdrantAPIKey", value: qdrantAPIKey)
+        } else {
+            KeychainService.delete(key: "qdrantAPIKey")
+        }
+        // Save other settings to UserDefaults
         if let data = try? JSONEncoder().encode(self) {
             UserDefaults.standard.set(data, forKey: "appSettings")
         }

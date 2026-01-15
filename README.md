@@ -59,6 +59,12 @@ Or install to Applications:
 cp -r build/Chunky.app /Applications/
 ```
 
+Run with logs:
+
+```bash
+./build/Chunky.app/Contents/MacOS/Chunky
+```
+
 ## Configuration
 
 Before using Chunky, configure:
@@ -107,6 +113,36 @@ Document -> Docling (chunking) -> Ollama (embeddings) -> Qdrant (storage)
 - **Chunky/** - Swift macOS app
 - **scripts/** - Python chunker using Docling
 - **qdrant-up/** - Rust CLI for fast Qdrant uploads
+
+## Security
+
+### API Key Storage
+
+Chunky stores the Qdrant API key in the macOS Keychain, not in plain text or UserDefaults. The key is:
+
+- Stored with `kSecAttrAccessibleWhenUnlocked` - only accessible when your Mac is unlocked
+- Scoped to the Chunky app only (`com.chunky.app` service identifier)
+- Protected from copy/cut operations in the UI
+
+### Keychain Permissions
+
+During development, macOS may repeatedly prompt for Keychain access. This happens because ad-hoc signed builds get a new code signature each time, and macOS treats each build as a different app.
+
+To avoid repeated prompts, create a self-signed certificate:
+
+1. Open **Keychain Access**
+2. Menu: **Keychain Access > Certificate Assistant > Create a Certificate...**
+3. Configure:
+   - Name: `Chunky Dev`
+   - Identity Type: `Self Signed Root`
+   - Certificate Type: `Code Signing`
+4. Click **Create**
+
+Then sign builds consistently:
+
+```bash
+codesign --force --sign "Chunky Dev" .build/debug/Chunky
+```
 
 ## Documentation
 
