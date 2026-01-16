@@ -9,7 +9,11 @@ let package = Package(
     targets: [
         .testTarget(
             name: "ChunkyTests",
-            path: "."
+            path: ".",
+            exclude: ["Fixtures"],
+            resources: [
+                .copy("Fixtures")
+            ]
         )
     ]
 )

@@ -114,6 +114,56 @@ Document -> Docling (chunking) -> Ollama (embeddings) -> Qdrant (storage)
 - **scripts/** - Python chunker using Docling
 - **qdrant-up/** - Rust CLI for fast Qdrant uploads
 
+## Development
+
+### Watch Mode
+
+For automatic rebuilding during development:
+
+```bash
+brew install fswatch  # if not installed
+./watch-and-build.sh
+```
+
+This watches for Swift file changes and automatically rebuilds and restarts the app.
+
+### Testing
+
+End-to-end tests verify the full pipeline: chunking, embedding, and Qdrant upload.
+
+#### Setup
+
+1. Copy the example environment file:
+   ```bash
+   cp Chunky/Tests/.env.example Chunky/Tests/.env
+   ```
+
+2. Edit `Chunky/Tests/.env` with your credentials:
+   ```
+   OLLAMA_URL=http://localhost:11434
+   EMBEDDING_MODEL=snowflake-arctic-embed2
+   QDRANT_URL=https://your-cluster.cloud.qdrant.io
+   QDRANT_API_KEY=your-api-key
+   ```
+
+3. Place a test PDF in `Chunky/Tests/Fixtures/sample.pdf`
+
+#### Running Tests
+
+```bash
+cd Chunky/Tests
+
+# Run all e2e tests
+swift test --filter E2ETests
+
+# Run specific test
+swift test --filter testOllamaConnection
+swift test --filter testChunkingWithPython
+swift test --filter testFullPipeline
+```
+
+Tests will skip Qdrant-dependent tests if credentials are not configured.
+
 ## Security
 
 ### API Key Storage

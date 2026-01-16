@@ -30,5 +30,9 @@ qdrant-up/target/
 build-app-local.sh
 watch-and-build.sh
 
+# Environment files with secrets
+.env
+Chunky/Tests/.env
+
 # Tests build artifacts
 Chunky/Tests/.build/
