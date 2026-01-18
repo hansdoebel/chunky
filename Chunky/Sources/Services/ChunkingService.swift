@@ -8,7 +8,7 @@ actor ChunkingService {
         // Find Python: prefer venv in project root, then system python3
         let possibleVenvPaths = [
             // Relative to app bundle (when running as .app)
-            Bundle.main.bundlePath + "/../../../../.venv/bin/python3",
+            Bundle.main.bundlePath + "/../../.venv/bin/python3",
             // Common development locations
             FileManager.default.currentDirectoryPath + "/.venv/bin/python3",
             // Home directory based venv

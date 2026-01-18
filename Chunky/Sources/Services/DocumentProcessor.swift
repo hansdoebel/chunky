@@ -20,7 +20,9 @@ final class DocumentProcessor: ObservableObject {
         }
     }
 
-    func processBatch(jobs: [ProcessingJob], settings: AppSettings, cancellationCheck: () -> Bool) async {
+    func processBatch(jobs: [ProcessingJob], settings: AppSettings, cancellationCheck: () -> Bool)
+        async
+    {
         var allChunksWithJobs: [(job: ProcessingJob, chunks: [Chunk])] = []
         let chunkingService = ChunkingService()
         let chunkingOptions = ChunkingService.Options(
@@ -70,7 +72,8 @@ final class DocumentProcessor: ObservableObject {
                 job.updateProgress(progress, message: "Chunking...")
 
                 do {
-                    chunks = try await chunkingService.chunk(documentURL: job.sourceURL, options: chunkingOptions)
+                    chunks = try await chunkingService.chunk(
+                        documentURL: job.sourceURL, options: chunkingOptions)
                     job.chunksCount = chunks.count
                     job.updateProgress(progress + 0.05, message: "Chunked \(chunks.count) pieces")
                 } catch {
@@ -129,7 +132,8 @@ final class DocumentProcessor: ObservableObject {
                 await MainActor.run {
                     let progress = 0.3 + (Double(completed) / Double(total)) * 0.4
                     for (job, _) in allChunksWithJobs {
-                        job.updateProgress(progress, message: "Embedding batch \(completed)/\(total)...")
+                        job.updateProgress(
+                            progress, message: "Embedding batch \(completed)/\(total)...")
                     }
                 }
             }
@@ -148,16 +152,17 @@ final class DocumentProcessor: ObservableObject {
             job.embeddedCount = chunks.count
             for chunk in chunks {
                 let vector = allEmbeddings[embeddingIndex]
-                allChunksWithEmbeddings.append(ChunkWithEmbedding(
-                    id: chunk.id,
-                    vector: vector,
-                    payload: ChunkPayload(
-                        text: chunk.text,
-                        source: chunk.metadata.source,
-                        page: chunk.metadata.page,
-                        headings: chunk.metadata.headings
-                    )
-                ))
+                allChunksWithEmbeddings.append(
+                    ChunkWithEmbedding(
+                        id: chunk.id,
+                        vector: vector,
+                        payload: ChunkPayload(
+                            text: chunk.text,
+                            source: chunk.metadata.source,
+                            page: chunk.metadata.page,
+                            headings: chunk.metadata.headings
+                        )
+                    ))
                 embeddingIndex += 1
             }
         }
@@ -185,7 +190,8 @@ final class DocumentProcessor: ObservableObject {
                 await MainActor.run {
                     let progress = 0.7 + (Double(completed) / Double(total)) * 0.3
                     for (job, _) in allChunksWithJobs {
-                        job.updateProgress(progress, message: "Uploading batch \(completed)/\(total)...")
+                        job.updateProgress(
+                            progress, message: "Uploading batch \(completed)/\(total)...")
                     }
                 }
             }
@@ -215,7 +221,7 @@ final class DocumentProcessor: ObservableObject {
             doTableExtraction: settings.doTableExtraction,
             tableMode: settings.tableMode,
             doOCR: settings.doOCR,
-            exportFormat: "json",
+            exportFormat: settings.exportFormat,
             exportFolder: settings.exportFolder
         )
 
@@ -334,6 +340,7 @@ final class DocumentProcessor: ObservableObject {
                 apiKey: settings.qdrantAPIKey,
                 timeout: settings.qdrantTimeout,
                 poolSize: settings.qdrantPoolSize,
+                batchSize: settings.qdrantBatchSize,
                 compression: settings.qdrantCompression,
                 dimensions: dimensions
             )
@@ -344,7 +351,8 @@ final class DocumentProcessor: ObservableObject {
             ) { completed, total in
                 await MainActor.run {
                     let progress = 0.7 + (Double(completed) / Double(total)) * 0.3
-                    job.updateProgress(progress, message: "Uploading batch \(completed)/\(total)...")
+                    job.updateProgress(
+                        progress, message: "Uploading batch \(completed)/\(total)...")
                 }
             }
             return
