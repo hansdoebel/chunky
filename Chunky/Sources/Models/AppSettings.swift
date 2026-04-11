@@ -1,0 +1,299 @@
+import SwiftUI
+import Combine
+
+// MARK: - AppSettings
+
+class AppSettings: ObservableObject {
+    private let defaults = UserDefaults.standard
+    private let prefix = "chunky."
+
+    /// Ollama URL - stored in Keychain for persistence across rebuilds
+    var ollamaURL: String {
+        get {
+            KeychainService.get(key: KeychainService.ollamaURLKey) ?? "http://localhost:11434"
+        }
+        set {
+            if newValue.isEmpty {
+                KeychainService.delete(key: KeychainService.ollamaURLKey)
+            } else {
+                try? KeychainService.save(key: KeychainService.ollamaURLKey, value: newValue)
+            }
+            objectWillChange.send()
+        }
+    }
+    @Published var embeddingModel: String {
+        didSet { defaults.set(embeddingModel, forKey: prefix + "embeddingModel") }
+    }
+    @Published var embeddingDimensions: Int {
+        didSet { defaults.set(embeddingDimensions, forKey: prefix + "embeddingDimensions") }
+    }
+    @Published var embeddingBatchSize: Int {
+        didSet { defaults.set(embeddingBatchSize, forKey: prefix + "embeddingBatchSize") }
+    }
+    @Published var embeddingConcurrency: Int {
+        didSet { defaults.set(embeddingConcurrency, forKey: prefix + "embeddingConcurrency") }
+    }
+
+    /// Qdrant URL - stored in Keychain for persistence across rebuilds
+    var qdrantURL: String {
+        get {
+            KeychainService.get(key: KeychainService.qdrantURLKey) ?? "http://localhost:6334"
+        }
+        set {
+            if newValue.isEmpty {
+                KeychainService.delete(key: KeychainService.qdrantURLKey)
+            } else {
+                try? KeychainService.save(key: KeychainService.qdrantURLKey, value: newValue)
+            }
+            objectWillChange.send()
+        }
+    }
+    @Published var defaultCollection: String {
+        didSet { defaults.set(defaultCollection, forKey: prefix + "defaultCollection") }
+    }
+    @Published var qdrantBatchSize: Int {
+        didSet { defaults.set(qdrantBatchSize, forKey: prefix + "qdrantBatchSize") }
+    }
+    @Published var qdrantTimeout: Int {
+        didSet { defaults.set(qdrantTimeout, forKey: prefix + "qdrantTimeout") }
+    }
+    @Published var qdrantDistanceMetric: String {
+        didSet { defaults.set(qdrantDistanceMetric, forKey: prefix + "qdrantDistanceMetric") }
+    }
+    @Published var hybridSearch: Bool {
+        didSet { defaults.set(hybridSearch, forKey: prefix + "hybridSearch") }
+    }
+    @Published var qdrantCompression: String {
+        didSet { defaults.set(qdrantCompression, forKey: prefix + "qdrantCompression") }
+    }
+
+    // Metadata options
+    @Published var metadataIncludeFilename: Bool {
+        didSet { defaults.set(metadataIncludeFilename, forKey: prefix + "metadataIncludeFilename") }
+    }
+    @Published var metadataIncludePageNumber: Bool {
+        didSet { defaults.set(metadataIncludePageNumber, forKey: prefix + "metadataIncludePageNumber") }
+    }
+    @Published var metadataIncludeHeadings: Bool {
+        didSet { defaults.set(metadataIncludeHeadings, forKey: prefix + "metadataIncludeHeadings") }
+    }
+    @Published var metadataIncludeTimestamp: Bool {
+        didSet { defaults.set(metadataIncludeTimestamp, forKey: prefix + "metadataIncludeTimestamp") }
+    }
+    @Published var metadataIncludeDocTitle: Bool {
+        didSet { defaults.set(metadataIncludeDocTitle, forKey: prefix + "metadataIncludeDocTitle") }
+    }
+    @Published var metadataIncludeAuthors: Bool {
+        didSet { defaults.set(metadataIncludeAuthors, forKey: prefix + "metadataIncludeAuthors") }
+    }
+    @Published var metadataIncludeChunkIndex: Bool {
+        didSet { defaults.set(metadataIncludeChunkIndex, forKey: prefix + "metadataIncludeChunkIndex") }
+    }
+    @Published var metadataIncludeContentType: Bool {
+        didSet { defaults.set(metadataIncludeContentType, forKey: prefix + "metadataIncludeContentType") }
+    }
+    @Published var metadataIncludeSection: Bool {
+        didSet { defaults.set(metadataIncludeSection, forKey: prefix + "metadataIncludeSection") }
+    }
+    @Published var metadataIncludeDOI: Bool {
+        didSet { defaults.set(metadataIncludeDOI, forKey: prefix + "metadataIncludeDOI") }
+    }
+    @Published var metadataIncludeDocumentId: Bool {
+        didSet { defaults.set(metadataIncludeDocumentId, forKey: prefix + "metadataIncludeDocumentId") }
+    }
+    @Published var metadataIncludeURL: Bool {
+        didSet { defaults.set(metadataIncludeURL, forKey: prefix + "metadataIncludeURL") }
+    }
+    @Published var metadataIncludeYear: Bool {
+        didSet { defaults.set(metadataIncludeYear, forKey: prefix + "metadataIncludeYear") }
+    }
+    @Published var metadataIncludeLanguage: Bool {
+        didSet { defaults.set(metadataIncludeLanguage, forKey: prefix + "metadataIncludeLanguage") }
+    }
+
+    @Published var doTextCleanup: Bool {
+        didSet { defaults.set(doTextCleanup, forKey: prefix + "doTextCleanup") }
+    }
+
+    @Published var useDaemonMode: Bool {
+        didSet { defaults.set(useDaemonMode, forKey: prefix + "useDaemonMode") }
+    }
+    @Published var streamingPipeline: Bool {
+        didSet { defaults.set(streamingPipeline, forKey: prefix + "streamingPipeline") }
+    }
+    @Published var enableEmbeddingCache: Bool {
+        didSet { defaults.set(enableEmbeddingCache, forKey: prefix + "enableEmbeddingCache") }
+    }
+    @Published var maxParallelJobs: Int {
+        didSet { defaults.set(maxParallelJobs, forKey: prefix + "maxParallelJobs") }
+    }
+
+    @Published var doclingModel: String {
+        didSet { defaults.set(doclingModel, forKey: prefix + "doclingModel") }
+    }
+    @Published var layoutModel: String {
+        didSet { defaults.set(layoutModel, forKey: prefix + "layoutModel") }
+    }
+    @Published var doclingWorkers: Int {
+        didSet { defaults.set(doclingWorkers, forKey: prefix + "doclingWorkers") }
+    }
+    @Published var doclingAccelerator: String {
+        didSet { defaults.set(doclingAccelerator, forKey: prefix + "doclingAccelerator") }
+    }
+    @Published var doclingTimeout: Int {
+        didSet { defaults.set(doclingTimeout, forKey: prefix + "doclingTimeout") }
+    }
+    @Published var doclingMaxPages: Int {
+        didSet { defaults.set(doclingMaxPages, forKey: prefix + "doclingMaxPages") }
+    }
+    @Published var maxTokensPerChunk: Int {
+        didSet { defaults.set(maxTokensPerChunk, forKey: prefix + "maxTokensPerChunk") }
+    }
+    @Published var chunkOverlap: Int {
+        didSet { defaults.set(chunkOverlap, forKey: prefix + "chunkOverlap") }
+    }
+    @Published var chunkMergePeers: Bool {
+        didSet { defaults.set(chunkMergePeers, forKey: prefix + "chunkMergePeers") }
+    }
+    @Published var chunkTokenizer: String {
+        didSet { defaults.set(chunkTokenizer, forKey: prefix + "chunkTokenizer") }
+    }
+    @Published var doTableExtraction: Bool {
+        didSet { defaults.set(doTableExtraction, forKey: prefix + "doTableExtraction") }
+    }
+    @Published var tableMode: String {
+        didSet { defaults.set(tableMode, forKey: prefix + "tableMode") }
+    }
+    @Published var doOCR: Bool {
+        didSet { defaults.set(doOCR, forKey: prefix + "doOCR") }
+    }
+    @Published var ocrLanguage: String {
+        didSet { defaults.set(ocrLanguage, forKey: prefix + "ocrLanguage") }
+    }
+
+    // Docling enrichment options
+    @Published var imageExportMode: String {
+        didSet { defaults.set(imageExportMode, forKey: prefix + "imageExportMode") }
+    }
+    @Published var doFormulaEnrichment: Bool {
+        didSet { defaults.set(doFormulaEnrichment, forKey: prefix + "doFormulaEnrichment") }
+    }
+    @Published var doCodeEnrichment: Bool {
+        didSet { defaults.set(doCodeEnrichment, forKey: prefix + "doCodeEnrichment") }
+    }
+    @Published var doChartExtraction: Bool {
+        didSet { defaults.set(doChartExtraction, forKey: prefix + "doChartExtraction") }
+    }
+    @Published var doPictureDescription: Bool {
+        didSet { defaults.set(doPictureDescription, forKey: prefix + "doPictureDescription") }
+    }
+    @Published var doPictureClassification: Bool {
+        didSet { defaults.set(doPictureClassification, forKey: prefix + "doPictureClassification") }
+    }
+
+    @Published var doStructuredExtraction: Bool {
+        didSet { defaults.set(doStructuredExtraction, forKey: prefix + "doStructuredExtraction") }
+    }
+    @Published var extractionSchemaPath: String {
+        didSet { defaults.set(extractionSchemaPath, forKey: prefix + "extractionSchemaPath") }
+    }
+
+    @Published var exportFolder: String {
+        didSet { defaults.set(exportFolder, forKey: prefix + "exportFolder") }
+    }
+    @Published var exportFormat: String {
+        didSet { defaults.set(exportFormat, forKey: prefix + "exportFormat") }
+    }
+
+    /// Qdrant API Key - stored in Keychain, not in UserDefaults
+    var qdrantAPIKey: String {
+        get {
+            KeychainService.get(key: KeychainService.qdrantAPIKeyKey) ?? ""
+        }
+        set {
+            if newValue.isEmpty {
+                KeychainService.delete(key: KeychainService.qdrantAPIKeyKey)
+            } else {
+                try? KeychainService.save(key: KeychainService.qdrantAPIKeyKey, value: newValue)
+            }
+            objectWillChange.send()
+        }
+    }
+
+    init() {
+        // Load saved values or use defaults
+        // Note: ollamaURL and qdrantURL are stored in Keychain (computed properties)
+        self.embeddingModel = defaults.string(forKey: prefix + "embeddingModel") ?? "qwen3-embedding"
+        self.embeddingDimensions = defaults.object(forKey: prefix + "embeddingDimensions") as? Int ?? 1024
+        self.embeddingBatchSize = defaults.object(forKey: prefix + "embeddingBatchSize") as? Int ?? 32
+        self.embeddingConcurrency = defaults.object(forKey: prefix + "embeddingConcurrency") as? Int ?? 4
+
+        self.defaultCollection = defaults.string(forKey: prefix + "defaultCollection") ?? "documents"
+        self.qdrantBatchSize = defaults.object(forKey: prefix + "qdrantBatchSize") as? Int ?? 250
+        self.qdrantTimeout = defaults.object(forKey: prefix + "qdrantTimeout") as? Int ?? 30
+        self.qdrantDistanceMetric = defaults.string(forKey: prefix + "qdrantDistanceMetric") ?? DistanceMetric.cosine.rawValue
+        self.hybridSearch = defaults.object(forKey: prefix + "hybridSearch") as? Bool ?? false
+        self.qdrantCompression = defaults.string(forKey: prefix + "qdrantCompression") ?? Compression.none.rawValue
+
+        // Metadata options - all enabled by default
+        self.metadataIncludeFilename = defaults.object(forKey: prefix + "metadataIncludeFilename") as? Bool ?? true
+        self.metadataIncludePageNumber = defaults.object(forKey: prefix + "metadataIncludePageNumber") as? Bool ?? true
+        self.metadataIncludeHeadings = defaults.object(forKey: prefix + "metadataIncludeHeadings") as? Bool ?? true
+        self.metadataIncludeTimestamp = defaults.object(forKey: prefix + "metadataIncludeTimestamp") as? Bool ?? true
+        self.metadataIncludeDocTitle = defaults.object(forKey: prefix + "metadataIncludeDocTitle") as? Bool ?? true
+        self.metadataIncludeAuthors = defaults.object(forKey: prefix + "metadataIncludeAuthors") as? Bool ?? true
+        self.metadataIncludeChunkIndex = defaults.object(forKey: prefix + "metadataIncludeChunkIndex") as? Bool ?? true
+        self.metadataIncludeContentType = defaults.object(forKey: prefix + "metadataIncludeContentType") as? Bool ?? true
+        self.metadataIncludeSection = defaults.object(forKey: prefix + "metadataIncludeSection") as? Bool ?? true
+        self.metadataIncludeDOI = defaults.object(forKey: prefix + "metadataIncludeDOI") as? Bool ?? true
+        self.metadataIncludeDocumentId = defaults.object(forKey: prefix + "metadataIncludeDocumentId") as? Bool ?? true
+        self.metadataIncludeURL = defaults.object(forKey: prefix + "metadataIncludeURL") as? Bool ?? true
+        self.metadataIncludeYear = defaults.object(forKey: prefix + "metadataIncludeYear") as? Bool ?? true
+        self.metadataIncludeLanguage = defaults.object(forKey: prefix + "metadataIncludeLanguage") as? Bool ?? true
+
+        self.doclingModel = defaults.string(forKey: prefix + "doclingModel") ?? DoclingModel.graniteDoclingMLX.rawValue
+        self.layoutModel = defaults.string(forKey: prefix + "layoutModel") ?? LayoutModel.standard.rawValue
+        self.doclingWorkers = defaults.object(forKey: prefix + "doclingWorkers") as? Int ?? 2
+        self.doclingAccelerator = defaults.string(forKey: prefix + "doclingAccelerator") ?? Accelerator.cpu.rawValue
+        self.doclingTimeout = defaults.object(forKey: prefix + "doclingTimeout") as? Int ?? 120
+        self.doclingMaxPages = defaults.object(forKey: prefix + "doclingMaxPages") as? Int ?? 0
+        self.maxTokensPerChunk = defaults.object(forKey: prefix + "maxTokensPerChunk") as? Int ?? 512
+        self.chunkOverlap = defaults.object(forKey: prefix + "chunkOverlap") as? Int ?? 64
+        self.chunkMergePeers = defaults.object(forKey: prefix + "chunkMergePeers") as? Bool ?? true
+        self.chunkTokenizer = defaults.string(forKey: prefix + "chunkTokenizer") ?? ""
+        self.doTableExtraction = defaults.object(forKey: prefix + "doTableExtraction") as? Bool ?? true
+        self.tableMode = defaults.string(forKey: prefix + "tableMode") ?? TableMode.accurate.rawValue
+        self.doOCR = defaults.object(forKey: prefix + "doOCR") as? Bool ?? false
+        self.ocrLanguage = defaults.string(forKey: prefix + "ocrLanguage") ?? OCRLanguage.german.rawValue
+
+        // Docling enrichment options
+        self.imageExportMode = defaults.string(forKey: prefix + "imageExportMode") ?? ImageExportMode.embedded.rawValue
+        self.doFormulaEnrichment = defaults.object(forKey: prefix + "doFormulaEnrichment") as? Bool ?? false
+        self.doCodeEnrichment = defaults.object(forKey: prefix + "doCodeEnrichment") as? Bool ?? false
+        self.doChartExtraction = defaults.object(forKey: prefix + "doChartExtraction") as? Bool ?? false
+        self.doPictureDescription = defaults.object(forKey: prefix + "doPictureDescription") as? Bool ?? false
+        self.doPictureClassification = defaults.object(forKey: prefix + "doPictureClassification") as? Bool ?? false
+
+        self.doStructuredExtraction = defaults.object(forKey: prefix + "doStructuredExtraction") as? Bool ?? false
+        self.extractionSchemaPath = defaults.string(forKey: prefix + "extractionSchemaPath") ?? ""
+
+        self.doTextCleanup = defaults.object(forKey: prefix + "doTextCleanup") as? Bool ?? false
+
+        self.useDaemonMode = defaults.object(forKey: prefix + "useDaemonMode") as? Bool ?? true
+        self.streamingPipeline = defaults.object(forKey: prefix + "streamingPipeline") as? Bool ?? true
+        self.enableEmbeddingCache = defaults.object(forKey: prefix + "enableEmbeddingCache") as? Bool ?? true
+        self.maxParallelJobs = defaults.object(forKey: prefix + "maxParallelJobs") as? Int ?? 2
+
+        self.exportFolder = defaults.string(forKey: prefix + "exportFolder")
+            ?? FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path
+            ?? ""
+        // Migrate old docling_images format to docling, default to markdown
+        let savedFormat = defaults.string(forKey: prefix + "exportFormat") ?? ExportFormat.docling.rawValue
+        self.exportFormat = savedFormat == "docling_images" ? ExportFormat.docling.rawValue : savedFormat
+    }
+
+    func save() {
+        // Settings are now auto-saved via didSet, but this can force a sync
+        defaults.synchronize()
+    }
+}

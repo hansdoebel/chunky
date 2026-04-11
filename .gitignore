@@ -1,0 +1,55 @@
+# Xcode
+*.xcuserstate
+xcuserdata/
+DerivedData/
+*.xcscmblueprint
+*.xccheckout
+
+# Swift Package Manager
+.build/
+.swiftpm/
+Package.resolved
+Packages/
+SourcePackages/
+
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Thumbnails
+Thumbs.db
+
+# Environment files with secrets
+.env
+*.env.local
+
+# Build artifacts
+build/
+*.o
+*.swiftmodule
+*.dSYM/
+
+# Local packages build artifacts (qdrant-swift, etc.)
+LocalPackages/*/.build/
+LocalPackages/*/.swiftpm/
+
+# Python virtual environments
+.venv/
+venv/
+*.pyc
+__pycache__/
+
+# IDE
+.idea/
+*.swp
+*.swo
+*~
+
+# Node
+node_modules/
+dist/
+
+# Claude
+.claude/

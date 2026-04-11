@@ -1,0 +1,653 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 77;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		3A062E3F2F2C0E87003CDEAF /* Chunky.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3A062E3E2F2C0E87003CDEAF /* Chunky.icon */; };
+		3A53CED72F2F77B300CAD968 /* QdrantCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CED62F2F77B300CAD968 /* QdrantCore */; };
+		3A53CED92F2F77B300CAD968 /* QdrantGRPC in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CED82F2F77B300CAD968 /* QdrantGRPC */; };
+		3A53CEDB2F2F77B300CAD968 /* QdrantREST in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CEDA2F2F77B300CAD968 /* QdrantREST */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		3A062E202F2C0D28003CDEAF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3A062E0A2F2C0D27003CDEAF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3A062E112F2C0D27003CDEAF;
+			remoteInfo = Chunky;
+		};
+		3A062E2A2F2C0D28003CDEAF /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 3A062E0A2F2C0D27003CDEAF /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 3A062E112F2C0D27003CDEAF;
+			remoteInfo = Chunky;
+		};
+/* End PBXContainerItemProxy section */
+
+/* Begin PBXFileReference section */
+		3A062E122F2C0D27003CDEAF /* Chunky.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Chunky.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A062E1F2F2C0D28003CDEAF /* ChunkyTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChunkyTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A062E292F2C0D28003CDEAF /* ChunkyUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = ChunkyUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
+		3A062E3E2F2C0E87003CDEAF /* Chunky.icon */ = {isa = PBXFileReference; lastKnownFileType = folder.iconcomposer.icon; path = Chunky.icon; sourceTree = "<group>"; };
+		3AA378472F2C54F70031280D /* .env */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = .env; sourceTree = "<group>"; };
+		3AA378492F2C56060031280D /* .env.example */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = .env.example; sourceTree = "<group>"; };
+		3AA3784B2F2C56740031280D /* Bildschirmfoto 2026-01-29 um 18.34.21.png */ = {isa = PBXFileReference; lastKnownFileType = image.png; path = "Bildschirmfoto 2026-01-29 um 18.34.21.png"; sourceTree = "<group>"; };
+		3AA3784C2F2C56740031280D /* sample.pdf */ = {isa = PBXFileReference; lastKnownFileType = image.pdf; path = sample.pdf; sourceTree = "<group>"; };
+		3AA3784D2F2C56740031280D /* sample_chunks.json */ = {isa = PBXFileReference; lastKnownFileType = text.json; path = sample_chunks.json; sourceTree = "<group>"; };
+		3AA3784E2F2C56740031280D /* screenshot.webp */ = {isa = PBXFileReference; lastKnownFileType = file; path = screenshot.webp; sourceTree = "<group>"; };
+/* End PBXFileReference section */
+
+/* Begin PBXFileSystemSynchronizedRootGroup section */
+		3A062E142F2C0D27003CDEAF /* Chunky */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = Chunky;
+			sourceTree = "<group>";
+		};
+		3A062E222F2C0D28003CDEAF /* ChunkyTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ChunkyTests;
+			sourceTree = "<group>";
+		};
+		3A062E2C2F2C0D28003CDEAF /* ChunkyUITests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = ChunkyUITests;
+			sourceTree = "<group>";
+		};
+/* End PBXFileSystemSynchronizedRootGroup section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		3A062E0F2F2C0D27003CDEAF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A53CED92F2F77B300CAD968 /* QdrantGRPC in Frameworks */,
+				3A53CEDB2F2F77B300CAD968 /* QdrantREST in Frameworks */,
+				3A53CED72F2F77B300CAD968 /* QdrantCore in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A062E1C2F2C0D28003CDEAF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A062E262F2C0D28003CDEAF /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		3A062E092F2C0D27003CDEAF = {
+			isa = PBXGroup;
+			children = (
+				3AA378472F2C54F70031280D /* .env */,
+				3AA378492F2C56060031280D /* .env.example */,
+				3A062E142F2C0D27003CDEAF /* Chunky */,
+				3A062E222F2C0D28003CDEAF /* ChunkyTests */,
+				3A062E2C2F2C0D28003CDEAF /* ChunkyUITests */,
+				3A062E132F2C0D27003CDEAF /* Products */,
+				3A062E3E2F2C0E87003CDEAF /* Chunky.icon */,
+				3AA3784F2F2C56740031280D /* assets */,
+				3A53CE422F2F702000CAD968 /* Frameworks */,
+			);
+			sourceTree = "<group>";
+		};
+		3A062E132F2C0D27003CDEAF /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				3A062E122F2C0D27003CDEAF /* Chunky.app */,
+				3A062E1F2F2C0D28003CDEAF /* ChunkyTests.xctest */,
+				3A062E292F2C0D28003CDEAF /* ChunkyUITests.xctest */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+		3A53CE422F2F702000CAD968 /* Frameworks */ = {
+			isa = PBXGroup;
+			children = (
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		3AA3784F2F2C56740031280D /* assets */ = {
+			isa = PBXGroup;
+			children = (
+				3AA3784B2F2C56740031280D /* Bildschirmfoto 2026-01-29 um 18.34.21.png */,
+				3AA3784C2F2C56740031280D /* sample.pdf */,
+				3AA3784D2F2C56740031280D /* sample_chunks.json */,
+				3AA3784E2F2C56740031280D /* screenshot.webp */,
+			);
+			path = assets;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		3A062E112F2C0D27003CDEAF /* Chunky */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3A062E332F2C0D28003CDEAF /* Build configuration list for PBXNativeTarget "Chunky" */;
+			buildPhases = (
+				3A062E0E2F2C0D27003CDEAF /* Sources */,
+				3A062E0F2F2C0D27003CDEAF /* Frameworks */,
+				3A062E102F2C0D27003CDEAF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			fileSystemSynchronizedGroups = (
+				3A062E142F2C0D27003CDEAF /* Chunky */,
+			);
+			name = Chunky;
+			packageProductDependencies = (
+				3A53CED62F2F77B300CAD968 /* QdrantCore */,
+				3A53CED82F2F77B300CAD968 /* QdrantGRPC */,
+				3A53CEDA2F2F77B300CAD968 /* QdrantREST */,
+			);
+			productName = Chunky;
+			productReference = 3A062E122F2C0D27003CDEAF /* Chunky.app */;
+			productType = "com.apple.product-type.application";
+		};
+		3A062E1E2F2C0D28003CDEAF /* ChunkyTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3A062E362F2C0D28003CDEAF /* Build configuration list for PBXNativeTarget "ChunkyTests" */;
+			buildPhases = (
+				3A062E1B2F2C0D28003CDEAF /* Sources */,
+				3A062E1C2F2C0D28003CDEAF /* Frameworks */,
+				3A062E1D2F2C0D28003CDEAF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3A062E212F2C0D28003CDEAF /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3A062E222F2C0D28003CDEAF /* ChunkyTests */,
+			);
+			name = ChunkyTests;
+			packageProductDependencies = (
+			);
+			productName = ChunkyTests;
+			productReference = 3A062E1F2F2C0D28003CDEAF /* ChunkyTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
+		};
+		3A062E282F2C0D28003CDEAF /* ChunkyUITests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 3A062E392F2C0D28003CDEAF /* Build configuration list for PBXNativeTarget "ChunkyUITests" */;
+			buildPhases = (
+				3A062E252F2C0D28003CDEAF /* Sources */,
+				3A062E262F2C0D28003CDEAF /* Frameworks */,
+				3A062E272F2C0D28003CDEAF /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				3A062E2B2F2C0D28003CDEAF /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				3A062E2C2F2C0D28003CDEAF /* ChunkyUITests */,
+			);
+			name = ChunkyUITests;
+			packageProductDependencies = (
+			);
+			productName = ChunkyUITests;
+			productReference = 3A062E292F2C0D28003CDEAF /* ChunkyUITests.xctest */;
+			productType = "com.apple.product-type.bundle.ui-testing";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		3A062E0A2F2C0D27003CDEAF /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastSwiftUpdateCheck = 2620;
+				LastUpgradeCheck = 2620;
+				TargetAttributes = {
+					3A062E112F2C0D27003CDEAF = {
+						CreatedOnToolsVersion = 26.2;
+					};
+					3A062E1E2F2C0D28003CDEAF = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 3A062E112F2C0D27003CDEAF;
+					};
+					3A062E282F2C0D28003CDEAF = {
+						CreatedOnToolsVersion = 26.2;
+						TestTargetID = 3A062E112F2C0D27003CDEAF;
+					};
+				};
+			};
+			buildConfigurationList = 3A062E0D2F2C0D27003CDEAF /* Build configuration list for PBXProject "Chunky" */;
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 3A062E092F2C0D27003CDEAF;
+			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				3A53CED52F2F77B300CAD968 /* XCLocalSwiftPackageReference "LocalPackages/qdrant-swift" */,
+			);
+			preferredProjectObjectVersion = 77;
+			productRefGroup = 3A062E132F2C0D27003CDEAF /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				3A062E112F2C0D27003CDEAF /* Chunky */,
+				3A062E1E2F2C0D28003CDEAF /* ChunkyTests */,
+				3A062E282F2C0D28003CDEAF /* ChunkyUITests */,
+			);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		3A062E102F2C0D27003CDEAF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				3A062E3F2F2C0E87003CDEAF /* Chunky.icon in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A062E1D2F2C0D28003CDEAF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A062E272F2C0D28003CDEAF /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		3A062E0E2F2C0D27003CDEAF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A062E1B2F2C0D28003CDEAF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		3A062E252F2C0D28003CDEAF /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin PBXTargetDependency section */
+		3A062E212F2C0D28003CDEAF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3A062E112F2C0D27003CDEAF /* Chunky */;
+			targetProxy = 3A062E202F2C0D28003CDEAF /* PBXContainerItemProxy */;
+		};
+		3A062E2B2F2C0D28003CDEAF /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = 3A062E112F2C0D27003CDEAF /* Chunky */;
+			targetProxy = 3A062E2A2F2C0D28003CDEAF /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
+
+/* Begin XCBuildConfiguration section */
+		3A062E312F2C0D28003CDEAF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_TESTABILITY = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_DYNAMIC_NO_PIC = NO;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				GCC_PREPROCESSOR_DEFINITIONS = (
+					"DEBUG=1",
+					"$(inherited)",
+				);
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MTL_ENABLE_DEBUG_INFO = INCLUDE_SOURCE;
+				MTL_FAST_MATH = YES;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = macosx;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+			};
+			name = Debug;
+		};
+		3A062E322F2C0D28003CDEAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				ASSETCATALOG_COMPILER_GENERATE_SWIFT_ASSET_SYMBOL_EXTENSIONS = YES;
+				CLANG_ANALYZER_NONNULL = YES;
+				CLANG_ANALYZER_NUMBER_OBJECT_CONVERSION = YES_AGGRESSIVE;
+				CLANG_CXX_LANGUAGE_STANDARD = "gnu++20";
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				CLANG_ENABLE_OBJC_WEAK = YES;
+				CLANG_WARN_BLOCK_CAPTURE_AUTORELEASING = YES;
+				CLANG_WARN_BOOL_CONVERSION = YES;
+				CLANG_WARN_COMMA = YES;
+				CLANG_WARN_CONSTANT_CONVERSION = YES;
+				CLANG_WARN_DEPRECATED_OBJC_IMPLEMENTATIONS = YES;
+				CLANG_WARN_DIRECT_OBJC_ISA_USAGE = YES_ERROR;
+				CLANG_WARN_DOCUMENTATION_COMMENTS = YES;
+				CLANG_WARN_EMPTY_BODY = YES;
+				CLANG_WARN_ENUM_CONVERSION = YES;
+				CLANG_WARN_INFINITE_RECURSION = YES;
+				CLANG_WARN_INT_CONVERSION = YES;
+				CLANG_WARN_NON_LITERAL_NULL_CONVERSION = YES;
+				CLANG_WARN_OBJC_IMPLICIT_RETAIN_SELF = YES;
+				CLANG_WARN_OBJC_LITERAL_CONVERSION = YES;
+				CLANG_WARN_OBJC_ROOT_CLASS = YES_ERROR;
+				CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER = YES;
+				CLANG_WARN_RANGE_LOOP_ANALYSIS = YES;
+				CLANG_WARN_STRICT_PROTOTYPES = YES;
+				CLANG_WARN_SUSPICIOUS_MOVE = YES;
+				CLANG_WARN_UNGUARDED_AVAILABILITY = YES_AGGRESSIVE;
+				CLANG_WARN_UNREACHABLE_CODE = YES;
+				CLANG_WARN__DUPLICATE_METHOD_MATCH = YES;
+				COPY_PHASE_STRIP = NO;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				ENABLE_NS_ASSERTIONS = NO;
+				ENABLE_STRICT_OBJC_MSGSEND = YES;
+				ENABLE_USER_SCRIPT_SANDBOXING = YES;
+				GCC_C_LANGUAGE_STANDARD = gnu17;
+				GCC_NO_COMMON_BLOCKS = YES;
+				GCC_WARN_64_TO_32_BIT_CONVERSION = YES;
+				GCC_WARN_ABOUT_RETURN_TYPE = YES_ERROR;
+				GCC_WARN_UNDECLARED_SELECTOR = YES;
+				GCC_WARN_UNINITIALIZED_AUTOS = YES_AGGRESSIVE;
+				GCC_WARN_UNUSED_FUNCTION = YES;
+				GCC_WARN_UNUSED_VARIABLE = YES;
+				LOCALIZATION_PREFERS_STRING_CATALOGS = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MTL_ENABLE_DEBUG_INFO = NO;
+				MTL_FAST_MATH = YES;
+				SDKROOT = macosx;
+				SWIFT_COMPILATION_MODE = wholemodule;
+			};
+			name = Release;
+		};
+		3A062E342F2C0D28003CDEAF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = Chunky;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Chunky/Chunky.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Chunky/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chunkyapp.Chunky;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		3A062E352F2C0D28003CDEAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = Chunky;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Chunky/Chunky.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				COMBINE_HIDPI_IMAGES = YES;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				ENABLE_APP_SANDBOX = NO;
+				ENABLE_HARDENED_RUNTIME = YES;
+				ENABLE_PREVIEWS = YES;
+				ENABLE_USER_SELECTED_FILES = readonly;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = Chunky/Info.plist;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.utilities";
+				INFOPLIST_KEY_NSHumanReadableCopyright = "";
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/../Frameworks",
+				);
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chunkyapp.Chunky;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				REGISTER_APP_GROUPS = YES;
+				STRING_CATALOG_GENERATE_SYMBOLS = YES;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_DEFAULT_ACTOR_ISOLATION = MainActor;
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		3A062E372F2C0D28003CDEAF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chunkyapp.ChunkyTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chunky.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Chunky";
+			};
+			name = Debug;
+		};
+		3A062E382F2C0D28003CDEAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				GENERATE_INFOPLIST_FILE = YES;
+				MACOSX_DEPLOYMENT_TARGET = 26.2;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chunkyapp.ChunkyTests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Chunky.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Chunky";
+			};
+			name = Release;
+		};
+		3A062E3A2F2C0D28003CDEAF /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chunkyapp.ChunkyUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Chunky;
+			};
+			name = Debug;
+		};
+		3A062E3B2F2C0D28003CDEAF /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = S5TNLVN9A8;
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.chunkyapp.ChunkyUITests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				STRING_CATALOG_GENERATE_SYMBOLS = NO;
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_EMIT_LOC_STRINGS = NO;
+				SWIFT_UPCOMING_FEATURE_MEMBER_IMPORT_VISIBILITY = YES;
+				SWIFT_VERSION = 5.0;
+				TEST_TARGET_NAME = Chunky;
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		3A062E0D2F2C0D27003CDEAF /* Build configuration list for PBXProject "Chunky" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3A062E312F2C0D28003CDEAF /* Debug */,
+				3A062E322F2C0D28003CDEAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3A062E332F2C0D28003CDEAF /* Build configuration list for PBXNativeTarget "Chunky" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3A062E342F2C0D28003CDEAF /* Debug */,
+				3A062E352F2C0D28003CDEAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3A062E362F2C0D28003CDEAF /* Build configuration list for PBXNativeTarget "ChunkyTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3A062E372F2C0D28003CDEAF /* Debug */,
+				3A062E382F2C0D28003CDEAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		3A062E392F2C0D28003CDEAF /* Build configuration list for PBXNativeTarget "ChunkyUITests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				3A062E3A2F2C0D28003CDEAF /* Debug */,
+				3A062E3B2F2C0D28003CDEAF /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		3A53CED52F2F77B300CAD968 /* XCLocalSwiftPackageReference "LocalPackages/qdrant-swift" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "LocalPackages/qdrant-swift";
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		3A53CED62F2F77B300CAD968 /* QdrantCore */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QdrantCore;
+		};
+		3A53CED82F2F77B300CAD968 /* QdrantGRPC */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QdrantGRPC;
+		};
+		3A53CEDA2F2F77B300CAD968 /* QdrantREST */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = QdrantREST;
+		};
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = 3A062E0A2F2C0D27003CDEAF /* Project object */;
+}

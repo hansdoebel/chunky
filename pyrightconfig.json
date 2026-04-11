@@ -1,0 +1,9 @@
+{
+  "venvPath": ".",
+  "venv": ".chunky-venv",
+  "pythonVersion": "3.14",
+  "include": ["Chunky/Resources/Scripts"],
+  "typeCheckingMode": "basic",
+  "reportPrivateImportUsage": false,
+  "reportMissingTypeArgument": false
+}
