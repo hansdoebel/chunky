@@ -15,6 +15,7 @@ dependencies = [
   "python-multipart==0.0.33",
   "pydantic==2.14.3",
   "qdrant-client==1.20.0",
+  "pypdf==6.4.2",
 ]
 
 [project.optional-dependencies]
