@@ -65,6 +65,20 @@ struct CitationExportTests {
         #expect(!CitationExport.biblatex([source]).contains("pages ="))
     }
 
+    @Test func newlineSeparatedPrintedLabelsBecomeARange() {
+        let source = CitationSource(hit: RetrievalHit(
+            id: "p",
+            score: 1,
+            text: "Later",
+            source: "paper.pdf",
+            page: 4,
+            headings: [],
+            payload: ["doc_title": "Paper", "cite_key": "ada2020", "page_labels": "12\n14"]
+        ))
+        #expect(source.pageLabels == ["12", "14"])
+        #expect(CitationExport.typstCites([source]) == "#cite(<ada2020>, supplement: [S. 12–14])")
+    }
+
     @Test func singlePrintedLabelBeatsThePdfIndex() {
         let source = CitationSource(hit: RetrievalHit(
             id: "p3",

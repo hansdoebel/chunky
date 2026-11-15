@@ -1384,7 +1384,11 @@ extension RetrievalHit {
             return list.compactMap { stringValue($0) }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         }
         if let text = value as? String {
-            return text.components(separatedBy: " > ").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            return text
+                .components(separatedBy: "\n")
+                .flatMap { $0.components(separatedBy: " > ") }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
         }
         return []
     }
