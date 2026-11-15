@@ -1,5 +1,27 @@
 import SwiftUI
 
+struct FlowCitationRow: View {
+    var citations: [RAGCitation]
+    var onSelect: (RAGCitation) -> Void
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ForEach(citations) { citation in
+                Button(action: { onSelect(citation) }) {
+                    Text(chip(citation))
+                        .font(.caption)
+                }
+                .buttonStyle(.bordered)
+            }
+        }
+    }
+
+    private func chip(_ citation: RAGCitation) -> String {
+        let page = citation.page.map { " p.\($0)" } ?? ""
+        return "\(citation.marker) \(citation.source)\(page) \(String(format: "%.3f", citation.score)) \(citation.id)"
+    }
+}
+
 struct RetrievalPlayground: View {
     @Binding var query: String
     @Binding var collection: String
@@ -25,6 +47,13 @@ struct RetrievalPlayground: View {
     var isSearching: Bool
     var scrolls: Bool
     var onSearch: () -> Void
+    @Binding var generationModel: String
+    var answer: String
+    var citations: [RAGCitation]
+    var selectedHitID: String?
+    var isAnswering: Bool
+    var onAsk: () -> Void
+    var onSelectCitation: (RAGCitation) -> Void
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -115,6 +144,16 @@ struct RetrievalPlayground: View {
             }
             .buttonStyle(.borderedProminent)
             .disabled(isSearching || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            TextField("Generation model", text: $generationModel, prompt: Text("qwen3"))
+                .textFieldStyle(.roundedBorder)
+            Button(action: onAsk) {
+                Text(isAnswering ? "Answering…" : "Ask")
+                    .frame(maxWidth: .infinity)
+            }
+            .disabled(isAnswering || isSearching || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || generationModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            Text("Ask uses these retrieval settings and an OpenAI-compatible chat endpoint.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
             Spacer(minLength: 0)
         }
         .padding(16)
@@ -144,7 +183,10 @@ struct RetrievalPlayground: View {
                         .foregroundStyle(AppTheme.statusRed)
                         .fixedSize(horizontal: false, vertical: true)
                 }
-                if hits.isEmpty && error == nil {
+                if !answer.isEmpty || isAnswering {
+                    answerBlock
+                }
+                if hits.isEmpty && error == nil && answer.isEmpty {
                     Text("Run a dense query to see scores, text, source, page, headings, and payload.")
                         .foregroundStyle(.secondary)
                 }
@@ -155,6 +197,21 @@ struct RetrievalPlayground: View {
             .padding(16)
             .frame(maxWidth: .infinity, alignment: .leading)
         }
+    }
+
+    private var answerBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(isAnswering && answer.isEmpty ? "Answering…" : answer)
+                .font(.body)
+                .fixedSize(horizontal: false, vertical: true)
+                .textSelection(.enabled)
+            if !citations.isEmpty {
+                FlowCitationRow(citations: citations, onSelect: onSelectCitation)
+            }
+        }
+        .padding(10)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(AppTheme.accentFallback.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private func hitCard(_ hit: RetrievalHit) -> some View {
@@ -190,6 +247,10 @@ struct RetrievalPlayground: View {
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(AppTheme.surfaceElevated, in: RoundedRectangle(cornerRadius: 8))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8)
+                .stroke(hit.id == selectedHitID ? AppTheme.accentFallback : Color.clear, lineWidth: 2)
+        )
     }
 
     private func payloadLine(_ payload: [String: String]) -> String {
@@ -231,10 +292,29 @@ struct RetrievalScreen: View {
     @State private var statusLine = RetrievalScreen.idleStatus
     @State private var isSearching = false
     @State private var prepared = false
+    @State private var generationModel = ""
+    @State private var answer = ""
+    @State private var citations: [RAGCitation] = []
+    @State private var selectedHitID: String?
+    @State private var isAnswering = false
     private let service: RetrievalService
+    private let chatFactory: (String, String, String) -> any RAGChatStreaming
 
-    init(service: RetrievalService = RetrievalService()) {
+    init(
+        service: RetrievalService = RetrievalService(),
+        chatFactory: @escaping (String, String, String) -> any RAGChatStreaming = { model, endpoint, apiKey in
+            OpenAIRAGChat(
+                client: OpenAICompatibleChatClient(
+                    baseURL: endpoint,
+                    model: model,
+                    apiKey: apiKey,
+                    http: URLSessionChatHTTP()
+                )
+            )
+        }
+    ) {
         self.service = service
+        self.chatFactory = chatFactory
     }
 
     var body: some View {
@@ -262,7 +342,14 @@ struct RetrievalScreen: View {
             hits: hits,
             isSearching: isSearching,
             scrolls: true,
-            onSearch: { Task { await runSearch() } }
+            onSearch: { Task { await runSearch() } },
+            generationModel: $generationModel,
+            answer: answer,
+            citations: citations,
+            selectedHitID: selectedHitID,
+            isAnswering: isAnswering,
+            onAsk: { Task { await ask() } },
+            onSelectCitation: { citation in selectedHitID = citation.id }
         )
         .onAppear {
             guard !prepared else { return }
@@ -270,11 +357,34 @@ struct RetrievalScreen: View {
             collection = appState.settings.defaultCollection
             backend = appState.settings.embeddingBackend
             model = appState.settings.embeddingModel
+            if generationModel.isEmpty {
+                generationModel = appState.settings.chatModel
+            }
         }
     }
 
     private var route: RetrievalRoute {
         appState.settings.processingHost == .devbox ? .worker : .localQdrant
+    }
+
+    private func ask() async {
+        isAnswering = true
+        answer = ""
+        citations = []
+        selectedHitID = nil
+        defer { isAnswering = false }
+        await runSearch()
+        guard error == nil, !hits.isEmpty else { return }
+        let bundle = RAGPrompt.assemble(question: query, hits: hits)
+        citations = bundle.citations
+        let chat = chatFactory(generationModel, appState.settings.chatAPIURL, appState.settings.chatAPIKey)
+        do {
+            for try await delta in chat.stream(system: bundle.system, user: bundle.user) {
+                answer += delta
+            }
+        } catch {
+            self.error = error.localizedDescription
+        }
     }
 
     private func runSearch() async {
