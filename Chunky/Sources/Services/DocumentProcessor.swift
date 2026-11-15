@@ -180,8 +180,7 @@ class DocumentProcessor: ObservableObject {
                 // Skip export if format is none
                 if format == .none {
                     try? FileManager.default.removeItem(at: tempDir)
-                    job.status = .completed
-                    job.statusMessage = "Chunked \(chunks.count) chunks (no export)"
+                    finishChunkOnly(job: job, settings: settings, started: jobStart, message: "Chunked \(chunks.count) chunks (no export)")
                     return
                 }
 
@@ -354,8 +353,7 @@ class DocumentProcessor: ObservableObject {
                 // Cleanup temp directory
                 try? FileManager.default.removeItem(at: tempDir)
 
-                job.status = .completed
-                job.statusMessage = "Exported \(chunks.count) chunks to \(exportDir.lastPathComponent)"
+                finishChunkOnly(job: job, settings: settings, started: jobStart, message: "Exported \(chunks.count) chunks to \(exportDir.lastPathComponent)")
                 return
             }
 
@@ -400,14 +398,16 @@ class DocumentProcessor: ObservableObject {
                 )
             }
 
-            let embedUploadTime = CFAbsoluteTimeGetCurrent() - embedStart
-            job.embeddingTime = embedUploadTime
+            if job.embeddingTime == nil {
+                job.embeddingTime = CFAbsoluteTimeGetCurrent() - embedStart
+            }
             job.totalTime = CFAbsoluteTimeGetCurrent() - jobStart
 
             try? FileManager.default.removeItem(at: tempDir)
 
             let timing = job.timingSummary ?? ""
             job.statusMessage = "\(chunks.count) chunks | \(timing)"
+            job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
             job.status = .completed
 
         } catch is CancellationError {
@@ -545,6 +545,7 @@ class DocumentProcessor: ObservableObject {
             let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
             let texts = chunksToEmbed.map { $0.embeddingText ?? $0.text }
 
+            let embedStarted = CFAbsoluteTimeGetCurrent()
             let embeddings = try await ollama.embedWithProgress(
                 texts: texts,
                 model: settings.embeddingModel,
@@ -556,6 +557,7 @@ class DocumentProcessor: ObservableObject {
                     job?.statusMessage = "Embedding batch \(completed)/\(total)..."
                 }
             }
+            job.embeddingTime = (job.embeddingTime ?? 0) + (CFAbsoluteTimeGetCurrent() - embedStarted)
 
             if let actual = embeddings.first?.count, actual != vectorSize {
                 throw EmbeddingDimensionError.batchMismatch(
@@ -574,6 +576,7 @@ class DocumentProcessor: ObservableObject {
             job.statusMessage = "Uploading to Qdrant..."
 
             let dedupSource: String? = cachedHashes != nil ? nil : job.fileName
+            let uploadStarted = CFAbsoluteTimeGetCurrent()
             try await uploadToQdrant(
                 points: newPoints,
                 collectionName: settings.defaultCollection,
@@ -587,6 +590,7 @@ class DocumentProcessor: ObservableObject {
                     job.statusMessage = "Uploading batch \(progress.currentBatch)/\(progress.totalBatches)..."
                 }
             }
+            job.uploadTime = (job.uploadTime ?? 0) + (CFAbsoluteTimeGetCurrent() - uploadStarted)
         } else {
             job.statusMessage = "All chunks cached, skipping embedding"
         }
@@ -630,8 +634,12 @@ class DocumentProcessor: ObservableObject {
         let totalBatches = (chunks.count + batchSize - 1) / batchSize
 
         let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
+        var embedSeconds = 0.0
+        var uploadSeconds = 0.0
         let firstBatchTexts = Array(chunks.prefix(batchSize)).map { $0.embeddingText ?? $0.text }
+        let firstEmbedStarted = CFAbsoluteTimeGetCurrent()
         let firstEmbeddings = try await ollama.embedBatch(texts: firstBatchTexts, model: settings.embeddingModel)
+        embedSeconds += CFAbsoluteTimeGetCurrent() - firstEmbedStarted
         if let actual = firstEmbeddings.first?.count, actual != vectorSize {
             throw EmbeddingDimensionError.batchMismatch(
                 model: settings.embeddingModel,
@@ -663,7 +671,9 @@ class DocumentProcessor: ObservableObject {
         let firstChunkBatch = Array(chunks.prefix(batchSize))
         let firstSparse = sparseVectors(for: firstChunkBatch, hybrid: createOptions.hybrid)
         let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt)
+        let firstUploadStarted = CFAbsoluteTimeGetCurrent()
         try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: firstPoints, batchSize: settings.qdrantBatchSize)
+        uploadSeconds += CFAbsoluteTimeGetCurrent() - firstUploadStarted
 
         var embeddedSoFar = firstChunkBatch.count
         job.statusMessage = "Embedding & uploading batch 1/\(totalBatches)..."
@@ -676,12 +686,16 @@ class DocumentProcessor: ObservableObject {
             let batchChunks = Array(chunks[start..<end])
             let batchTexts = batchChunks.map { $0.embeddingText ?? $0.text }
 
+            let batchEmbedStarted = CFAbsoluteTimeGetCurrent()
             let batchEmbeddings = try await ollama.embedBatch(texts: batchTexts, model: settings.embeddingModel)
+            embedSeconds += CFAbsoluteTimeGetCurrent() - batchEmbedStarted
 
             let batchSparse = sparseVectors(for: batchChunks, hybrid: createOptions.hybrid)
 
             let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt)
+            let batchUploadStarted = CFAbsoluteTimeGetCurrent()
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: batchPoints, batchSize: settings.qdrantBatchSize)
+            uploadSeconds += CFAbsoluteTimeGetCurrent() - batchUploadStarted
 
             embeddedSoFar += batchChunks.count
             job.progress = Double(batchIndex + 1) / Double(totalBatches)
@@ -689,6 +703,16 @@ class DocumentProcessor: ObservableObject {
         }
 
         job.embeddedCount = embeddedSoFar
+        job.embeddingTime = embedSeconds
+        job.uploadTime = uploadSeconds
+    }
+
+    @MainActor
+    private func finishChunkOnly(job: ProcessingJob, settings: AppSettings, started: CFAbsoluteTime, message: String) {
+        job.totalTime = CFAbsoluteTimeGetCurrent() - started
+        job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+        job.statusMessage = message
+        job.status = .completed
     }
 
     func processBatch(
@@ -760,11 +784,21 @@ class DocumentProcessor: ObservableObject {
                 job.embeddedCount = count
                 job.statusMessage = "Upserted \(count) points to \(parsed.ingestCollection ?? settings.defaultCollection)"
             case "return_vectors":
+                let uploadStarted = CFAbsoluteTimeGetCurrent()
                 try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed)
+                job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
             default:
                 job.statusMessage = "\(parsed.chunks.count) chunks from devbox"
             }
             job.totalTime = CFAbsoluteTimeGetCurrent() - started
+            if var remote = parsed.metrics {
+                if let upload = job.uploadTime, upload > 0 {
+                    remote = remote.addingLocalUpload(seconds: upload)
+                }
+                job.metrics = remote
+            } else {
+                job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+            }
             job.status = .completed
         } catch is CancellationError {
             job.status = .failed

@@ -331,5 +331,36 @@ class TestInputFormatArg(unittest.TestCase):
         self.assertIsNone(args.input_format)
 
 
+class TestConversionStageMs(unittest.TestCase):
+    def test_inner_stages_share_the_convert_window(self):
+        stages = docling_convert._conversion_stage_ms(
+            40,
+            7,
+            enable_ocr=True,
+            no_tables=False,
+            do_picture_description=True,
+            vlm_model="granite-docling-transformers",
+            chunk=True,
+        )
+        self.assertEqual(stages["convert_layout"], 40)
+        self.assertEqual(stages["ocr"], 40)
+        self.assertEqual(stages["table"], 40)
+        self.assertEqual(stages["picture_description"], 40)
+        self.assertEqual(stages["vlm_convert"], 40)
+        self.assertEqual(stages["chunking"], 7)
+
+    def test_disabled_stages_are_omitted(self):
+        stages = docling_convert._conversion_stage_ms(
+            10,
+            0,
+            enable_ocr=False,
+            no_tables=True,
+            do_picture_description=False,
+            vlm_model=None,
+            chunk=False,
+        )
+        self.assertEqual(stages, {"convert_layout": 10})
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,6 +9,7 @@ from pathlib import Path
 from typing import Any
 
 from chunky_worker.embeddings import DimensionCache, EmbeddingBackend
+from chunky_worker.metrics import MetricsRecorder
 from chunky_worker.exceptions import JobCanceled
 from chunky_worker.qdrant_ingest import (
     DimensionMismatch,
@@ -140,6 +141,12 @@ class JobRunner:
         self.embeddings = embeddings
         self.ingestor = ingestor or QdrantCloudIngestor()
         self.dimensions = DimensionCache()
+        self.resources = lambda: {
+            "gpu_name": None,
+            "vram_used_mb": None,
+            "vram_total_mb": None,
+            "utilization": [],
+        }
 
     def backend_for(self, job_settings) -> EmbeddingBackend:
         kind = (job_settings.embedding_backend or "").strip()
@@ -248,10 +255,14 @@ class JobRunner:
                 raise JobCanceled()
             self.store.set_status(job_id, JobStatus.RUNNING)
             self._emit(job_id, "Job started", 0)
+            recorder = MetricsRecorder(job.settings, host="devbox", resources=self.resources)
+            recorder.on_event = lambda event: self.store.append_event(job_id, event)
+            embedded_count = 0
 
             def on_progress(message: str, percent: float | None = None) -> None:
                 self._emit(job_id, message, percent)
 
+            convert_started = recorder.clock()
             raw = self.pipeline.convert_and_chunk(
                 input_path=input_path,
                 output_dir=output_dir,
@@ -259,6 +270,7 @@ class JobRunner:
                 on_progress=on_progress,
                 cancel_event=cancel_event,
             )
+            recorder.apply_pipeline(raw, max(0.0, (recorder.clock() - convert_started) * 1000))
             if cancel_event.is_set():
                 raise JobCanceled()
 
@@ -320,7 +332,13 @@ class JobRunner:
                     chunk.get("embedding_text") or chunk.get("text") or ""
                     for chunk in chunks
                 ]
-                vectors = backend.embed(texts, model)
+                vectors = recorder.time(
+                    "embedding",
+                    kind,
+                    lambda: backend.embed(texts, model),
+                    chunks=len(chunks),
+                )
+                embedded_count = len(vectors)
                 actual = len(vectors[0]) if vectors else 0
                 if vectors and actual != probed:
                     raise DimensionMismatch(
@@ -329,23 +347,40 @@ class JobRunner:
                     )
                 result.embedding_model = model
                 result.embedding_dim = probed if vectors else 0
-                self._apply_ingest(
-                    job_id,
-                    job,
-                    result,
-                    chunks,
-                    vectors,
-                    model,
-                    cancel_event,
+                recorder.time(
+                    "qdrant_upsert",
+                    "qdrant",
+                    lambda: self._apply_ingest(
+                        job_id,
+                        job,
+                        result,
+                        chunks,
+                        vectors,
+                        model,
+                        cancel_event,
+                    ),
+                    chunks=len(chunks),
                 )
 
             if cancel_event.is_set():
                 raise JobCanceled()
 
+            metrics = recorder.finish(
+                pages=result.page_count,
+                chunks=len(result.chunks),
+                embeddings=embedded_count,
+            )
+            result.metrics = metrics.model_dump(mode="json")
             self.store.set_status(job_id, JobStatus.SUCCEEDED, result=result, error=None)
             self.store.append_event(
                 job_id,
-                {"type": "complete", "message": "Job complete", "percent": 100, "status": "succeeded"},
+                {
+                    "type": "complete",
+                    "message": "Job complete",
+                    "percent": 100,
+                    "status": "succeeded",
+                    "metrics": result.metrics,
+                },
             )
         except JobCanceled:
             log.info("Job %s canceled", job_id)
