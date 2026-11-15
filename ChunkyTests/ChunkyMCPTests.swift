@@ -125,7 +125,8 @@ struct ChunkyMCPTests {
         #expect(sent?.collection == "manuals")
         #expect(sent?.limit == 4)
         #expect(sent?.filters.first?.key == "source")
-        #expect(sent?.qdrantAPIKey != "super-secret-token")
+        #expect(sent?.qdrantAPIKey == "super-secret-token")
+        #expect(page.results.first?.payload.values.contains("super-secret-token") != true)
         let names = try await backend.listCollections()
         #expect(names == ["manuals", "notes"])
         let listed = await script.listed
