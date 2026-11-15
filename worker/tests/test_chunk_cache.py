@@ -157,6 +157,25 @@ def test_http_cache_requires_a_token_and_round_trips(tmp_path, tmp_settings):
         assert client.post("/v1/cache/lookup", json=body).json()["hit"] is False
 
 
+def test_replacing_chunks_drops_stale_vectors_and_counts_must_match(tmp_path):
+    cache = ChunkCache(tmp_path)
+    cache.store(KEY, {"name": "a"}, [{"text": "one"}, {"text": "two"}])
+    cache.store_vectors(KEY, "qwen3-embedding", 2, [[0.1, 0.2], [0.3, 0.4]])
+    with pytest.raises(ChunkCacheError) as caught:
+        cache.store_vectors(KEY, "qwen3-embedding", 2, [[0.1, 0.2]])
+    assert caught.value.error_type == "invalid_vectors"
+    cache.store(KEY, {"name": "b"}, [{"text": "only"}])
+    refreshed = cache.lookup(KEY, embedding_model="qwen3-embedding", embedding_dim=2)
+    assert refreshed["hit"] is True
+    assert refreshed["vector_hit"] is False
+    assert refreshed["chunks"][0]["text"] == "only"
+    first = cache.lookup(KEY)
+    other = {**KEY, "content_sha256": "ccc"}
+    cache.store(other, {"name": "c"}, [{"text": "c"}])
+    assert first["id"] != cache.lookup(other)["id"]
+    assert cache.lookup(KEY)["id"] == first["id"]
+
+
 def test_lookup_of_an_unknown_key_is_a_miss(tmp_path):
     cache = ChunkCache(tmp_path)
     assert cache.lookup(KEY) is None

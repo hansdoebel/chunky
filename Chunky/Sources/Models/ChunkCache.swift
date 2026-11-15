@@ -286,12 +286,15 @@ struct ChunkCacheStore {
         }
         let folder = entryDirectory(key.id)
         try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let vectorsFolder = folder.appendingPathComponent("vectors", isDirectory: true)
+        if FileManager.default.fileExists(atPath: vectorsFolder.path) {
+            try FileManager.default.removeItem(at: vectorsFolder)
+        }
         try atomicWrite(document, to: folder.appendingPathComponent("document.json"))
         try atomicWrite(try JSONSerialization.data(withJSONObject: chunks.map { $0.jsonObject() }), to: folder.appendingPathComponent("chunks.json"))
         var manifest = try loadManifest()
-        let previous = manifest.first { $0.id == key.id }
         manifest.removeAll { $0.id == key.id }
-        let row = try row(key: key, vectors: previous?.vectors ?? [])
+        let row = try row(key: key, vectors: [])
         manifest.append(row)
         let evicted = try evict(manifest, protect: key.id)
         try writeManifest(evicted)
@@ -304,6 +307,8 @@ struct ChunkCacheStore {
         guard !vectors.isEmpty, vectors.allSatisfy({ $0.count == dimension }) else { throw ChunkCacheError.invalidVectors }
         let chunksURL = entryDirectory(key.id).appendingPathComponent("chunks.json")
         guard FileManager.default.fileExists(atPath: chunksURL.path) else { throw ChunkCacheError.missingChunks }
+        let saved = try decodeChunks(chunksURL)
+        guard vectors.count == saved.count else { throw ChunkCacheError.invalidVectors }
         let body: [String: Any] = ["model": trimmed, "dimension": dimension, "vectors": vectors]
         let path = vectorURL(id: key.id, model: trimmed, dimension: dimension)
         try atomicWrite(try JSONSerialization.data(withJSONObject: body), to: path)
@@ -473,7 +478,7 @@ struct ChunkCacheStore {
 
     private static func timestamp() -> String {
         let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
         return formatter.string(from: Date())
     }
 }

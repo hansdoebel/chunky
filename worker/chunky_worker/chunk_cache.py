@@ -143,7 +143,7 @@ def apply_identity(chunks: list[dict[str, Any]], identity: dict[str, Any]) -> li
 
 
 def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S.%fZ")
 
 
 def atomic_write(path: Path, data: bytes) -> None:
@@ -232,12 +232,13 @@ class ChunkCache:
             ident = self._id(key)
             directory = self._entry_dir(ident)
             directory.mkdir(parents=True, exist_ok=True)
+            vectors_dir = directory / "vectors"
+            if vectors_dir.exists():
+                self._remove_tree(vectors_dir)
             atomic_write(directory / "document.json", _dump(document))
             atomic_write(directory / "chunks.json", _dump(normalized))
             manifest = self._load_manifest()
-            previous = next((item for item in manifest["entries"] if item["id"] == ident), None)
-            vectors = list(previous.get("vectors") or []) if previous else []
-            row = self._row(ident, key, vectors)
+            row = self._row(ident, key, [])
             manifest["entries"] = [item for item in manifest["entries"] if item["id"] != ident]
             manifest["entries"].append(row)
             self._evict(manifest, protect=ident)
@@ -262,6 +263,9 @@ class ChunkCache:
             chunks_path = self._entry_dir(ident) / "chunks.json"
             if not chunks_path.is_file():
                 raise ChunkCacheError("store chunks before vectors", "missing_chunks")
+            saved_chunks = json.loads(chunks_path.read_text(encoding="utf-8"))
+            if len(vectors) != len(saved_chunks):
+                raise ChunkCacheError("vector count must match the saved chunks", "invalid_vectors")
             body = {"model": model, "dimension": dimension, "vectors": vectors}
             path = self._vector_path(ident, model, dimension)
             atomic_write(path, _dump(body))
