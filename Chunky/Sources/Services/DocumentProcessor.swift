@@ -1557,6 +1557,15 @@ class DocumentProcessor: ObservableObject {
             onDiskPayload: createOptions.onDiskPayload,
             quantizationConfig: quantizationValue(createOptions)
         )
+        if let packing = CollectionPackingStore.load(name: collectionName, defaults: appState.settings.defaults) {
+            let client = CollectionPackingClient(transport: LiveCollectionPackingTransport())
+            try await client.update(
+                baseURL: QdrantKeepAlive.databaseURL(settings: appState.settings),
+                apiKey: appState.settings.qdrantAPIKey,
+                collection: collectionName,
+                packing: packing
+            )
+        }
 
         if let source = dedupSource {
             try await service.deleteBySource(
