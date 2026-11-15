@@ -74,6 +74,7 @@ struct BibliographyTests {
         #expect(line.contains("[redacted]"))
     }
 
+    @MainActor
     @Test func bibliographyWinsOverDoclingFields() {
         let chunk = ChunkingService.DocumentChunk(
             text: "Hello",
