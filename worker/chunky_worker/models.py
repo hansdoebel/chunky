@@ -104,6 +104,13 @@ class JobSettings(BaseModel):
     metadata_include_year: bool = True
     metadata_include_language: bool = True
     metadata_include_content_hash: bool = True
+    bibliography_title: str | None = None
+    bibliography_authors: list[str] = Field(default_factory=list)
+    bibliography_year: int | None = None
+    bibliography_doi: str | None = None
+    bibliography_venue: str | None = None
+    bibliography_abstract: str | None = None
+    bibliography_cite_key: str | None = None
 
     def public_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json", exclude={"qdrant_api_key"})

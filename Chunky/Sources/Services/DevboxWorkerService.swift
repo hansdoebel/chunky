@@ -168,6 +168,19 @@ enum DevboxJobPayload {
         return body
     }
 
+    static func settings(from settings: AppSettings, mode: ProcessingMode, bibliography: BibliographicMetadata?) -> [String: Any] {
+        var body = self.settings(from: settings, mode: mode)
+        guard let bibliography else { return body }
+        if !bibliography.title.isEmpty { body["bibliography_title"] = bibliography.title }
+        if !bibliography.authors.isEmpty { body["bibliography_authors"] = bibliography.authors }
+        if let year = bibliography.year { body["bibliography_year"] = year }
+        if let doi = bibliography.doi, !doi.isEmpty { body["bibliography_doi"] = doi }
+        if let venue = bibliography.venue, !venue.isEmpty { body["bibliography_venue"] = venue }
+        if let abstract = bibliography.abstract, !abstract.isEmpty { body["bibliography_abstract"] = abstract }
+        if !bibliography.citeKey.isEmpty { body["bibliography_cite_key"] = bibliography.citeKey }
+        return body
+    }
+
     static func multipartBody(filename: String, fileData: Data, settings: [String: Any], boundary: String) throws -> Data {
         let settingsJSON = try JSONSerialization.data(withJSONObject: settings)
         var body = Data()

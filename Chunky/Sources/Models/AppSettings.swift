@@ -317,6 +317,11 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.chatAPIKeyKey, newValue) }
     }
 
+    var zoteroAPIKey: String {
+        get { secret(KeychainService.zoteroAPIKeyKey) }
+        set { setSecret(KeychainService.zoteroAPIKeyKey, newValue) }
+    }
+
     var workerToken: String {
         get { secret(KeychainService.workerTokenKey) }
         set { setSecret(KeychainService.workerTokenKey, newValue) }
