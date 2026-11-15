@@ -86,7 +86,7 @@ def read_pdf_labels(path: str | Path) -> list[str] | None:
     except ImportError:
         return None
     reader = PdfReader(str(path))
-    root = reader.trailer.get("/Root")
+    root = reader.root_object
     if root is None or "/PageLabels" not in root:
         return None
     labels = list(reader.page_labels)

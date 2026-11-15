@@ -144,7 +144,10 @@ extension ChunkCacheChunk {
             pictureClass: pictureClass,
             tableMarkdown: tableMarkdown,
             pageEnd: pageEnd,
-            bboxes: boxes.isEmpty ? nil : boxes
+            bboxes: boxes.isEmpty ? nil : boxes,
+            pageLabels: pageLabels.isEmpty ? nil : pageLabels,
+            printedPage: nil,
+            pageOffset: nil
         )
     }
 }

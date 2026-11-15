@@ -21,6 +21,9 @@ actor DoclingService {
         let tableMarkdown: String?
         let pageEnd: Int?
         let bboxes: [ProvenanceBox]?
+        let pageLabels: [String]?
+        let printedPage: String?
+        let pageOffset: Int?
 
         enum CodingKeys: String, CodingKey {
             case text
@@ -34,6 +37,9 @@ actor DoclingService {
             case tableMarkdown = "table_markdown"
             case pageEnd = "page_end"
             case bboxes
+            case pageLabels = "page_labels"
+            case printedPage = "printed_page"
+            case pageOffset = "page_offset"
         }
     }
 
@@ -152,6 +158,7 @@ actor DoclingService {
         var chunkMergePeers: Bool = true
         var chunkTokenizer: String = ""
         var useDaemon: Bool = true
+        var pageOffset: Int?
 
         init() {}
     }
@@ -408,6 +415,9 @@ actor DoclingService {
             cmd["chunk_merge_peers"] = options.chunkMergePeers
             if !options.chunkTokenizer.isEmpty { cmd["chunk_tokenizer"] = options.chunkTokenizer }
         }
+        if let pageOffset = options.pageOffset {
+            cmd["page_offset"] = pageOffset
+        }
 
         let jsonData = try JSONSerialization.data(withJSONObject: cmd)
         let jsonStr = String(data: jsonData, encoding: .utf8)! + "\n"
@@ -599,6 +609,9 @@ actor DoclingService {
             if !options.chunkMergePeers {
                 arguments.append("--no-chunk-merge-peers")
             }
+        }
+        if let pageOffset = options.pageOffset {
+            arguments.append(contentsOf: ["--page-offset", String(pageOffset)])
         }
 
         if onProgress != nil {

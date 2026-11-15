@@ -1004,6 +1004,7 @@ def main():
     parser.add_argument("--ocr-batch-size", type=int, default=0, help="Override the OCR batch. 0 keeps the host default.")
     parser.add_argument("--layout-batch-size", type=int, default=0, help="Override the layout batch. 0 keeps the host default.")
     parser.add_argument("--table-batch-size", type=int, default=0, help="Override the table batch. 0 keeps the host default.")
+    parser.add_argument("--page-offset", type=int, default=None, help="Printed page number of PDF page 1.")
 
     args = parser.parse_args()
 
@@ -1040,6 +1041,7 @@ def main():
         chunk_max_tokens=args.chunk_max_tokens,
         chunk_merge_peers=args.chunk_merge_peers,
         chunk_tokenizer=args.chunk_tokenizer,
+        page_offset=args.page_offset,
     )
 
     print(json.dumps(result, indent=2))

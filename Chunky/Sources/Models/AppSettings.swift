@@ -225,6 +225,7 @@ class AppSettings: ObservableObject {
             "layout=\(layoutModel)",
             "images=\(imageExportMode)",
             "cleanup=\(doTextCleanup ? 1 : 0)",
+            "pageOffset=\(journalPageOffset.map(String.init) ?? "")",
         ].joined(separator: ";")
     }
     @Published var doTableExtraction: Bool {
