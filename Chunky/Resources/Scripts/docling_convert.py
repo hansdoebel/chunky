@@ -120,9 +120,16 @@ def _non_pdf_format_options():
     }
 
 
-def _build_vlm_format_options(vlm_model, ollama_url, vlm_engine=None, vllm_url=None, accelerator="cuda"):
+def _build_vlm_format_options(
+    vlm_model,
+    ollama_url,
+    vlm_engine=None,
+    vllm_url=None,
+    accelerator="cuda",
+    **enrichment,
+):
     if vlm_model == "granite-docling-transformers" and vlm_engine in {"vllm", "transformers"}:
-        return _build_granite_format_options(vlm_engine, vllm_url, accelerator)
+        return _build_granite_format_options(vlm_engine, vllm_url, accelerator, **enrichment)
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import VlmPipelineOptions
     from docling.document_converter import FormatOption, PdfFormatOption
@@ -152,6 +159,7 @@ def _build_vlm_format_options(vlm_model, ollama_url, vlm_engine=None, vllm_url=N
         pipeline_options = VlmPipelineOptions(
             vlm_options=spec,
         )
+        _apply_pipeline_enrichment(pipeline_options, **enrichment)
     else:
         from docling.datamodel.pipeline_options_vlm_model import (
             ApiVlmOptions,
@@ -171,6 +179,7 @@ def _build_vlm_format_options(vlm_model, ollama_url, vlm_engine=None, vllm_url=N
             enable_remote_services=True,
             vlm_options=vlm_options,
         )
+        _apply_pipeline_enrichment(pipeline_options, **enrichment)
 
     format_options: dict[InputFormat, FormatOption] = {
         InputFormat.PDF: PdfFormatOption(
@@ -182,7 +191,13 @@ def _build_vlm_format_options(vlm_model, ollama_url, vlm_engine=None, vllm_url=N
     return format_options
 
 
-def _build_granite_format_options(vlm_engine, vllm_url, accelerator):
+def _apply_pipeline_enrichment(pipeline_options, **enrichment):
+    from enrichment import apply_enrichment
+
+    return apply_enrichment(pipeline_options, **enrichment)
+
+
+def _build_granite_format_options(vlm_engine, vllm_url, accelerator, **enrichment):
     """granite-docling via the DocTags preset. vLLM first, Transformers on CUDA as fallback."""
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import FormatOption, PdfFormatOption
@@ -199,6 +214,7 @@ def _build_granite_format_options(vlm_engine, vllm_url, accelerator):
         plan["cuda_use_flash_attention2"],
     )
     pipeline_options = build_granite_pipeline_options(plan)
+    _apply_pipeline_enrichment(pipeline_options, **enrichment)
     format_options: dict[InputFormat, FormatOption] = {
         InputFormat.PDF: PdfFormatOption(
             pipeline_cls=VlmPipeline,
@@ -247,10 +263,15 @@ def _build_standard_format_options(
     if enable_ocr and ocr_language:
         pipeline_options.ocr_options.lang = [ocr_language]
 
-    pipeline_options.do_formula_enrichment = do_formula_enrichment
-    pipeline_options.do_code_enrichment = do_code_enrichment
-    pipeline_options.do_picture_classification = do_picture_classification
-    pipeline_options.do_picture_description = do_picture_description
+    _apply_pipeline_enrichment(
+        pipeline_options,
+        generate_images=generate_images,
+        do_formula_enrichment=do_formula_enrichment,
+        do_code_enrichment=do_code_enrichment,
+        do_chart_extraction=do_chart_extraction,
+        do_picture_description=do_picture_description,
+        do_picture_classification=do_picture_classification,
+    )
 
     if layout_model != "default":
         from docling.datamodel.pipeline_options import LayoutObjectDetectionOptions
@@ -265,9 +286,6 @@ def _build_standard_format_options(
         else:
             layout_opts = LayoutObjectDetectionOptions()
         pipeline_options.layout_options = layout_opts
-
-    if do_chart_extraction:
-        pipeline_options.generate_picture_images = True
 
     if no_tables:
         pipeline_options.do_table_structure = False
@@ -471,6 +489,11 @@ def convert_document(
                 vlm_engine=vlm_engine,
                 vllm_url=vllm_url,
                 accelerator=accelerator,
+                do_formula_enrichment=do_formula_enrichment,
+                do_code_enrichment=do_code_enrichment,
+                do_chart_extraction=do_chart_extraction,
+                do_picture_description=do_picture_description,
+                do_picture_classification=do_picture_classification,
             )
         else:
             format_options = _build_standard_format_options(
