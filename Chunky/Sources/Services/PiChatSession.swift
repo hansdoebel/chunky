@@ -173,7 +173,13 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         previous?.terminate()
         let launched = transportFactory()
         let env = PiLaunch.environment(executable: path, nodePath: report.nodePath, base: environment())
-        try launched.launch(executable: path, arguments: PiLaunch.arguments(toolMode: toolMode), environment: env)
+        let plan = try launchPlan()
+        try launched.launch(
+            executable: path,
+            arguments: plan.arguments,
+            environment: env,
+            currentDirectory: plan.directory
+        )
         let created = PiRPCClient(transport: launched)
         created.startReading()
         lock.lock()
@@ -188,6 +194,15 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         launchedOverride = override
         lock.unlock()
         return created
+    }
+
+    private func launchPlan() throws -> (arguments: [String], directory: String?) {
+        if case .allow(let names) = toolMode, names.contains("mcp__chunky__search") {
+            let command = Bundle.main.executablePath ?? CommandLine.arguments[0]
+            let directory = try PiMCPConfig.prepareRuntimeDirectory(command: command)
+            return (PiLaunch.chunkySearchArguments(), directory)
+        }
+        return (PiLaunch.arguments(toolMode: toolMode), nil)
     }
 
     private func dropClient() {

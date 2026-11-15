@@ -6,7 +6,7 @@ import Combine
 class AppState: ObservableObject {
     @Published var jobs: [ProcessingJob] = []
     @Published var settings = AppSettings()
-    let piSession = PiChatSession()
+    let piSession = PiChatSession(toolMode: .allow(PiLaunch.chunkyMCPTools))
     @Published var viewMode: ViewMode = .queue
     @Published var processingMode: ProcessingMode = {
         ProcessingMode(rawValue: UserDefaults.standard.string(forKey: "chunky.processingMode") ?? "") ?? .chunkOnly
