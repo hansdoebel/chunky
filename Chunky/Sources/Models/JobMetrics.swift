@@ -2,8 +2,8 @@ import Foundation
 
 struct StageMetric: Codable, Equatable {
     var name: String
-    var durationMs: Double
-    var status: String
+    var durationMs: Double = 0
+    var status: String = "skipped"
     var runtime: String?
     var pages: Int?
     var chunks: Int?

@@ -21,6 +21,8 @@ class AppState: ObservableObject {
     @Published var isLoadingPoints: Bool = false
     @Published var sidebarVisibility: NavigationSplitViewVisibility = .all
     @Published var qdrantConnectionError: String?
+    let runHistory = RunHistoryStore.makeDefault()
+    @Published private(set) var finishedRuns: [RunDraft] = []
 
     /// The shared Qdrant service instance
     var qdrantService: QdrantService?
@@ -63,6 +65,24 @@ class AppState: ObservableObject {
     func clearAll() {
         jobs.removeAll()
     }
+    func reloadHistory() {
+        finishedRuns = (try? runHistory.allDrafts()) ?? finishedRuns
+    }
+
+    func storeFinishedRun(_ job: ProcessingJob, settings: AppSettings) {
+        guard job.status == .completed || job.status == .failed else { return }
+        guard !job.analyticsStored else { return }
+        let hash = RunHistory.contentHash(ofFile: job.sourceURL)
+        let draft = RunDraft.make(job: job, settings: settings, contentHash: hash)
+        do {
+            try runHistory.insert(draft)
+            job.analyticsStored = true
+            reloadHistory()
+        } catch {
+            job.analyticsStored = true
+        }
+    }
+
     func requestCancellation() { isCancellationRequested = true }
     func resetCancellation() { isCancellationRequested = false }
 

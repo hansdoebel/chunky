@@ -48,6 +48,7 @@ class DocumentProcessor: ObservableObject {
 
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+        defer { appState?.storeFinishedRun(job, settings: settings) }
         if settings.processingHost == .devbox {
             await processOnDevbox(job: job, settings: settings, mode: mode)
             return

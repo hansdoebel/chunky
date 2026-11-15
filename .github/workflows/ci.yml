@@ -124,6 +124,14 @@ jobs:
             DEVELOPMENT_TEAM="" \
             ENABLE_HARDENED_RUNTIME=NO
 
+      - name: Upload analytics screenshot
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: analytics-screenshot
+          path: /tmp/chunky-analytics.png
+          if-no-files-found: ignore
+
       - name: Build qdrant-swift and run its unit tests
         # Same fail-open rule as the job: skip only on an explicit false.
         if: ${{ needs.changes.outputs.qdrant != 'false' }}
