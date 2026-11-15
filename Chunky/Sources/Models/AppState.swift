@@ -14,6 +14,7 @@ class AppState: ObservableObject {
     }
     @Published var isProcessing: Bool = false
     @Published var isCancellationRequested: Bool = false
+    var benchmarkTask: Task<Void, Never>?
     @Published var availableCollections: [String] = ["documents", "notes"]
     @Published var browserPoints: [QdrantPoint] = []
     @Published var browserSources: [String] = []
