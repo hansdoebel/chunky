@@ -32,6 +32,15 @@ from chunky_worker.models import (
 )
 from chunky_worker.pipeline import DocumentPipeline
 from chunky_worker.settings import Settings
+from chunky_worker.verification import (
+    ensure_chunk_ids,
+    hash_file,
+    note_store_failure,
+    qdrant_readers,
+    resolve_chunks,
+    verify_document,
+    write_report,
+)
 
 log = logging.getLogger(__name__)
 
@@ -108,6 +117,12 @@ class JobStore:
                 setattr(job, key, value)
             self._changed[job_id].set()
             return job.model_copy(deep=True)
+
+    def set_verification_status(self, job_id: str, status: str) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is not None and job.result is not None:
+                job.result.verification_status = status
 
     def events_since(self, job_id: str, index: int) -> tuple[list[dict[str, Any]], bool]:
         with self._lock:
@@ -290,6 +305,8 @@ class JobRunner:
                 return
 
             chunks = list(raw.get("chunks") or [])
+            ensure_chunk_ids(chunks, hash_file(input_path))
+            vectors: list[list[float]] | None = None
             result = JobResult(
                 mode=job.settings.mode,
                 success=True,
@@ -369,6 +386,7 @@ class JobRunner:
                 embeddings=embedded_count,
             )
             result.metrics = metrics.model_dump(mode="json")
+            self._record_verification(job_id, job, input_path, chunks, vectors, result, secret)
             self.store.set_status(job_id, JobStatus.SUCCEEDED, result=result, error=None)
             self.store.append_event(
                 job_id,
@@ -418,3 +436,101 @@ class JobRunner:
             )
         finally:
             self.store.forget_api_key(job_id)
+
+    def produce_report(
+        self,
+        *,
+        pdf_path: Path,
+        chunks: list[dict[str, Any]],
+        filename: str,
+        job_id: str | None,
+        model: str,
+        vectors: list[list[float]] | None,
+        expected_dim: int | None,
+        qdrant_url: str | None,
+        qdrant_api_key: str | None,
+        collection: str | None,
+        read_store: bool,
+        embeddings: EmbeddingBackend | None = None,
+    ) -> dict[str, Any]:
+        backend = embeddings or self.embeddings
+        digest = hash_file(pdf_path) if pdf_path.is_file() else ""
+        ready, _source = resolve_chunks(digest, chunks)
+        points, search, failure = None, None, None
+        if read_store:
+            points, search, failure = qdrant_readers(
+                url=qdrant_url,
+                api_key=qdrant_api_key,
+                collection=collection,
+                ids=[str(chunk.get("id")) for chunk in ready if chunk.get("id")],
+                model=model,
+                embeddings=backend,
+                ingestor=self.ingestor,
+                worker_settings=self.settings,
+                live=type(self.ingestor) is QdrantCloudIngestor,
+            )
+        embed = None
+        if vectors or read_store:
+
+            def embed(texts: list[str], backend=backend, model=model) -> list[list[float]]:
+                return backend.embed(texts, model)
+
+        report = verify_document(
+            pdf_path=pdf_path,
+            chunks=ready,
+            filename=filename,
+            job_id=job_id,
+            pdf_hash=digest or None,
+            model=model,
+            vectors=None if points is not None else vectors,
+            expected_dim=expected_dim,
+            points=points,
+            embed=embed,
+            search=search,
+        )
+        if failure:
+            report = note_store_failure(report, failure)
+        return report
+
+    def _record_verification(
+        self,
+        job_id: str,
+        job: Job,
+        input_path: Path,
+        chunks: list[dict[str, Any]],
+        vectors: list[list[float]] | None,
+        result: JobResult,
+        secret: str | None,
+    ) -> None:
+        path = self.settings.work_dir / job_id / "verification.json"
+        try:
+            model = result.embedding_model or job.settings.embedding_model or self.settings.embedding_model
+            report = self.produce_report(
+                pdf_path=input_path,
+                chunks=chunks,
+                filename=job.filename,
+                job_id=job_id,
+                model=model,
+                vectors=vectors,
+                expected_dim=result.embedding_dim,
+                qdrant_url=job.settings.qdrant_url,
+                qdrant_api_key=secret,
+                collection=job.settings.qdrant_collection,
+                read_store=job.settings.ingest_target == IngestTarget.QDRANT_CLOUD,
+                embeddings=self.backend_for(job.settings),
+            )
+            write_report(path, report)
+            result.verification_status = report["status"]
+        except Exception as exc:
+            message = redact(str(exc), secret)
+            log.error("Job %s verification failed: %s", job_id, message)
+            result.verification_status = "red"
+            write_report(
+                path,
+                {
+                    "job_id": job_id,
+                    "filename": job.filename,
+                    "status": "red",
+                    "text": {"status": "red", "note": message},
+                },
+            )

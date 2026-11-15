@@ -156,11 +156,12 @@ def test_chunk_and_embed_uses_mock_backend(client, embeddings):
     assert result["embeddings"] == [[0.0, 0.1, 0.2], [1.0, 0.1, 0.2]]
     assert result["embedding_model"] == "qwen3-embedding"
     assert result["embedding_dim"] == 3
-    assert len(embeddings.embed_calls) == 2
+    assert len(embeddings.embed_calls) == 3
     assert embeddings.embed_calls[0][0] == ["chunky"]
     texts, model = embeddings.embed_calls[1]
     assert texts == ["Hello world", "Second chunk"]
     assert model == "qwen3-embedding"
+    assert embeddings.embed_calls[2][0] == ["Hello world", "Second chunk"]
 
 def test_conversion_failure_marks_job_failed(tmp_settings, embeddings):
     from fastapi.testclient import TestClient

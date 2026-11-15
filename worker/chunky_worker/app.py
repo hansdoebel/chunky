@@ -25,6 +25,7 @@ from chunky_worker.model_catalog import (
 )
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
+from chunky_worker.verification import hash_file, write_report
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
 from chunky_worker.search import QdrantPointSearcher, SearchError, parse_search_request, run_search
 from chunky_worker.settings import Settings, is_loopback_url, require_token_when_exposed
@@ -246,6 +247,102 @@ def create_app(
             raise HTTPException(status_code=404, detail="Job not found")
         return _job_payload(job)
 
+    @api.get("/v1/jobs/{job_id}/verification")
+    def get_verification(job_id: str) -> dict:
+        if store.get(job_id) is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        path = settings.work_dir / job_id / "verification.json"
+        if not path.is_file():
+            raise HTTPException(status_code=404, detail="Verification report not found")
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    @api.post("/v1/jobs/{job_id}/verify")
+    async def reverify_job(job_id: str, request: Request) -> dict:
+        job = store.get(job_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="Job not found")
+        if job.status != JobStatus.SUCCEEDED or job.result is None:
+            raise HTTPException(status_code=409, detail="Job is not ready to verify")
+        overrides = await _json_object(request)
+        source = settings.work_dir / job_id / Path(job.filename).name
+        if not source.is_file():
+            raise HTTPException(status_code=404, detail="Source file is no longer on the worker")
+        secret = _optional_secret(overrides.get("qdrant_api_key"))
+        chunks = overrides.get("chunks") if isinstance(overrides.get("chunks"), list) else job.result.chunks
+        model = (overrides.get("embedding_model") or job.result.embedding_model or settings.embedding_model)
+        report = await asyncio.to_thread(
+            runner.produce_report,
+            pdf_path=source,
+            chunks=chunks,
+            filename=job.filename,
+            job_id=job.id,
+            model=model,
+            vectors=job.result.embeddings,
+            expected_dim=job.result.embedding_dim,
+            qdrant_url=overrides.get("qdrant_url") or job.settings.qdrant_url,
+            qdrant_api_key=secret,
+            collection=overrides.get("qdrant_collection") or job.settings.qdrant_collection or "documents",
+            read_store=bool(overrides.get("qdrant_url") or job.settings.ingest_target == "qdrant_cloud"),
+            embeddings=runner.backend_for(job.settings),
+        )
+        _reject_secret(report, secret)
+        write_report(settings.work_dir / job_id / "verification.json", report)
+        store.set_verification_status(job_id, report["status"])
+        return report
+
+    @api.post("/v1/verify")
+    async def verify_upload(
+        file: Annotated[UploadFile, File()],
+        settings_raw: Annotated[str | None, Form(alias="settings")] = None,
+    ) -> dict:
+        payload = _settings_object(settings_raw)
+        secret = _optional_secret(payload.get("qdrant_api_key"))
+        payload.pop("qdrant_api_key", None)
+        original_name = file.filename or "upload.bin"
+        safe_name = Path(original_name).name or "upload.bin"
+        digest_dir = settings.work_dir / "verification-upload"
+        digest_dir.mkdir(parents=True, exist_ok=True)
+        dest = digest_dir / safe_name
+        dest.write_bytes(await file.read())
+        try:
+            chunks = payload.get("chunks") if isinstance(payload.get("chunks"), list) else []
+            if not chunks:
+                from chunky_worker.verification import cached_chunks
+
+                cached = cached_chunks(hash_file(dest))
+                if not cached:
+                    raise HTTPException(status_code=400, detail="No chunk records for this PDF")
+                chunks = cached
+            model = payload.get("embedding_model") or settings.embedding_model
+            from chunky_worker.models import JobSettings
+
+            embed_settings = JobSettings(
+                embedding_model=model,
+                embedding_backend=str(payload.get("embedding_backend") or ""),
+                embedding_url=str(payload.get("embedding_url") or ""),
+            )
+            collection = payload.get("qdrant_collection") or ("documents" if payload.get("qdrant_url") else None)
+            report = await asyncio.to_thread(
+                runner.produce_report,
+                pdf_path=dest,
+                chunks=chunks,
+                filename=safe_name,
+                job_id=None,
+                model=model,
+                vectors=payload.get("embeddings") if isinstance(payload.get("embeddings"), list) else None,
+                expected_dim=payload.get("embedding_dim"),
+                qdrant_url=payload.get("qdrant_url"),
+                qdrant_api_key=secret,
+                collection=collection,
+                read_store=bool(payload.get("qdrant_url")),
+                embeddings=runner.backend_for(embed_settings),
+            )
+        finally:
+            dest.unlink(missing_ok=True)
+        _reject_secret(report, secret)
+        write_report(settings.work_dir / "verification" / f"{report['pdf_hash']}.json", report)
+        return report
+
     @api.post("/v1/jobs/{job_id}/cancel")
     def cancel_job(job_id: str) -> JSONResponse:
         job = store.request_cancel(job_id)
@@ -280,6 +377,47 @@ def create_app(
 
     app.include_router(api)
     return app
+
+async def _json_object(request: Request) -> dict:
+    raw = await request.body()
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid settings JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid verification request")
+    return payload
+
+
+def _settings_object(raw: str | None) -> dict:
+    if not raw:
+        return {}
+    try:
+        payload = json.loads(raw)
+    except json.JSONDecodeError as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid settings JSON: {exc}") from exc
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Invalid settings JSON")
+    return payload
+
+
+def _optional_secret(value: object) -> str | None:
+    if isinstance(value, str) and value.strip():
+        return value
+    return None
+
+
+def _reject_secret(report: dict, secret: str | None) -> None:
+    if not secret:
+        return
+    raw = json.dumps(report)
+    if secret not in raw:
+        return
+    report.clear()
+    report.update(json.loads(raw.replace(secret, "[redacted]")))
+
 
 def _log_startup(settings: Settings) -> None:
     if settings.token:
