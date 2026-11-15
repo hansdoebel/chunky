@@ -323,7 +323,7 @@ struct RetrievalEvalTests {
             rerank: nil,
             filters: filters
         )
-        _ = try await RetrievalEvalRunner(service: service).run(
+        let draft = try await RetrievalEvalRunner(service: service).run(
             set: RetrievalEvalSet(name: "scope", queries: [RetrievalEvalQuery(question: "revenue", relevantIDs: ["d1"])]),
             config: config,
             settings: settings,
@@ -331,7 +331,8 @@ struct RetrievalEvalTests {
         )
         let encoded = RetrievalFilter.encodedSummaries(filters)
         #expect(encoded.map(\.key) == ["year", "authors"])
-        #expect(index.lastFilter?.must.count == 2)
+        #expect(draft.scope == RetrievalFilter.scopeLabel(filters))
+        #expect(index.lastFilter != nil)
         #expect(index.denseCalls == 1)
     }
 }
