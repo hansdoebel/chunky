@@ -8,6 +8,7 @@ struct CollectionBrowserView: View {
     @State private var selectedIds: Set<String> = []
     @State private var showDeleteConfirmation = false
     @State private var showNewCollection = false
+    @State private var showSnapshots = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -61,6 +62,8 @@ struct CollectionBrowserView: View {
                     .help("Substring browse loads at most \(CollectionBrowse.pointLimit) points. Use Retrieval for semantic search.")
 
                 Button("New") { showNewCollection = true }
+                    .buttonStyle(.bordered)
+                Button("Snapshots") { showSnapshots = true }
                     .buttonStyle(.bordered)
                 Button(action: { Task { await appState.loadBrowserPoints() } }) {
                     Image(systemName: "arrow.clockwise")
@@ -138,6 +141,10 @@ struct CollectionBrowserView: View {
                 await appState.fetchCollections()
                 await appState.loadBrowserPoints()
             }
+        }
+        .sheet(isPresented: $showSnapshots) {
+            CollectionSnapshotsScreen()
+                .environmentObject(appState)
         }
         .sheet(isPresented: $showNewCollection) {
             NewCollectionSheet(
