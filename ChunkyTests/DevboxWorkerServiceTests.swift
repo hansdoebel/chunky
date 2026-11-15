@@ -16,11 +16,7 @@ struct DevboxWorkerServiceTests {
     }
 
     @Test func settingsMapMLXAndChooseIngestTarget() {
-        let settings = AppSettings()
-        defer {
-            settings.qdrantAPIKey = ""
-            settings.qdrantCloudURL = ""
-        }
+        let settings = IsolatedSettings.make()
         settings.doclingModel = "granite-docling-mlx"
         settings.doclingAccelerator = "mps"
         settings.devboxIngestTarget = .localDocker
@@ -40,6 +36,27 @@ struct DevboxWorkerServiceTests {
         let chunkOnly = DevboxJobPayload.settings(from: settings, mode: .chunkOnly)
         #expect(chunkOnly["ingest_target"] as? String == "none")
         #expect(chunkOnly["mode"] as? String == "chunk_only")
+    }
+
+    @Test func savedCollectionPlanChoosesCloudIngest() {
+        let settings = IsolatedSettings.make()
+        let name = "plan-\(UUID().uuidString)"
+        settings.defaultCollection = name
+        settings.devboxIngestTarget = .localDocker
+        var plan = CollectionPlan.preset(
+            .largeCloud, name: name, vectorSize: 1024,
+            embeddingBackend: "openai", embeddingModel: "Qwen/Qwen3-Embedding-0.6B"
+        )
+        plan.distance = .dot
+        CollectionPlanStore.save(plan, defaults: settings.defaults)
+        settings.qdrantCloudURL = "https://example.cloud.qdrant.io"
+        settings.qdrantAPIKey = "cloud-key"
+        let cloud = DevboxJobPayload.settings(from: settings, mode: .full)
+        #expect(cloud["ingest_target"] as? String == "qdrant_cloud")
+        #expect(cloud["qdrant_distance"] as? String == "dot")
+        #expect(cloud["qdrant_hybrid"] as? Bool == true)
+        #expect(cloud["qdrant_quantization"] as? String == "scalar")
+        #expect(cloud["qdrant_on_disk"] as? Bool == true)
     }
 
     @Test func errorsNameUnreachableUnauthorizedAndDimensionMismatch() {

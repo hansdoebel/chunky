@@ -1,25 +1,52 @@
 import SwiftUI
 import Combine
 
+protocol SettingsSecretStore: AnyObject {
+    func value(for key: String) -> String?
+    func set(_ value: String?, for key: String)
+}
+
+final class KeychainSecretStore: SettingsSecretStore {
+    func value(for key: String) -> String? {
+        KeychainService.get(key: key)
+    }
+
+    func set(_ value: String?, for key: String) {
+        if let value, !value.isEmpty {
+            try? KeychainService.save(key: key, value: value)
+        } else {
+            KeychainService.delete(key: key)
+        }
+    }
+}
+
+final class MemorySecretStore: SettingsSecretStore {
+    private var values: [String: String] = [:]
+
+    func value(for key: String) -> String? {
+        values[key]
+    }
+
+    func set(_ value: String?, for key: String) {
+        if let value, !value.isEmpty {
+            values[key] = value
+        } else {
+            values[key] = nil
+        }
+    }
+}
+
 // MARK: - AppSettings
 
 class AppSettings: ObservableObject {
-    private let defaults = UserDefaults.standard
+    let defaults: UserDefaults
+    private let secrets: SettingsSecretStore
     private let prefix = "chunky."
 
     /// Ollama URL - stored in Keychain for persistence across rebuilds
     var ollamaURL: String {
-        get {
-            KeychainService.get(key: KeychainService.ollamaURLKey) ?? "http://localhost:11434"
-        }
-        set {
-            if newValue.isEmpty {
-                KeychainService.delete(key: KeychainService.ollamaURLKey)
-            } else {
-                try? KeychainService.save(key: KeychainService.ollamaURLKey, value: newValue)
-            }
-            objectWillChange.send()
-        }
+        get { secret(KeychainService.ollamaURLKey, default: "http://localhost:11434") }
+        set { setSecret(KeychainService.ollamaURLKey, newValue) }
     }
     @Published var embeddingBackend: String {
         didSet { defaults.set(embeddingBackend, forKey: prefix + "embeddingBackend") }
@@ -42,17 +69,8 @@ class AppSettings: ObservableObject {
 
     /// Qdrant URL - stored in Keychain for persistence across rebuilds
     var qdrantURL: String {
-        get {
-            KeychainService.get(key: KeychainService.qdrantURLKey) ?? "http://localhost:6334"
-        }
-        set {
-            if newValue.isEmpty {
-                KeychainService.delete(key: KeychainService.qdrantURLKey)
-            } else {
-                try? KeychainService.save(key: KeychainService.qdrantURLKey, value: newValue)
-            }
-            objectWillChange.send()
-        }
+        get { secret(KeychainService.qdrantURLKey, default: "http://localhost:6334") }
+        set { setSecret(KeychainService.qdrantURLKey, newValue) }
     }
     @Published var defaultCollection: String {
         didSet { defaults.set(defaultCollection, forKey: prefix + "defaultCollection") }
@@ -247,46 +265,25 @@ class AppSettings: ObservableObject {
 
     /// Bearer token for the devbox worker. Stored in the Keychain.
     var workerToken: String {
-        get { KeychainService.get(key: KeychainService.workerTokenKey) ?? "" }
-        set {
-            if newValue.isEmpty {
-                KeychainService.delete(key: KeychainService.workerTokenKey)
-            } else {
-                try? KeychainService.save(key: KeychainService.workerTokenKey, value: newValue)
-            }
-            objectWillChange.send()
-        }
+        get { secret(KeychainService.workerTokenKey) }
+        set { setSecret(KeychainService.workerTokenKey, newValue) }
     }
 
     /// Qdrant Cloud URL sent with a devbox job. Local Docker stays in `qdrantURL`.
     var qdrantCloudURL: String {
-        get { KeychainService.get(key: KeychainService.qdrantCloudURLKey) ?? "" }
-        set {
-            if newValue.isEmpty {
-                KeychainService.delete(key: KeychainService.qdrantCloudURLKey)
-            } else {
-                try? KeychainService.save(key: KeychainService.qdrantCloudURLKey, value: newValue)
-            }
-            objectWillChange.send()
-        }
+        get { secret(KeychainService.qdrantCloudURLKey) }
+        set { setSecret(KeychainService.qdrantCloudURLKey, newValue) }
     }
 
     /// Qdrant API Key - stored in Keychain, not in UserDefaults
     var qdrantAPIKey: String {
-        get {
-            KeychainService.get(key: KeychainService.qdrantAPIKeyKey) ?? ""
-        }
-        set {
-            if newValue.isEmpty {
-                KeychainService.delete(key: KeychainService.qdrantAPIKeyKey)
-            } else {
-                try? KeychainService.save(key: KeychainService.qdrantAPIKeyKey, value: newValue)
-            }
-            objectWillChange.send()
-        }
+        get { secret(KeychainService.qdrantAPIKeyKey) }
+        set { setSecret(KeychainService.qdrantAPIKeyKey, newValue) }
     }
 
-    init() {
+    init(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) {
+        self.defaults = defaults
+        self.secrets = secrets
         // Load saved values or use defaults
         // Note: ollamaURL and qdrantURL are stored in Keychain (computed properties)
         self.embeddingBackend = defaults.string(forKey: prefix + "embeddingBackend") ?? EmbeddingBackendKind.ollama.rawValue
@@ -379,5 +376,14 @@ class AppSettings: ObservableObject {
     func save() {
         // Settings are now auto-saved via didSet, but this can force a sync
         defaults.synchronize()
+    }
+
+    private func secret(_ key: String, default fallback: String = "") -> String {
+        secrets.value(for: key) ?? fallback
+    }
+
+    private func setSecret(_ key: String, _ value: String) {
+        secrets.set(value.isEmpty ? nil : value, for: key)
+        objectWillChange.send()
     }
 }

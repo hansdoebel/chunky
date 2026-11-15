@@ -15,6 +15,7 @@ from chunky_worker.qdrant_ingest import (
     QdrantCloudIngestor,
     build_points,
     content_hash,
+    sparse_vectors,
 )
 from tests.conftest import FakeEmbeddings, FakePipeline, auth_headers, wait_for_status
 
@@ -276,6 +277,60 @@ def test_cloud_failure_redacts_key(tmp_settings, pipeline, embeddings):
     assert "[redacted]" in body["error"]
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
+
+
+def test_sparse_vectors_follow_term_frequency():
+    rows = sparse_vectors(["alpha beta", "alpha alpha"])
+    assert rows[0][0]
+    assert rows[1][0]
+    assert len(rows[0][0]) == len(rows[0][1])
+
+
+def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
+    created: dict = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def collection_exists(self, collection_name):
+            return False
+
+        def create_collection(self, **kwargs):
+            created["create"] = kwargs
+
+        def upsert(self, **kwargs):
+            created["upsert"] = kwargs
+
+        def create_payload_index(self, **kwargs):
+            return None
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("qdrant_client.QdrantClient", FakeClient)
+    written = QdrantCloudIngestor().upsert_cloud(
+        url="https://example.cloud.qdrant.io",
+        api_key=API_KEY,
+        collection="docs",
+        points=[PreparedPoint(id="00000000-0000-0000-0000-000000000001", vector=[0.1, 0.2], payload={"text": "alpha beta"})],
+        vector_size=2,
+        distance="cosine",
+        batch_size=10,
+        hybrid=True,
+        quantization="scalar",
+        on_disk=True,
+    )
+    assert written == 1
+    create = created["create"]
+    assert create["vectors_config"]["dense"].size == 2
+    assert create["vectors_config"]["dense"].on_disk is True
+    assert create["sparse_vectors_config"]["sparse"].modifier.value == "idf"
+    assert create["on_disk_payload"] is True
+    assert create["quantization_config"] is not None
+    point = created["upsert"]["points"][0]
+    assert point.vector["dense"] == [0.1, 0.2]
+    assert point.vector["sparse"].indices
 
 
 def test_cloud_client_creates_collection_and_batches(monkeypatch):

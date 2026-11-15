@@ -6,11 +6,9 @@ import Testing
 struct AppSettingsTests {
 
     // MARK: - Initialization Tests
-    // Note: These tests verify that settings can be created and have reasonable values.
-    // Exact defaults may vary based on UserDefaults state from previous app runs.
 
     @Test func settingsCanBeCreated() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         // Verify embedding settings exist and have valid ranges
         #expect(!settings.embeddingModel.isEmpty)
@@ -20,7 +18,7 @@ struct AppSettingsTests {
     }
 
     @Test func qdrantSettingsHaveValidRanges() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         #expect(!settings.defaultCollection.isEmpty)
         #expect(settings.qdrantBatchSize >= 10 && settings.qdrantBatchSize <= 500)
@@ -30,7 +28,7 @@ struct AppSettingsTests {
     }
 
     @Test func metadataSettingsAreBooleans() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         // These should be booleans - verify they can be read without error
         _ = settings.metadataIncludeFilename
@@ -40,7 +38,7 @@ struct AppSettingsTests {
     }
 
     @Test func doclingSettingsHaveValidRanges() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         // Model should be a valid value
         #expect(!settings.doclingModel.isEmpty)
@@ -53,7 +51,7 @@ struct AppSettingsTests {
     }
 
     @Test func exportSettingsExist() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         // Export format should be a valid enum value
         #expect(ExportFormat.allCases.map { $0.rawValue }.contains(settings.exportFormat))
@@ -62,21 +60,21 @@ struct AppSettingsTests {
     // MARK: - Settings Modification Tests
 
     @Test func embeddingModelCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.embeddingModel = "nomic-embed-text"
         #expect(settings.embeddingModel == "nomic-embed-text")
     }
 
     @Test func embeddingDimensionsCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.embeddingDimensions = 768
         #expect(settings.embeddingDimensions == 768)
     }
 
     @Test func embeddingBatchSizeRange() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         // Test valid range (1-32 according to UI)
         settings.embeddingBatchSize = 1
@@ -87,14 +85,14 @@ struct AppSettingsTests {
     }
 
     @Test func qdrantBatchSizeCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.qdrantBatchSize = 200
         #expect(settings.qdrantBatchSize == 200)
     }
 
     @Test func metadataOptionsCanBeToggled() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.metadataIncludeFilename = false
         #expect(settings.metadataIncludeFilename == false)
@@ -110,17 +108,7 @@ struct AppSettingsTests {
     }
 
     @Test func doclingSettingsCanBeChanged() {
-        let defaults = UserDefaults.standard
-        let workersKey = "chunky.doclingWorkers"
-        let savedWorkers = defaults.object(forKey: workersKey)
-        defer {
-            if let savedWorkers {
-                defaults.set(savedWorkers, forKey: workersKey)
-            } else {
-                defaults.removeObject(forKey: workersKey)
-            }
-        }
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.doclingWorkers = 16
         #expect(settings.doclingWorkers == 16)
@@ -139,7 +127,7 @@ struct AppSettingsTests {
     }
 
     @Test func chunkingSettingsCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.maxTokensPerChunk = 1024
         #expect(settings.maxTokensPerChunk == 1024)
@@ -149,7 +137,7 @@ struct AppSettingsTests {
     }
 
     @Test func exportSettingsCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.exportFormat = ExportFormat.docling.rawValue
         #expect(settings.exportFormat == ExportFormat.docling.rawValue)
@@ -168,7 +156,7 @@ struct AppSettingsTests {
     }
 
     @Test func compressionCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         for compression in Compression.allCases {
             settings.qdrantCompression = compression.rawValue
@@ -177,7 +165,7 @@ struct AppSettingsTests {
     }
 
     @Test func distanceMetricCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         for metric in DistanceMetric.allCases {
             settings.qdrantDistanceMetric = metric.rawValue
@@ -186,7 +174,7 @@ struct AppSettingsTests {
     }
 
     @Test func tableModeCanBeChanged() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
 
         settings.tableMode = TableMode.accurate.rawValue
         #expect(settings.tableMode == TableMode.accurate.rawValue)

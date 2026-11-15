@@ -16,20 +16,7 @@ struct PicturePresetTests {
     }
 
     @Test func emptyPresetFollowsTheProcessingHost() {
-        let defaults = UserDefaults.standard
-        let hostKey = "chunky.processingHost"
-        let presetKey = "chunky.pictureDescriptionPreset"
-        let urlKey = "chunky.vlmServerURL"
-        let savedHost = defaults.string(forKey: hostKey)
-        let savedPreset = defaults.string(forKey: presetKey)
-        let savedURL = defaults.string(forKey: urlKey)
-        defer {
-            restore(defaults, hostKey, savedHost)
-            restore(defaults, presetKey, savedPreset)
-            restore(defaults, urlKey, savedURL)
-        }
-
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
         settings.pictureDescriptionPreset = ""
         settings.processingHost = .localMac
         #expect(settings.resolvedPictureDescriptionPreset == "smolvlm")
@@ -39,13 +26,5 @@ struct PicturePresetTests {
         #expect(settings.resolvedPictureDescriptionPreset == "qwen")
         settings.vlmServerURL = "http://127.0.0.1:8001"
         #expect(settings.vlmServerURL == "http://127.0.0.1:8001")
-    }
-}
-
-private func restore(_ defaults: UserDefaults, _ key: String, _ value: String?) {
-    if let value {
-        defaults.set(value, forKey: key)
-    } else {
-        defaults.removeObject(forKey: key)
     }
 }

@@ -25,6 +25,7 @@ struct PreferencesView: View {
     @State private var isCheckingDocling = false
     @State private var isUpdatingDocling = false
     @State private var doclingUpdateStatus: String?
+    @State private var showNewCollection = false
 
     enum ConnectionStatus {
         case unknown, checking, connected, failed
@@ -71,6 +72,14 @@ struct PreferencesView: View {
         }
         .onDisappear {
             appState.settings.save()
+        }
+        .sheet(isPresented: $showNewCollection) {
+            NewCollectionSheet(
+                vectorSize: appState.settings.embeddingDimensions,
+                embeddingBackend: appState.settings.embeddingBackend,
+                embeddingModel: appState.settings.embeddingModel
+            )
+            .environmentObject(appState)
         }
     }
 
@@ -621,6 +630,7 @@ struct PreferencesView: View {
                     }
                 }
 
+                Button("New collection") { showNewCollection = true }
                 Picker("Collection", selection: $appState.settings.defaultCollection) {
                     ForEach(appState.availableCollections, id: \.self) { collection in
                         Text(collection).tag(collection)

@@ -8,6 +8,8 @@ Payload field names match ``ChunkPoint.toQdrantPoint`` in the Mac app
 from __future__ import annotations
 
 import hashlib
+import math
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -48,6 +50,9 @@ class QdrantIngestor(Protocol):
         vector_size: int,
         distance: str,
         batch_size: int,
+        hybrid: bool = False,
+        quantization: str = "none",
+        on_disk: bool = False,
         on_progress: Callable[[int, int], None] | None = None,
     ) -> int:
         """Create the collection when missing and upsert. Returns the point count."""
@@ -71,6 +76,60 @@ def normalize_distance(value: str) -> str:
     if key not in aliases:
         raise IngestError(f"Unsupported Qdrant distance: {value}")
     return aliases[key]
+
+
+def sparse_vectors(texts: list[str]) -> list[tuple[list[int], list[float]]]:
+    tokenized = [_tokenize(text) for text in texts]
+    document_frequency: dict[str, int] = {}
+    for tokens in tokenized:
+        for token in set(tokens):
+            document_frequency[token] = document_frequency.get(token, 0) + 1
+    vocabulary = {token: index for index, token in enumerate(sorted(document_frequency))}
+    count = float(len(texts)) or 1.0
+    rows: list[tuple[list[int], list[float]]] = []
+    for tokens in tokenized:
+        frequencies: dict[str, int] = {}
+        for token in tokens:
+            frequencies[token] = frequencies.get(token, 0) + 1
+        pairs: list[tuple[int, float]] = []
+        for token, frequency in frequencies.items():
+            index = vocabulary.get(token)
+            seen = document_frequency.get(token)
+            if index is None or seen is None:
+                continue
+            score = math.log1p(frequency) * math.log1p(count / float(seen))
+            if score > 0:
+                pairs.append((index, score))
+        pairs.sort()
+        rows.append(([index for index, _ in pairs], [score for _, score in pairs]))
+    return rows
+
+
+def _tokenize(text: str) -> list[str]:
+    return re.findall(r"[0-9A-Za-z_]{2,}", text.lower())
+
+
+def _quantization_config(name: str, *, on_disk: bool):
+    key = (name or "none").strip().lower()
+    if key in {"", "none"}:
+        return None
+    try:
+        from qdrant_client.models import (
+            BinaryQuantization,
+            BinaryQuantizationConfig,
+            ScalarQuantization,
+            ScalarQuantizationConfig,
+        )
+    except ImportError as exc:
+        raise IngestError("qdrant-client is not installed") from exc
+    always_ram = not on_disk
+    if key == "scalar":
+        return ScalarQuantization(
+            scalar=ScalarQuantizationConfig(type="int8", always_ram=always_ram)
+        )
+    if key == "binary":
+        return BinaryQuantization(binary=BinaryQuantizationConfig(always_ram=always_ram))
+    raise IngestError(f"Unsupported Qdrant quantization: {name}")
 
 
 def content_hash(text: str, model: str) -> str:
@@ -298,6 +357,9 @@ class QdrantCloudIngestor:
         vector_size: int,
         distance: str,
         batch_size: int,
+        hybrid: bool = False,
+        quantization: str = "none",
+        on_disk: bool = False,
         on_progress: Callable[[int, int], None] | None = None,
     ) -> int:
         if not url:
@@ -311,7 +373,14 @@ class QdrantCloudIngestor:
 
         distance_name = normalize_distance(distance)
         try:
-            from qdrant_client.models import Distance, PointStruct, VectorParams
+            from qdrant_client.models import (
+                Distance,
+                Modifier,
+                PointStruct,
+                SparseVector,
+                SparseVectorParams,
+                VectorParams,
+            )
         except ImportError as exc:
             raise IngestError("qdrant-client is not installed") from exc
 
@@ -333,21 +402,46 @@ class QdrantCloudIngestor:
                         "Refusing to upsert."
                     )
             else:
-                client.create_collection(
-                    collection_name=collection,
-                    vectors_config=VectorParams(size=vector_size, distance=distance_enum),
+                compression = _quantization_config(quantization, on_disk=on_disk)
+                dense = VectorParams(
+                    size=vector_size,
+                    distance=distance_enum,
+                    on_disk=True if on_disk else None,
                 )
+                if hybrid:
+                    client.create_collection(
+                        collection_name=collection,
+                        vectors_config={"dense": dense},
+                        sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.IDF)},
+                        on_disk_payload=on_disk,
+                        quantization_config=compression,
+                    )
+                else:
+                    client.create_collection(
+                        collection_name=collection,
+                        vectors_config=dense,
+                        on_disk_payload=True if on_disk else None,
+                        quantization_config=compression,
+                    )
             ensure_payload_indexes(client, collection)
 
+            sparse_rows = sparse_vectors([point.payload.get("text") or "" for point in points]) if hybrid else None
             total = len(points)
             written = 0
             step = batch_size
             for start in range(0, total, step):
                 batch = points[start : start + step]
-                structs = [
-                    PointStruct(id=point.id, vector=point.vector, payload=point.payload)
-                    for point in batch
-                ]
+                structs = []
+                for offset, point in enumerate(batch):
+                    if sparse_rows is None:
+                        vector: Any = point.vector
+                    else:
+                        indices, values = sparse_rows[start + offset]
+                        vector = {
+                            "dense": point.vector,
+                            "sparse": SparseVector(indices=indices, values=values),
+                        }
+                    structs.append(PointStruct(id=point.id, vector=vector, payload=point.payload))
                 client.upsert(collection_name=collection, points=structs, wait=True)
                 written += len(batch)
                 if on_progress:

@@ -121,19 +121,36 @@ class QdrantService: ObservableObject {
         )
     }
 
-    func createCollectionIfNeeded(name: String, vectorSize: Int, hybrid: Bool = false, distance: Distance = .cosine, quantizationConfig: QuantizationConfig? = nil) async throws {
+    func createCollectionIfNeeded(
+        name: String,
+        vectorSize: Int,
+        hybrid: Bool = false,
+        distance: Distance = .cosine,
+        onDiskVectors: Bool? = nil,
+        onDiskPayload: Bool? = nil,
+        quantizationConfig: QuantizationConfig? = nil
+    ) async throws {
         guard let client = client else {
             throw QdrantServiceError.notConnected
         }
 
         let exists = try await client.collections.exists(name: name)
         if !exists {
+            let payloadOnDisk = onDiskPayload ?? (hybrid ? true : nil)
+            let dense = VectorConfig(size: vectorSize, distance: distance, onDisk: onDiskVectors)
             if hybrid {
                 try await client.collections.create(
                     name: name,
-                    vectors: .named(["dense": VectorConfig(size: vectorSize, distance: distance)]),
+                    vectors: .named(["dense": dense]),
                     sparseVectors: ["sparse": SparseVectorParams(modifier: .idf)],
-                    onDiskPayload: true,
+                    onDiskPayload: payloadOnDisk,
+                    quantizationConfig: quantizationConfig
+                )
+            } else if onDiskVectors != nil {
+                try await client.collections.create(
+                    name: name,
+                    vectors: .single(dense),
+                    onDiskPayload: payloadOnDisk,
                     quantizationConfig: quantizationConfig
                 )
             } else {
@@ -141,7 +158,7 @@ class QdrantService: ObservableObject {
                     name: name,
                     vectorSize: UInt64(vectorSize),
                     distance: distance,
-                    onDiskPayload: nil,
+                    onDiskPayload: payloadOnDisk,
                     quantizationConfig: quantizationConfig
                 )
             }

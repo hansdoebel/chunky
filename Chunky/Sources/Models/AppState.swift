@@ -156,9 +156,9 @@ class AppState: ObservableObject {
     func fetchCollections() async {
         // Skip if Qdrant is not configured
         guard !settings.qdrantURL.isEmpty else {
-            if availableCollections.isEmpty {
-                availableCollections = ["documents"]
-            }
+            let base = availableCollections.isEmpty ? ["documents"] : availableCollections
+            let pending = CollectionPlanStore.mergedNames(server: base)
+            availableCollections = pending.isEmpty ? ["documents"] : pending
             return
         }
 
@@ -166,7 +166,7 @@ class AppState: ObservableObject {
             try await ensureQdrantConnection()
 
             guard let service = qdrantService else { return }
-            let collections = try await service.listCollections()
+            let collections = CollectionPlanStore.mergedNames(server: try await service.listCollections())
             availableCollections = collections.isEmpty ? ["documents"] : collections
             qdrantConnectionError = nil
             print("Fetched \(collections.count) collections: \(collections)")
@@ -175,7 +175,8 @@ class AppState: ObservableObject {
             qdrantConnectionError = error.localizedDescription
             // Keep default collections on error
             if availableCollections.isEmpty {
-                availableCollections = ["documents"]
+                let pending = CollectionPlanStore.mergedNames(server: ["documents"])
+                availableCollections = pending.isEmpty ? ["documents"] : pending
             }
         }
     }
