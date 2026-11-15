@@ -171,6 +171,13 @@ struct RetrievalEvalScreen: View {
     @State private var rerankModel = ""
     @State private var rerankAPIKey = ""
     @State private var k = 10
+    @State private var yearFrom = ""
+    @State private var yearTo = ""
+    @State private var author = ""
+    @State private var doi = ""
+    @State private var titleContains = ""
+    @State private var heading = ""
+    @State private var contentType = ""
     @State private var status = ""
     @State private var running = false
 
@@ -225,6 +232,30 @@ struct RetrievalEvalScreen: View {
                         .textFieldStyle(.roundedBorder)
                 }
             }
+            HStack {
+                TextField("Year from", text: $yearFrom)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 90)
+                TextField("Year to", text: $yearTo)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 90)
+                TextField("Author", text: $author)
+                    .textFieldStyle(.roundedBorder)
+                TextField("DOI", text: $doi)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Title contains", text: $titleContains)
+                    .textFieldStyle(.roundedBorder)
+                TextField("Heading contains", text: $heading)
+                    .textFieldStyle(.roundedBorder)
+                Picker("Content", selection: $contentType) {
+                    Text("Any").tag("")
+                    Text("text").tag("text")
+                    Text("picture").tag("picture")
+                    Text("table").tag("table")
+                    Text("formula").tag("formula")
+                }
+                .frame(maxWidth: 140)
+            }
             TextField("Synthetic chunks, one per line: id<tab>text", text: $synthetic)
                 .textFieldStyle(.roundedBorder)
             Button("Build synthetic set") { buildSynthetic() }
@@ -246,7 +277,16 @@ struct RetrievalEvalScreen: View {
             reranker: reranker,
             k: k,
             rrfWeights: nil,
-            rerank: reranker ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey) : nil
+            rerank: reranker ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey) : nil,
+            filters: RetrievalFilter.scope(
+                yearFrom: yearFrom,
+                yearTo: yearTo,
+                author: author,
+                doi: doi,
+                title: titleContains,
+                heading: heading,
+                contentType: contentType
+            )
         )
     }
 

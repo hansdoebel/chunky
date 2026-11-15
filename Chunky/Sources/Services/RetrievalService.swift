@@ -41,6 +41,7 @@ enum RetrievalMatch: Equatable, Sendable {
     case text(String)
     case integer(Int)
     case boolean(Bool)
+    case contains(String)
 }
 
 struct RetrievalFilter: Equatable, Sendable {
@@ -53,6 +54,16 @@ struct RetrievalFilter: Equatable, Sendable {
 
     var hasRange: Bool {
         gt != nil || gte != nil || lt != nil || lte != nil
+    }
+
+    var exactMatch: String? {
+        if case .text(let value) = match { return value }
+        return nil
+    }
+
+    var containsMatch: String? {
+        if case .contains(let value) = match { return value }
+        return nil
     }
 
     func conditions() -> [Condition] {
@@ -68,6 +79,8 @@ struct RetrievalFilter: Equatable, Sendable {
                 encoded = .integer(Int64(value))
             case .boolean(let value):
                 encoded = .boolean(value)
+            case .contains(let value):
+                encoded = .text(value)
             }
             items.append(.field(key: trimmed, match: encoded))
         }
@@ -86,6 +99,8 @@ struct RetrievalFilter: Equatable, Sendable {
             object["match"] = value
         case .boolean(let value):
             object["match"] = value
+        case .contains(let value):
+            object["text"] = value
         case nil:
             break
         }
@@ -111,6 +126,9 @@ struct RetrievalFilter: Equatable, Sendable {
             if case .keyword(let value) = field.match {
                 summary.keyword = value
             }
+            if case .text(let value) = field.match {
+                summary.text = value
+            }
             if case .integer(let value) = field.match {
                 summary.integer = Int(value)
             }
@@ -120,7 +138,17 @@ struct RetrievalFilter: Equatable, Sendable {
         }
     }
 
-    static func playground(source: String, page: String, contentType: String) -> [RetrievalFilter] {
+    static func playground(
+        source: String,
+        page: String,
+        contentType: String,
+        yearFrom: String = "",
+        yearTo: String = "",
+        author: String = "",
+        doi: String = "",
+        title: String = "",
+        heading: String = ""
+    ) -> [RetrievalFilter] {
         var filters: [RetrievalFilter] = []
         let sourceText = source.trimmingCharacters(in: .whitespacesAndNewlines)
         if !sourceText.isEmpty {
@@ -129,17 +157,129 @@ struct RetrievalFilter: Equatable, Sendable {
         if let pageNumber = Int(page.trimmingCharacters(in: .whitespacesAndNewlines)) {
             filters.append(RetrievalFilter(key: "page", match: .integer(pageNumber)))
         }
+        filters += scope(
+            yearFrom: yearFrom,
+            yearTo: yearTo,
+            author: author,
+            doi: doi,
+            title: title,
+            heading: heading,
+            contentType: contentType
+        )
+        return filters
+    }
+
+    static func scope(
+        yearFrom: String = "",
+        yearTo: String = "",
+        author: String = "",
+        doi: String = "",
+        title: String = "",
+        heading: String = "",
+        contentType: String = ""
+    ) -> [RetrievalFilter] {
+        var filters: [RetrievalFilter] = []
+        let from = Int(yearFrom.trimmingCharacters(in: .whitespacesAndNewlines))
+        let to = Int(yearTo.trimmingCharacters(in: .whitespacesAndNewlines))
+        if from != nil || to != nil {
+            filters.append(RetrievalFilter(key: "year", gte: from.map(Double.init), lte: to.map(Double.init)))
+        }
+        let authorText = author.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !authorText.isEmpty {
+            filters.append(RetrievalFilter(key: "authors", match: .contains(authorText)))
+        }
+        let doiText = doi.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !doiText.isEmpty {
+            filters.append(RetrievalFilter(key: "doi", match: .text(doiText)))
+        }
+        let titleText = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !titleText.isEmpty {
+            filters.append(RetrievalFilter(key: "doc_title", match: .contains(titleText)))
+        }
+        let headingText = heading.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !headingText.isEmpty {
+            filters.append(RetrievalFilter(key: "headings", match: .contains(headingText)))
+        }
         let kind = contentType.trimmingCharacters(in: .whitespacesAndNewlines)
         if !kind.isEmpty {
             filters.append(RetrievalFilter(key: "content_type", match: .text(kind)))
         }
         return filters
     }
+
+    static func keeps(_ payload: [String: Any], filters: [RetrievalFilter]) -> Bool {
+        filters.allSatisfy { $0.matches(payload) }
+    }
+
+    func matches(_ payload: [String: Any]) -> Bool {
+        let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return true }
+        let value = payload[trimmed]
+        if let match {
+            switch match {
+            case .text(let expected):
+                if !Self.equals(value, expected) { return false }
+            case .integer(let expected):
+                if Self.intValue(value) != expected { return false }
+            case .boolean(let expected):
+                if (value as? Bool) != expected { return false }
+            case .contains(let expected):
+                if !Self.contains(value, expected) { return false }
+            }
+        }
+        if hasRange {
+            guard let number = Self.doubleValue(value) else { return false }
+            if let gt, number <= gt { return false }
+            if let gte, number < gte { return false }
+            if let lt, number >= lt { return false }
+            if let lte, number > lte { return false }
+        }
+        return true
+    }
+
+    private static func equals(_ value: Any?, _ expected: String) -> Bool {
+        if let text = value as? String { return text == expected }
+        if let values = value as? [String] { return values.contains(expected) }
+        if let values = value as? [Any] {
+            return values.contains { ($0 as? String) == expected }
+        }
+        return false
+    }
+
+    private static func contains(_ value: Any?, _ expected: String) -> Bool {
+        let needle = expected.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty else { return true }
+        if let text = value as? String {
+            return text.lowercased().contains(needle)
+        }
+        if let values = value as? [String] {
+            return values.contains { $0.lowercased().contains(needle) }
+        }
+        if let values = value as? [Any] {
+            return values.contains { (($0 as? String) ?? "").lowercased().contains(needle) }
+        }
+        return false
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        if let number = value as? Int { return number }
+        if let number = value as? Double { return Int(number) }
+        if let text = value as? String { return Int(text) }
+        return nil
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        if let number = value as? Double { return number }
+        if let number = value as? Int { return Double(number) }
+        if let text = value as? String { return Double(text) }
+        return nil
+    }
 }
 
 struct EncodedFilterSummary: Equatable, Sendable {
     var key: String
     var keyword: String? = nil
+    var text: String? = nil
     var integer: Int? = nil
     var gte: Double? = nil
     var lte: Double? = nil
@@ -511,16 +651,16 @@ enum HybridQuery {
             let key = item.key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { continue }
             if let match = item.match {
-                let value: Any
                 switch match {
                 case .text(let text):
-                    value = text
+                    must.append(["key": key, "match": ["value": text]])
                 case .integer(let number):
-                    value = number
+                    must.append(["key": key, "match": ["value": number]])
                 case .boolean(let flag):
-                    value = flag
+                    must.append(["key": key, "match": ["value": flag]])
+                case .contains(let text):
+                    must.append(["key": key, "match": ["text": text]])
                 }
-                must.append(["key": key, "match": ["value": value]])
             }
             if item.hasRange {
                 var range: [String: Any] = [:]
@@ -660,6 +800,7 @@ struct QdrantRetrievalIndex: RetrievalIndex {
     }
 
     func hybridRRF(collection: String, url: String, apiKey: String, body: [String: Any]) async throws -> [SearchResult] {
+        await service.ensureRetrievalIndexes(collection: collection)
         guard let endpoint = HybridQuery.restURL(qdrantURL: url, collection: collection) else {
             throw QdrantServiceError.invalidURL(url)
         }

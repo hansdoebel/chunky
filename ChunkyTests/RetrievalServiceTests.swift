@@ -90,6 +90,53 @@ struct RetrievalServiceTests {
         #expect(RetrievalFilter.encodedSummaries([]).isEmpty)
     }
 
+    @Test func scopeFiltersYearAndAuthorAndDropsOutsiders() {
+        let filters = RetrievalFilter.scope(
+            yearFrom: "2020",
+            yearTo: "2024",
+            author: "Ada",
+            doi: "10.1000/xyz",
+            title: "Revenue",
+            heading: "Results",
+            contentType: "table"
+        )
+        let encoded = RetrievalFilter.encodedSummaries(filters)
+        #expect(encoded.map(\.key) == ["year", "authors", "doi", "doc_title", "headings", "content_type"])
+        #expect(encoded[0].gte == 2020)
+        #expect(encoded[0].lte == 2024)
+        #expect(encoded[1].text == "Ada")
+        #expect(encoded[2].keyword == "10.1000/xyz")
+        #expect(encoded[3].text == "Revenue")
+        #expect(encoded[4].text == "Results")
+        #expect(encoded[5].keyword == "table")
+        #expect(RetrievalFilter.qdrantFilter([]) == nil)
+        let inside: [String: Any] = [
+            "year": 2022,
+            "authors": "Ada; Bea",
+            "doi": "10.1000/xyz",
+            "doc_title": "Revenue notes",
+            "headings": ["Intro", "Results"],
+            "content_type": "table",
+        ]
+        #expect(RetrievalFilter.keeps(inside, filters: filters))
+        var early = inside
+        early["year"] = 2010
+        #expect(!RetrievalFilter.keeps(early, filters: filters))
+        var otherAuthor = inside
+        otherAuthor["authors"] = "Bea"
+        #expect(!RetrievalFilter.keeps(otherAuthor, filters: filters))
+        #expect(RetrievalFilter.keeps(inside, filters: []))
+        let body = HybridQuery.restFilter(filters)
+        let must = body?["must"] as? [[String: Any]]
+        #expect(must?.count == 6)
+        #expect((must?[1]["match"] as? [String: Any])?["text"] as? String == "Ada")
+    }
+
+    @Test func emptyScopeDoesNotAddFilters() {
+        #expect(RetrievalFilter.scope().isEmpty)
+        #expect(RetrievalFilter.playground(source: "  ", page: "nope", contentType: " ").isEmpty)
+    }
+
     @Test func localDimensionMismatchRefusesBeforeSearch() async {
         let embedding = FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3])
         let index = FakeIndex(vectorSize: 1024)
@@ -328,7 +375,7 @@ struct RetrievalServiceTests {
     @MainActor
     private func render(hits: [RetrievalHit], scheme: ColorScheme) throws -> (png: Data, colored: Int, luminance: Double) {
         let view = RetrievalScreenshotHost(hits: hits)
-            .frame(width: 960, height: 640)
+            .frame(width: 1100, height: 980)
             .environment(\.colorScheme, scheme)
         let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
         let previous = NSAppearance.current
@@ -519,6 +566,12 @@ struct RetrievalScreenshotHost: View {
     @State private var source = "paper.pdf"
     @State private var page = "2"
     @State private var contentType = "text"
+    @State private var yearFrom = "2020"
+    @State private var yearTo = "2024"
+    @State private var author = "Ada"
+    @State private var doi = "10.1000/example"
+    @State private var title = "Revenue"
+    @State private var heading = "Results"
     @State private var mode = RetrievalMode.hybrid.rawValue
     @State private var denseWeight = "0.7"
     @State private var lexicalWeight = "0.3"
@@ -542,6 +595,12 @@ struct RetrievalScreenshotHost: View {
             source: $source,
             page: $page,
             contentType: $contentType,
+            yearFrom: $yearFrom,
+            yearTo: $yearTo,
+            author: $author,
+            doi: $doi,
+            title: $title,
+            heading: $heading,
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,

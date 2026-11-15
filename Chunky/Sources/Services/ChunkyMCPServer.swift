@@ -55,6 +55,7 @@ nonisolated enum ChunkyMCPDispatch {
                             "properties": [
                                 "key": ["type": "string"],
                                 "match": ["type": "string"],
+                                "text": ["type": "string"],
                                 "gt": ["type": "number"],
                                 "gte": ["type": "number"],
                                 "lt": ["type": "number"],
@@ -62,7 +63,14 @@ nonisolated enum ChunkyMCPDispatch {
                             ],
                             "required": ["key"]
                         ]
-                    ]
+                    ],
+                    "year_from": ["type": "integer"],
+                    "year_to": ["type": "integer"],
+                    "author": ["type": "string"],
+                    "doi": ["type": "string"],
+                    "title": ["type": "string"],
+                    "heading": ["type": "string"],
+                    "content_type": ["type": "string"]
                 ],
                 "required": ["query"]
             ]
@@ -111,8 +119,35 @@ nonisolated enum ChunkyMCPDispatch {
         guard topK >= 1, topK <= 100 else {
             throw ChunkySearchError.invalidArguments("top_k must be from 1 to 100")
         }
-        let filters = PiJSONL.dictionaries(arguments["filters"]).compactMap(filter)
+        let filters = PiJSONL.dictionaries(arguments["filters"]).compactMap(filter) + scopeFilters(arguments)
         return ChunkySearchRequest(query: query, collection: collection, topK: topK, filters: filters)
+    }
+
+    static func scopeFilters(_ arguments: [String: Any]) -> [ChunkySearchFilter] {
+        RetrievalFilter.scope(
+            yearFrom: string(arguments["year_from"]),
+            yearTo: string(arguments["year_to"]),
+            author: string(arguments["author"]),
+            doi: string(arguments["doi"]),
+            title: string(arguments["title"]),
+            heading: string(arguments["heading"]),
+            contentType: string(arguments["content_type"])
+        ).map { item in
+            ChunkySearchFilter(
+                key: item.key,
+                match: item.exactMatch,
+                text: item.containsMatch,
+                gte: item.gte,
+                lte: item.lte
+            )
+        }
+    }
+
+    private static func string(_ value: Any?) -> String {
+        if let text = value as? String { return text }
+        if let number = value as? Int { return String(number) }
+        if let number = value as? NSNumber { return number.stringValue }
+        return ""
     }
 
     private static func filter(_ object: [String: Any]) -> ChunkySearchFilter? {
@@ -120,6 +155,7 @@ nonisolated enum ChunkyMCPDispatch {
         return ChunkySearchFilter(
             key: key,
             match: object["match"] as? String,
+            text: object["text"] as? String,
             gt: double(object["gt"]),
             gte: double(object["gte"]),
             lt: double(object["lt"]),

@@ -283,6 +283,37 @@ struct RetrievalEvalTests {
             )
         )
     }
+
+    @Test func evalSearchSendsTheSameScopeFilter() async throws {
+        let settings = IsolatedSettings.make()
+        let index = EvalFakeIndex(hits: [
+            SearchResult(id: "d1", score: 0.9, text: "alpha", source: "doc-1"),
+        ])
+        let service = RetrievalService(embedding: EvalFakeEmbedding(), worker: EvalFakeWorker())
+        let filters = RetrievalFilter.scope(yearFrom: "2020", yearTo: "2024", author: "Ada")
+        let config = RetrievalEvalConfig(
+            collection: "documents",
+            embeddingBackend: EmbeddingBackendKind.ollama.rawValue,
+            embeddingModel: "qwen3-embedding",
+            chunking: "512/64",
+            hybrid: false,
+            reranker: false,
+            k: 3,
+            rrfWeights: nil,
+            rerank: nil,
+            filters: filters
+        )
+        _ = try await RetrievalEvalRunner(service: service).run(
+            set: RetrievalEvalSet(name: "scope", queries: [RetrievalEvalQuery(question: "revenue", relevantIDs: ["d1"])]),
+            config: config,
+            settings: settings,
+            index: index
+        )
+        let encoded = RetrievalFilter.encodedSummaries(filters)
+        #expect(encoded.map(\.key) == ["year", "authors"])
+        #expect(index.lastFilter?.must.count == 2)
+        #expect(index.denseCalls == 1)
+    }
 }
 
 private struct EvalFakeEmbedding: RetrievalEmbedding {
@@ -303,6 +334,8 @@ private final class EvalFakeIndex: RetrievalIndex {
 
     func vectorSize(collection: String) async throws -> Int? { 4 }
     func vectorName(collection: String) async throws -> String? { "dense" }
+    var lastFilter: RetrievalQueryFilter?
+
     func denseSearch(
         collection: String,
         vector: [Float],
@@ -312,6 +345,7 @@ private final class EvalFakeIndex: RetrievalIndex {
         vectorName: String?
     ) async throws -> [SearchResult] {
         denseCalls += 1
+        lastFilter = filter
         return hits
     }
 

@@ -176,6 +176,69 @@ def test_build_query_filter_ands_match_and_range():
     assert must[3].match is None
     assert build_query_filter([]) is None
 
+def test_build_query_filter_uses_text_for_author_title_and_heading():
+    query_filter = build_query_filter(
+        [
+            PayloadFilter(key="year", gte=2020, lte=2024),
+            PayloadFilter(key="authors", text="Ada"),
+            PayloadFilter(key="doi", match="10.1000/xyz"),
+            PayloadFilter(key="doc_title", text="Revenue"),
+            PayloadFilter(key="headings", text="Results"),
+            PayloadFilter(key="content_type", match="table"),
+        ]
+    )
+    must = query_filter.must
+    assert [item.key for item in must] == [
+        "year",
+        "authors",
+        "doi",
+        "doc_title",
+        "headings",
+        "content_type",
+    ]
+    assert must[0].range.gte == 2020
+    assert must[0].range.lte == 2024
+    assert must[1].match.text == "Ada"
+    assert must[2].match.value == "10.1000/xyz"
+    assert must[3].match.text == "Revenue"
+    assert must[4].match.text == "Results"
+    assert must[5].match.value == "table"
+    inside = {
+        "year": 2022,
+        "authors": "Ada; Bea",
+        "doi": "10.1000/xyz",
+        "doc_title": "Revenue notes",
+        "headings": ["Intro", "Results"],
+        "content_type": "table",
+    }
+    assert _keeps(inside, query_filter)
+    early = dict(inside, year=2010)
+    assert not _keeps(early, query_filter)
+    other = dict(inside, authors="Bea")
+    assert not _keeps(other, query_filter)
+
+def _keeps(payload, query_filter) -> bool:
+    for condition in query_filter.must:
+        value = payload.get(condition.key)
+        match = condition.match
+        if match is not None and getattr(match, "text", None):
+            needle = str(match.text).lower()
+            if isinstance(value, list):
+                if not any(needle in str(item).lower() for item in value):
+                    return False
+            elif needle not in str(value).lower():
+                return False
+        elif match is not None and getattr(match, "value", None) is not None:
+            if value != match.value:
+                return False
+        bounds = condition.range
+        if bounds is not None:
+            if bounds.gte is not None and value < bounds.gte:
+                return False
+            if bounds.lte is not None and value > bounds.lte:
+                return False
+    return True
+
 def test_searcher_sends_dense_query_shape():
     fake = FakeQdrant(named="dense")
     opened = []

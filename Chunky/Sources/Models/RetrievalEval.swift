@@ -90,6 +90,7 @@ struct RetrievalEvalConfig: Equatable, Sendable {
     var k: Int
     var rrfWeights: [Double]?
     var rerank: RerankConfig?
+    var filters: [RetrievalFilter] = []
 
     var label: String {
         let fusion = hybrid ? "hybrid" : "dense"
@@ -391,6 +392,7 @@ struct RetrievalEvalRunner {
                 limit: config.k,
                 backend: config.embeddingBackend,
                 model: config.embeddingModel,
+                filters: config.filters,
                 rrfWeights: config.hybrid ? config.rrfWeights : nil,
                 rerank: config.reranker ? config.rerank : nil,
                 settings: settings

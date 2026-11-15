@@ -15,6 +15,8 @@ from chunky_worker.qdrant_ingest import (
     QdrantCloudIngestor,
     build_points,
     INTEGER_PAYLOAD_INDEXES,
+    KEYWORD_PAYLOAD_INDEXES,
+    TEXT_PAYLOAD_INDEXES,
     content_hash,
     sparse_vectors,
 )
@@ -99,6 +101,12 @@ def test_payload_matches_mac_field_names():
     assert "page" in INTEGER_PAYLOAD_INDEXES
     assert "page_end" in INTEGER_PAYLOAD_INDEXES
     assert "year" in INTEGER_PAYLOAD_INDEXES
+    assert "headings" in TEXT_PAYLOAD_INDEXES
+    assert "doc_title" in TEXT_PAYLOAD_INDEXES
+    assert "authors" in TEXT_PAYLOAD_INDEXES
+    assert "doc_title" not in KEYWORD_PAYLOAD_INDEXES
+    assert "content_type" in KEYWORD_PAYLOAD_INDEXES
+    assert "doi" in KEYWORD_PAYLOAD_INDEXES
     assert isinstance(payload["chunk_index"], str)
 
 def test_picture_and_table_payloads_keep_serialized_text():

@@ -29,6 +29,7 @@ class SearchError(Exception):
 class PayloadFilter(BaseModel):
     key: str
     match: str | int | bool | None = None
+    text: str | None = None
     gt: float | None = None
     gte: float | None = None
     lt: float | None = None
@@ -56,9 +57,19 @@ class PayloadFilter(BaseModel):
     def has_range(self) -> bool:
         return any(bound is not None for bound in (self.gt, self.gte, self.lt, self.lte))
 
+    @field_validator("text")
+    @classmethod
+    def text_is_not_empty(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        text = value.strip()
+        if not text:
+            raise ValueError("text must not be empty")
+        return text
+
     def check_complete(self) -> None:
-        if self.match is None and not self.has_range():
-            raise ValueError(f"Filter {self.key!r} needs a match or a range")
+        if self.match is None and self.text is None and not self.has_range():
+            raise ValueError(f"Filter {self.key!r} needs a match, text, or a range")
 
 class SearchRequest(BaseModel):
     query: str
@@ -189,13 +200,15 @@ def hybrid_query_arguments(
 def build_query_filter(filters: list[PayloadFilter]):
     if not filters:
         return None
-    from qdrant_client.models import FieldCondition, Filter, MatchValue, Range
+    from qdrant_client.models import FieldCondition, Filter, MatchText, MatchValue, Range
 
     must = []
     for item in filters:
         item.check_complete()
         kwargs: dict[str, Any] = {"key": item.key}
-        if item.match is not None:
+        if item.text is not None:
+            kwargs["match"] = MatchText(text=item.text)
+        elif item.match is not None:
             kwargs["match"] = MatchValue(value=item.match)
         if item.has_range():
             kwargs["range"] = Range(gt=item.gt, gte=item.gte, lt=item.lt, lte=item.lte)
@@ -389,6 +402,14 @@ def _default_client(url: str, api_key: str):
         return QdrantClient(url=url, api_key=api_key, timeout=30)
     return QdrantClient(url=url, timeout=30)
 
+def _ensure_filter_indexes(client: Any, collection: str) -> None:
+    try:
+        from chunky_worker.qdrant_ingest import ensure_payload_indexes
+
+        ensure_payload_indexes(client, collection)
+    except Exception:
+        log.debug("payload index ensure skipped for %s", collection)
+
 def _payload_dict(payload: Any) -> dict[str, Any]:
     if payload is None:
         return {}
@@ -449,6 +470,7 @@ class QdrantPointSearcher:
     ) -> list[ScoredHit]:
         client = self._open(url, api_key)
         try:
+            _ensure_filter_indexes(client, collection)
             response = client.query_points(
                 collection_name=collection,
                 query=vector,
@@ -501,6 +523,7 @@ class QdrantPointSearcher:
     ) -> list[ScoredHit]:
         client = self._open(url, api_key)
         try:
+            _ensure_filter_indexes(client, collection)
             arguments = hybrid_query_arguments(
                 vector=vector,
                 text=text,
