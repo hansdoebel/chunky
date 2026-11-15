@@ -15,27 +15,27 @@ struct WorkerEndpointTests {
         #expect(endpoints.map(\.name) == WorkerEndpoint.starterNames)
         let wifi = endpoints[1]
         var saved = endpoints
-        saved[1].url = "https://devbox.example.ts.net"
+        saved[1].url = "https://worker.example.ts.net"
         settings.replaceWorkerEndpoints(saved)
         settings.setWorkerEndpointToken(id: wifi.id, "endpoint-secret")
         #expect(settings.devboxWorkerURL == "http://192.0.2.10:8080")
         #expect(settings.workerToken == "existing-token")
         settings.useWorkerEndpoint(saved[1])
-        #expect(settings.devboxWorkerURL == "https://devbox.example.ts.net")
+        #expect(settings.devboxWorkerURL == "https://worker.example.ts.net")
         #expect(settings.workerToken == "endpoint-secret")
         #expect(settings.workerEndpointToken(id: wifi.id) == "endpoint-secret")
         let loaded = WorkerEndpointStore.load(defaults: settings.defaults)
-        #expect(loaded.contains { $0.url == "https://devbox.example.ts.net" })
+        #expect(loaded.contains { $0.url == "https://worker.example.ts.net" })
         let text = String(decoding: try JSONEncoder().encode(loaded), as: UTF8.self)
         #expect(!text.contains("endpoint-secret"))
         #expect(!text.contains("existing-token"))
-        #expect(WorkerProbe.accepts(url: "https://devbox.example.ts.net"))
-        #expect(!WorkerProbe.accepts(url: "ftp://devbox"))
+        #expect(WorkerProbe.accepts(url: "https://worker.example.ts.net"))
+        #expect(!WorkerProbe.accepts(url: "ftp://worker"))
     }
 
     @Test func probeClassifiesReachabilityAndLatency() {
         let connected = WorkerProbe.classify(
-            url: "https://devbox.example.ts.net",
+            url: "https://worker.example.ts.net",
             healthStatus: 200,
             healthFailedSecure: false,
             healthUnreachable: false,
@@ -47,7 +47,7 @@ struct WorkerEndpointTests {
         #expect(connected.kind == .connected)
         #expect(connected.latencyMs == 18)
         let denied = WorkerProbe.classify(
-            url: "http://devbox.local:8080",
+            url: "http://worker.local:8080",
             healthStatus: 200,
             healthFailedSecure: false,
             healthUnreachable: false,
@@ -59,7 +59,7 @@ struct WorkerEndpointTests {
         #expect(denied.kind == .unauthorized)
         #expect(denied.latencyMs == 40)
         let blocked = WorkerProbe.classify(
-            url: "http://devbox.example.ts.net:8080",
+            url: "http://worker.example.ts.net:8080",
             healthStatus: nil,
             healthFailedSecure: true,
             healthUnreachable: false,
@@ -92,24 +92,24 @@ struct WorkerEndpointTests {
             elapsed: 0
         )
         #expect(bad.kind == .invalidURL)
-        #expect(WorkerProbe.isCurrent(started: 2, url: "http://devbox.local:8080", token: "a", generation: 2, currentURL: "http://devbox.local:8080", currentToken: "a"))
-        #expect(!WorkerProbe.isCurrent(started: 2, url: "http://devbox.local:8080", token: "a", generation: 3, currentURL: "http://devbox.local:8080", currentToken: "a"))
-        #expect(!WorkerProbe.isCurrent(started: 2, url: "http://devbox.local:8080", token: "a", generation: 2, currentURL: "https://devbox.example.ts.net", currentToken: "a"))
+        #expect(WorkerProbe.isCurrent(started: 2, url: "http://worker.local:8080", token: "a", generation: 2, currentURL: "http://worker.local:8080", currentToken: "a"))
+        #expect(!WorkerProbe.isCurrent(started: 2, url: "http://worker.local:8080", token: "a", generation: 3, currentURL: "http://worker.local:8080", currentToken: "a"))
+        #expect(!WorkerProbe.isCurrent(started: 2, url: "http://worker.local:8080", token: "a", generation: 2, currentURL: "https://worker.example.ts.net", currentToken: "a"))
     }
 
     @Test @MainActor func endpointPaneRendersAColoredScreenshot() throws {
         let endpoints = [
-            WorkerEndpoint(id: UUID(), name: "Mac Studio 10GbE", url: "http://192.0.2.10:8080"),
-            WorkerEndpoint(id: UUID(), name: "Wi-Fi LAN", url: "http://devbox.local:8080"),
-            WorkerEndpoint(id: UUID(), name: "Tailscale", url: "https://devbox.example.ts.net"),
+            WorkerEndpoint(id: UUID(), name: "Wired LAN", url: "http://192.0.2.10:8080"),
+            WorkerEndpoint(id: UUID(), name: "Wi-Fi", url: "http://worker.local:8080"),
+            WorkerEndpoint(id: UUID(), name: "Tailscale", url: "https://worker.example.ts.net"),
         ]
         let report = WorkerProbeReport(kind: .connected, latencyMs: 18, message: "Connected in 18 ms.")
         let view = WorkerEndpointsPane(
             endpoints: endpoints,
             selectedID: endpoints[1].id,
             activeID: endpoints[1].id,
-            name: "Wi-Fi LAN",
-            url: "http://devbox.local:8080",
+            name: "Wi-Fi",
+            url: "http://worker.local:8080",
             token: "secret",
             report: report,
             onSelect: { _ in },

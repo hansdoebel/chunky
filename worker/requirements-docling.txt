@@ -1,8 +1,8 @@
-# Installed on the Ubuntu worker together with the runtime pins.
-# torch==2.15.0 from PyPI is the CPU/CI build. Do not use it on the R9700.
-# ROCm 10.1 validates PyTorch 2.14.x. Install that ROCm wheel, including
-# gfx1201, from AMD's index and confirm torch.cuda.get_arch_list().
-# See docs/devbox-setup.md. Do not install mlx-vlm.
+# Installed on a Linux worker together with the runtime pins.
+# torch==2.15.0 from PyPI is the CPU/CI build. Do not use it on a GPU worker.
+# Install the ROCm wheel that your ROCm release validates and that lists your
+# GPU's gfx target, then confirm torch.cuda.get_arch_list().
+# See docs/worker-host.md. Do not install mlx-vlm.
 -r requirements.txt
 docling==2.150.1
 docling-core==2.107.0

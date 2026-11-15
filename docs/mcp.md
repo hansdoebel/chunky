@@ -5,7 +5,7 @@ Chunky exposes two tools over stdio MCP:
 - `search` with `query`, `collection`, `top_k`, and `filters`
 - `list_collections`
 
-The server reads the Qdrant, embedding, and worker settings saved in the app, including the worker profile that Use last applied. API keys and the worker token come from the Keychain and are not written to logs. Search follows the Retrieval tab. It calls `POST /v1/search` on that worker when the processing host is Devbox and Devbox ingest is Qdrant Cloud. Otherwise it searches the Qdrant URL stored on the Mac. Hybrid fusion is dense plus BM25 with RRF. Rerank, Eval, and the in-app citation chat are not MCP tools.
+The server reads the Qdrant, embedding, and worker settings saved in the app, including the worker profile that Use last applied. API keys and the worker token come from the Keychain and are not written to logs. Search follows the Retrieval tab. It calls `POST /v1/search` on that worker when the processing host is Devbox and Devbox ingest is Qdrant Cloud. Otherwise it searches the Qdrant URL stored on the app machine. Hybrid fusion is dense plus BM25 with RRF. Rerank, Eval, and the in-app citation chat are not MCP tools.
 
 ## pi
 

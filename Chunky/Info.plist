@@ -26,7 +26,7 @@
     <dict>
         <!--
           Plain HTTP to local and private-LAN addresses, including a
-          user-configured devbox 10GbE IP. Narrower than NSAllowsArbitraryLoads:
+          user-configured worker address. Narrower than NSAllowsArbitraryLoads:
           public hosts still require HTTPS.
         -->
         <key>NSAllowsLocalNetworking</key>

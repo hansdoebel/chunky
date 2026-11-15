@@ -38,8 +38,8 @@ struct RecommendedModelsSection: View {
             Text("Recommended models")
         } footer: {
             Text(host == .devbox
-                 ? "Devbox: qwen3-embedding, granite-docling, and granite-vision. MLX models stay on the Mac. The worker reports what is actually cached."
-                 : "Mac: Granite-Docling MLX. A devbox download uses the worker token.")
+                 ? "Worker host: qwen3-embedding, granite-docling, and granite-vision. MLX models stay on the app machine. The worker reports what is actually cached."
+                 : "App machine: Granite-Docling MLX. A worker download uses the worker token.")
         }
     }
 }
