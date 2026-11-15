@@ -232,6 +232,8 @@ struct RetrievalFilter: Equatable, Sendable {
             parts.append(value ? "true" : "false")
         case .contains(let value):
             parts.append("~\(value)")
+        case .anyText(let values):
+            parts.append(values.joined(separator: "|"))
         case nil:
             break
         }
@@ -742,7 +744,7 @@ enum HybridQuery {
                 if let value = item.gte { range["gte"] = value }
                 if let value = item.lt { range["lt"] = value }
                 if let value = item.lte { range["lte"] = value }
-                let condition = ["key": key, "range": range]
+                let condition: [String: Any] = ["key": key, "range": range]
                 if item.negated {
                     mustNot.append(condition)
                 } else {
