@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Requ
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from chunky_worker.auth import require_bearer
-from chunky_worker.embeddings import EmbeddingBackend, OllamaEmbeddingBackend
+from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
 from chunky_worker.jobs import TERMINAL, JobRunner, JobStore
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
@@ -58,8 +58,12 @@ def create_app(
         vlm_engine=settings.vlm_engine,
         vllm_url=settings.vllm_url,
         chart_vllm_url=settings.chart_vllm_url,
+        embedding_model=settings.embedding_model,
     )
-    embeddings = embeddings or OllamaEmbeddingBackend(settings.ollama_url)
+    embeddings = embeddings or make_embedding_backend(
+        settings.embedding_backend,
+        settings.embedding_url or settings.ollama_url,
+    )
     store = store or JobStore()
     runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
 
@@ -85,8 +89,10 @@ def create_app(
             "docling": {"importable": docling_ok, "error": docling_error},
             "embeddings": {
                 "reachable": embed_ok,
-                "backend": "ollama",
-                "url": settings.ollama_url,
+                "backend": settings.embedding_backend,
+                "url": settings.embedding_url or settings.ollama_url
+                if settings.embedding_backend == "openai"
+                else settings.ollama_url,
                 "error": embed_error,
             },
             "vlm": {

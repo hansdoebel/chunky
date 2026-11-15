@@ -233,6 +233,7 @@ def _handle_convert(cmd):
             cmd.get("chunk_max_tokens", 512),
             cmd.get("chunk_merge_peers", True),
             _progress,
+            cmd.get("embedding_model", ""),
         )
         if chunk_result is not None:
             result_data["chunks"] = chunk_result

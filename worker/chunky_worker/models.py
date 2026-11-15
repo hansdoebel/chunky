@@ -69,6 +69,8 @@ class JobSettings(BaseModel):
     chunk_tokenizer: str = ""
     ollama_url: str | None = None
     embedding_model: str | None = None
+    embedding_backend: str = ""
+    embedding_url: str = ""
     ingest_target: IngestTarget = IngestTarget.NONE
     qdrant_url: str | None = None
     # Kept in memory for the duration of the job only. Never logged or returned.

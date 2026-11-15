@@ -77,6 +77,30 @@ struct PreferencesView: View {
     private var embeddingTab: some View {
         Form {
             Section {
+                if appState.settings.processingHost == .devbox {
+                    Picker("Backend", selection: $appState.settings.embeddingBackend) {
+                        ForEach(EmbeddingBackendKind.allCases) { kind in
+                            Text(kind.displayName).tag(kind.rawValue)
+                        }
+                    }
+                    if appState.settings.embeddingBackend == EmbeddingBackendKind.openai.rawValue {
+                        TextField(
+                            "Embeddings URL",
+                            text: $appState.settings.embeddingAPIURL,
+                            prompt: Text("http://127.0.0.1:8002")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        TextField(
+                            "Model ID",
+                            text: $appState.settings.embeddingModel,
+                            prompt: Text("Qwen/Qwen3-Embedding-0.6B")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        Text("OpenAI-compatible /v1/embeddings. This is not the Ollama URL. Local Mac jobs still embed with Ollama.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                }
                 HStack {
                     TextField(
                         "Server URL", text: $appState.settings.ollamaURL,
@@ -717,7 +741,8 @@ struct PreferencesView: View {
             availableModels = try await service.listModels()
             ollamaStatus = .connected
 
-            if !availableModels.isEmpty
+            if appState.settings.embeddingBackend != EmbeddingBackendKind.openai.rawValue
+                && !availableModels.isEmpty
                 && !embeddingModels.contains(where: { $0.name == appState.settings.embeddingModel })
             {
                 if let firstEmbedding = embeddingModels.first {
