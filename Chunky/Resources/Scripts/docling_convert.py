@@ -873,6 +873,16 @@ def main():
         help="Enable picture classification",
     )
     parser.add_argument(
+        "--picture-description-preset",
+        default="",
+        help="Picture description preset: smolvlm, granite_vision, qwen, or api",
+    )
+    parser.add_argument(
+        "--vlm-server-url",
+        default="",
+        help="OpenAI-compatible VLM server for the api picture preset. Not the embedding Ollama URL.",
+    )
+    parser.add_argument(
         "--layout-model",
         choices=["default", "heron", "egret-medium", "egret-large", "egret-xlarge"],
         default="default",
@@ -942,6 +952,8 @@ def main():
         do_chart_extraction=args.do_chart_extraction,
         do_picture_description=args.do_picture_description,
         do_picture_classification=args.do_picture_classification,
+        picture_description_preset=args.picture_description_preset or None,
+        vlm_server_url=args.vlm_server_url or None,
         input_format=args.input_format,
         extract_schema=args.extract_schema,
         layout_model=args.layout_model,

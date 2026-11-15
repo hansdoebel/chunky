@@ -552,6 +552,12 @@ actor DoclingService {
         if options.doChartExtraction { arguments.append("--do-chart-extraction") }
         if options.doPictureDescription { arguments.append("--do-picture-description") }
         if options.doPictureClassification { arguments.append("--do-picture-classification") }
+        if !options.pictureDescriptionPreset.isEmpty {
+            arguments.append(contentsOf: ["--picture-description-preset", options.pictureDescriptionPreset])
+        }
+        if !options.vlmServerURL.isEmpty {
+            arguments.append(contentsOf: ["--vlm-server-url", options.vlmServerURL])
+        }
 
         if let inputFormat = options.inputFormat {
             arguments.append(contentsOf: ["--input-format", inputFormat])

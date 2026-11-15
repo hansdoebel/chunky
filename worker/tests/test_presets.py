@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 from pathlib import Path
 
+import pytest
+
 SCRIPTS = Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts"
 sys.path.insert(0, str(SCRIPTS))
 
@@ -140,6 +142,37 @@ def test_picture_presets_map_to_docling_options():
     assert quality["do_picture_description"] is True
     assert quality["do_picture_classification"] is True
     assert quality["picture_description_preset"] == "granite_vision"
+
+
+def test_cli_forwards_picture_preset_and_server(monkeypatch):
+    import docling_convert
+
+    seen = {}
+
+    def fake_convert(**kwargs):
+        seen.update(kwargs)
+        return {"success": True}
+
+    monkeypatch.setattr(docling_convert, "convert_document", fake_convert)
+    monkeypatch.setattr(
+        sys,
+        "argv",
+        [
+            "docling_convert.py",
+            "input.pdf",
+            "--do-picture-description",
+            "--picture-description-preset",
+            "api",
+            "--vlm-server-url",
+            "http://127.0.0.1:8001",
+        ],
+    )
+    with pytest.raises(SystemExit) as caught:
+        docling_convert.main()
+    assert caught.value.code == 0
+    assert seen["picture_description_preset"] == "api"
+    assert seen["vlm_server_url"] == "http://127.0.0.1:8001"
+    assert seen["do_picture_description"] is True
 
 
 def test_chart_preset_is_left_alone_when_extraction_is_off():
