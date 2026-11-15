@@ -107,22 +107,23 @@ actor OllamaService {
         }
     }
 
-    /// Fetch available models
-    func listModels() async throws -> [ModelInfo] {
+    func tagsData() async throws -> Data {
         let url = baseURL.appendingPathComponent("api/tags")
         var request = URLRequest(url: url)
         request.httpMethod = "GET"
-
         let (data, response) = try await session.data(for: request)
-
         guard let httpResponse = response as? HTTPURLResponse else {
             throw OllamaError.invalidResponse
         }
-
         guard httpResponse.statusCode == 200 else {
             throw OllamaError.connectionFailed("HTTP \(httpResponse.statusCode)")
         }
+        return data
+    }
 
+    /// Fetch available models
+    func listModels() async throws -> [ModelInfo] {
+        let data = try await tagsData()
         let modelsResponse = try JSONDecoder().decode(ModelsResponse.self, from: data)
         return modelsResponse.models
     }

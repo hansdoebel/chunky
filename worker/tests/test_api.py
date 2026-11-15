@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import json
 
+from fastapi.testclient import TestClient
+
 from chunky_worker.app import MLX_VLM_MODELS, TRANSFORMERS_VLM_MODELS, create_app
 from chunky_worker.jobs import JobStore
 from tests.conftest import FakeEmbeddings, FakePipeline, auth_headers, wait_for_status
@@ -59,10 +61,57 @@ def test_models_lists_embeddings_and_known_vlms(client):
     assert "qwen3-embedding" in names
     vlm_names = {item["name"]: item for item in body["vlm"]}
     for name in TRANSFORMERS_VLM_MODELS:
-        assert vlm_names[name]["available"] is True
+        assert vlm_names[name]["available"] is False
+        assert vlm_names[name]["revision"] is None
     for name in MLX_VLM_MODELS:
         assert vlm_names[name]["available"] is False
         assert "Apple-only" in vlm_names[name]["reason"]
+    assert "qwen3-embedding" in body["recommended"]["devbox"]
+    assert body["recommended"]["mac"] == ["granite-docling-mlx"]
+
+
+def test_cached_model_is_available_and_download_stays_local(tmp_settings):
+    def fake_download(repo_id, revision, on_progress, cancel_event):
+        on_progress(25, "copying")
+
+    app = create_app(
+        settings=tmp_settings,
+        pipeline=FakePipeline(),
+        embeddings=FakeEmbeddings(),
+        store=JobStore(),
+        model_cache=lambda: (
+            [{"repo_id": "ibm-granite/granite-docling-258M", "revision": "rev1", "size": 9}],
+            None,
+        ),
+        model_server=lambda: ["ds4sd/SmolDocling-256M-preview"],
+        ollama_tags=lambda: ([{"name": "qwen3-embedding:latest", "size": 4096, "digest": "abc", "parameter_size": "0.6B", "quantization": "Q8_0"}], None),
+        downloader=fake_download,
+    )
+    with TestClient(app) as open_client:
+        denied = open_client.post("/v1/models/download", json={"repo_id": "ibm-granite/granite-docling-258M"})
+        assert denied.status_code == 401
+    with TestClient(app, headers=auth_headers()) as client:
+        granite = next(item for item in client.get("/v1/models").json()["vlm"] if item["name"] == "granite-docling-transformers")
+        assert granite["available"] is True
+        assert granite["revision"] == "rev1"
+        assert granite["engine"] == "vllm"
+        names = {item["name"] for item in client.get("/v1/models").json()["installed"]}
+        assert "qwen3-embedding:latest" in names
+        assert "ibm-granite/granite-docling-258M" in names
+        started = client.post("/v1/models/download", json={"repo_id": "ibm-granite/granite-docling-258M"})
+        assert started.status_code == 202
+        assert started.json()["kind"] == "huggingface"
+        ollama = client.post("/v1/models/download", json={"repo_id": "qwen3-embedding"})
+        assert ollama.status_code == 202
+        assert ollama.json()["kind"] == "ollama"
+        job_id = started.json()["id"]
+        record = None
+        for _ in range(50):
+            record = client.get(f"/v1/models/download/{job_id}").json()
+            if record["status"] == "succeeded":
+                break
+        assert record["status"] == "succeeded"
+        assert record["repo_id"] == "ibm-granite/granite-docling-258M"
 
 
 def test_create_job_requires_file(client):

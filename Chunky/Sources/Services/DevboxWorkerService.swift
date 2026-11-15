@@ -282,6 +282,91 @@ final class DevboxWorkerService {
         return try await fetchJob(id: created, root: root, token: token)
     }
 
+    func fetchInstalledModels(baseURL: String, token: String) async throws -> [ManagedModel] {
+        let data = try await authorizedData(baseURL: baseURL, token: token, path: ["v1", "models"], method: "GET", body: nil)
+        return try ModelCatalog.installedModels(fromWorker: data)
+    }
+
+    func startModelDownload(baseURL: String, token: String, repoID: String, kind: String) async throws -> String {
+        guard let root = URL(string: baseURL), root.host != nil else {
+            throw DevboxClientError.invalidURL(baseURL)
+        }
+        let endpoint = root.appendingPathComponent("v1").appendingPathComponent("models").appendingPathComponent("download")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(DevboxJobPayload.authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["repo_id": repoID, "kind": kind])
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DevboxClientError.unreachable(url: endpoint.absoluteString, reason: "No HTTP response")
+        }
+        if http.statusCode == 401 {
+            throw DevboxClientError.unauthorized(url: endpoint.absoluteString)
+        }
+        guard http.statusCode == 202 else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw DevboxClientError.http(url: endpoint.absoluteString, status: http.statusCode, detail: body)
+        }
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return object?["id"] as? String ?? ""
+    }
+
+    func waitForModelDownload(baseURL: String, token: String, jobID: String) async throws -> String {
+        guard !jobID.isEmpty else { return "succeeded" }
+        for _ in 0..<180 {
+            let data = try await authorizedData(
+                baseURL: baseURL,
+                token: token,
+                path: ["v1", "models", "download", jobID],
+                method: "GET",
+                body: nil
+            )
+            let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+            let status = object?["status"] as? String ?? ""
+            if status == "failed" {
+                throw DevboxClientError.http(
+                    url: baseURL,
+                    status: 200,
+                    detail: object?["message"] as? String ?? "Download failed"
+                )
+            }
+            if status == "succeeded" || status == "canceled" {
+                return status
+            }
+            try await Task.sleep(nanoseconds: 1_000_000_000)
+        }
+        return "downloading"
+    }
+
+    private func authorizedData(baseURL: String, token: String, path: [String], method: String, body: Data?) async throws -> Data {
+        guard var root = URL(string: baseURL), root.host != nil else {
+            throw DevboxClientError.invalidURL(baseURL)
+        }
+        for part in path {
+            root.appendPathComponent(part)
+        }
+        var request = URLRequest(url: root)
+        request.httpMethod = method
+        request.setValue(DevboxJobPayload.authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
+        if let body {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+            request.httpBody = body
+        }
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DevboxClientError.unreachable(url: root.absoluteString, reason: "No HTTP response")
+        }
+        if http.statusCode == 401 {
+            throw DevboxClientError.unauthorized(url: root.absoluteString)
+        }
+        guard (200..<300).contains(http.statusCode) else {
+            let detail = String(data: data, encoding: .utf8) ?? ""
+            throw DevboxClientError.http(url: root.absoluteString, status: http.statusCode, detail: detail)
+        }
+        return data
+    }
+
     func cancel(jobID: String, baseURL: String, token: String) async {
         guard let root = URL(string: baseURL) else { return }
         let endpoint = root.appendingPathComponent("v1").appendingPathComponent("jobs").appendingPathComponent(jobID).appendingPathComponent("cancel")
