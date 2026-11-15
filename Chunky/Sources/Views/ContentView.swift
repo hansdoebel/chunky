@@ -6,6 +6,21 @@ struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var processor = DocumentProcessor()
 
+    private static func pingDatabase(settings: AppSettings) async -> Bool {
+        guard let url = try? QdrantKeepAlive.collectionsURL(baseURL: QdrantKeepAlive.databaseURL(settings: settings)) else { return false }
+        var request = URLRequest(url: url)
+        if !settings.qdrantAPIKey.isEmpty {
+            request.setValue(settings.qdrantAPIKey, forHTTPHeaderField: "api-key")
+        }
+        do {
+            let (_, response) = try await URLSession.shared.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            return (200..<300).contains(status)
+        } catch {
+            return false
+        }
+    }
+
     var body: some View {
         NavigationSplitView(columnVisibility: $appState.sidebarVisibility) {
             SidebarView()
@@ -75,6 +90,16 @@ struct ContentView: View {
             }
             appState.isProcessing = false
             appState.resetCancellation()
+        }
+        .task(id: appState.settings.qdrantKeepAlive) {
+            guard appState.settings.qdrantKeepAlive else { return }
+            while !Task.isCancelled {
+                let now = Date()
+                await QdrantKeepAliveLoop.tick(settings: appState.settings, now: now) {
+                    await Self.pingDatabase(settings: appState.settings)
+                }
+                try? await Task.sleep(for: .seconds(60 * 60))
+            }
         }
     }
 }

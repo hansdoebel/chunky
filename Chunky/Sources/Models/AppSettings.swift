@@ -392,6 +392,25 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.qdrantAPIKeyKey, newValue) }
     }
 
+    @Published var qdrantKeepAlive: Bool {
+        didSet { defaults.set(qdrantKeepAlive, forKey: prefix + "qdrantKeepAlive") }
+    }
+
+    var qdrantCloudAccountID: String {
+        get { defaults.string(forKey: prefix + "qdrantCloudAccountID") ?? "" }
+        set { defaults.set(newValue, forKey: prefix + "qdrantCloudAccountID") }
+    }
+
+    var qdrantCloudClusterID: String {
+        get { defaults.string(forKey: prefix + "qdrantCloudClusterID") ?? "" }
+        set { defaults.set(newValue, forKey: prefix + "qdrantCloudClusterID") }
+    }
+
+    var qdrantCloudManagementKey: String {
+        get { secret(KeychainService.qdrantCloudManagementKey) }
+        set { setSecret(KeychainService.qdrantCloudManagementKey, newValue) }
+    }
+
     var qdrantLastSuccessAt: Date? {
         get {
             let value = defaults.double(forKey: prefix + "qdrantLastSuccessAt")
@@ -423,6 +442,7 @@ class AppSettings: ObservableObject {
         self.qdrantDistanceMetric = defaults.string(forKey: prefix + "qdrantDistanceMetric") ?? DistanceMetric.cosine.rawValue
         self.hybridSearch = defaults.object(forKey: prefix + "hybridSearch") as? Bool ?? false
         self.qdrantCompression = defaults.string(forKey: prefix + "qdrantCompression") ?? Compression.none.rawValue
+        self.qdrantKeepAlive = defaults.object(forKey: prefix + "qdrantKeepAlive") as? Bool ?? false
 
         self.metadataIncludeFilename = defaults.object(forKey: prefix + "metadataIncludeFilename") as? Bool ?? true
         self.metadataIncludePageNumber = defaults.object(forKey: prefix + "metadataIncludePageNumber") as? Bool ?? true
