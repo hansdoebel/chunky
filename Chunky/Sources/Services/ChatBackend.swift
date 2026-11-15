@@ -202,12 +202,23 @@ nonisolated final class OpenAICompatibleChatClient: ChatStreaming, @unchecked Se
     }
 
     func stream(user message: String) -> AsyncThrowingStream<String, Error> {
+        stream(messages: [["role": "user", "content": message]])
+    }
+
+    func stream(system: String, user: String) -> AsyncThrowingStream<String, Error> {
+        stream(messages: [
+            ["role": "system", "content": system],
+            ["role": "user", "content": user]
+        ])
+    }
+
+    private func stream(messages: [[String: String]]) -> AsyncThrowingStream<String, Error> {
         AsyncThrowingStream { continuation in
             let task = Task {
                 do {
                     let body: [String: Any] = [
                         "model": self.model,
-                        "messages": [["role": "user", "content": message]],
+                        "messages": messages,
                         "stream": true
                     ]
                     let request = try self.makeRequest(path: "chat/completions", method: "POST", body: body)

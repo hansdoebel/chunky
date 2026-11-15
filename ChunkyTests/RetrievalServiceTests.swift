@@ -508,7 +508,7 @@ private final class FakeWorker: RetrievalWorker {
     }
 }
 
-private struct RetrievalScreenshotHost: View {
+struct RetrievalScreenshotHost: View {
     var hits: [RetrievalHit]
     @State private var query = "revenue by year"
     @State private var collection = "documents"
@@ -526,6 +526,10 @@ private struct RetrievalScreenshotHost: View {
     @State private var rerankURL = ""
     @State private var rerankModel = ""
     @State private var rerankAPIKey = ""
+    @State private var generationModel = "qwen3"
+    var answer: String = ""
+    var citations: [RAGCitation] = []
+    var selectedHitID: String? = nil
 
     var body: some View {
         RetrievalPlayground(
@@ -552,7 +556,14 @@ private struct RetrievalScreenshotHost: View {
             hits: hits,
             isSearching: false,
             scrolls: false,
-            onSearch: {}
+            onSearch: {},
+            generationModel: $generationModel,
+            answer: answer,
+            citations: citations,
+            selectedHitID: selectedHitID,
+            isAnswering: false,
+            onAsk: {},
+            onSelectCitation: { _ in }
         )
     }
 }
