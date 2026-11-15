@@ -370,18 +370,11 @@ class DocumentProcessor: ObservableObject {
                 throw QdrantError.operationFailed("Ollama is not running at \(settings.ollamaURL)")
             }
 
-            let distance: Distance
-            switch settings.qdrantDistanceMetric {
-            case "Dot": distance = .dot
-            case "Euclid": distance = .euclid
-            default: distance = .cosine
-            }
-
-            let quantizationConfig: QuantizationConfig?
-            switch settings.qdrantCompression {
-            case "Scalar": quantizationConfig = .scalar(quantile: nil, alwaysRam: true)
-            case "Binary": quantizationConfig = .binary(alwaysRam: true)
-            default: quantizationConfig = nil
+            let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+            if createOptions.target == .qdrantCloud {
+                throw QdrantError.operationFailed(
+                    "Collection \(settings.defaultCollection) targets Qdrant Cloud. Switch Processing host to Devbox."
+                )
             }
 
             let ingestedAt = ISO8601DateFormatter().string(from: Date())
@@ -393,8 +386,7 @@ class DocumentProcessor: ObservableObject {
                     chunks: chunks,
                     settings: settings,
                     ollama: ollama,
-                    distance: distance,
-                    quantizationConfig: quantizationConfig,
+                    createOptions: createOptions,
                     ingestedAt: ingestedAt
                 )
             } else {
@@ -403,8 +395,7 @@ class DocumentProcessor: ObservableObject {
                     chunks: chunks,
                     settings: settings,
                     ollama: ollama,
-                    distance: distance,
-                    quantizationConfig: quantizationConfig,
+                    createOptions: createOptions,
                     ingestedAt: ingestedAt
                 )
             }
@@ -493,8 +484,7 @@ class DocumentProcessor: ObservableObject {
         chunks: [ChunkingService.DocumentChunk],
         settings: AppSettings,
         ollama: OllamaService,
-        distance: Distance,
-        quantizationConfig: QuantizationConfig?,
+        createOptions: CollectionCreateOptions,
         ingestedAt: String
     ) async throws {
         var chunksToEmbed = chunks
@@ -575,12 +565,7 @@ class DocumentProcessor: ObservableObject {
                 )
             }
 
-            let sparseVectors: [SparseVector?]
-            if settings.hybridSearch {
-                sparseVectors = SparseVectorService.generateSparseVectors(texts: chunksToEmbed.map { $0.text }).map { Optional($0) }
-            } else {
-                sparseVectors = Array(repeating: nil, count: chunksToEmbed.count)
-            }
+            let sparseVectors = sparseVectors(for: chunksToEmbed, hybrid: createOptions.hybrid)
 
             let newPoints = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
             allPoints = newPoints
@@ -594,9 +579,7 @@ class DocumentProcessor: ObservableObject {
                 collectionName: settings.defaultCollection,
                 vectorSize: vectorSize,
                 batchSize: settings.qdrantBatchSize,
-                hybrid: settings.hybridSearch,
-                distance: distance,
-                quantizationConfig: quantizationConfig,
+                createOptions: createOptions,
                 dedupSource: dedupSource
             ) { progress in
                 Task { @MainActor in
@@ -636,8 +619,7 @@ class DocumentProcessor: ObservableObject {
         chunks: [ChunkingService.DocumentChunk],
         settings: AppSettings,
         ollama: OllamaService,
-        distance: Distance,
-        quantizationConfig: QuantizationConfig?,
+        createOptions: CollectionCreateOptions,
         ingestedAt: String
     ) async throws {
         guard let appState = appState else { throw QdrantError.notConnected }
@@ -658,27 +640,19 @@ class DocumentProcessor: ObservableObject {
             )
         }
 
-        var createHybrid = settings.hybridSearch
-        var createDistance = distance
-        if let saved = CollectionPlanStore.load(name: settings.defaultCollection) {
-            if saved.vectorSize != vectorSize {
-                job.statusMessage = "Collection \(saved.name) was saved with vector size \(saved.vectorSize), but \(settings.embeddingModel) probes \(vectorSize)."
-            } else if let warning = saved.mismatch(existingVectorSize: nil, existingHybrid: settings.hybridSearch) {
-                job.statusMessage = warning
-            }
-            createHybrid = saved.hybrid
-            switch saved.distance {
-            case .cosine: createDistance = .cosine
-            case .dot: createDistance = .dot
-            case .euclid: createDistance = .euclid
-            }
+        if let expected = createOptions.expectedVectorSize, expected != vectorSize {
+            throw QdrantError.operationFailed(
+                "Collection \(settings.defaultCollection) was saved with vector size \(expected), but \(settings.embeddingModel) probes \(vectorSize)."
+            )
         }
         try await qdrant.createCollectionIfNeeded(
             name: settings.defaultCollection,
             vectorSize: vectorSize,
-            hybrid: createHybrid,
-            distance: createDistance,
-            quantizationConfig: quantizationConfig
+            hybrid: createOptions.hybrid,
+            distance: distanceValue(createOptions.distance),
+            onDiskVectors: createOptions.onDiskVectors,
+            onDiskPayload: createOptions.onDiskPayload,
+            quantizationConfig: quantizationValue(createOptions)
         )
 
         try await qdrant.deleteBySource(
@@ -687,12 +661,7 @@ class DocumentProcessor: ObservableObject {
         )
 
         let firstChunkBatch = Array(chunks.prefix(batchSize))
-        let firstSparse: [SparseVector?]
-        if settings.hybridSearch {
-            firstSparse = SparseVectorService.generateSparseVectors(texts: firstChunkBatch.map { $0.text }).map { Optional($0) }
-        } else {
-            firstSparse = Array(repeating: nil, count: firstChunkBatch.count)
-        }
+        let firstSparse = sparseVectors(for: firstChunkBatch, hybrid: createOptions.hybrid)
         let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt)
         try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: firstPoints, batchSize: settings.qdrantBatchSize)
 
@@ -709,12 +678,7 @@ class DocumentProcessor: ObservableObject {
 
             let batchEmbeddings = try await ollama.embedBatch(texts: batchTexts, model: settings.embeddingModel)
 
-            let batchSparse: [SparseVector?]
-            if settings.hybridSearch {
-                batchSparse = SparseVectorService.generateSparseVectors(texts: batchChunks.map { $0.text }).map { Optional($0) }
-            } else {
-                batchSparse = Array(repeating: nil, count: batchChunks.count)
-            }
+            let batchSparse = sparseVectors(for: batchChunks, hybrid: createOptions.hybrid)
 
             let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt)
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: batchPoints, batchSize: settings.qdrantBatchSize)
@@ -749,6 +713,14 @@ class DocumentProcessor: ObservableObject {
         devboxBaseURL = settings.devboxWorkerURL
         devboxToken = settings.workerToken
         devboxService = DevboxWorkerService()
+        let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        if mode == .full && createOptions.target == .qdrantCloud {
+            if settings.qdrantCloudURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.qdrantAPIKey.isEmpty {
+                job.status = .failed
+                job.statusMessage = "Set the Qdrant Cloud URL and API key before ingesting \(settings.defaultCollection)."
+                return
+            }
+        }
         let payload = DevboxJobPayload.settings(from: settings, mode: mode)
         do {
             let parsed = try await devboxService.run(
@@ -841,26 +813,20 @@ class DocumentProcessor: ObservableObject {
                 tableMarkdown: raw["table_markdown"] as? String
             )
         }
+        let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
         let points = buildPoints(
             chunks: documentChunks,
             embeddings: parsed.embeddings,
-            sparseVectors: Array(repeating: nil, count: documentChunks.count),
+            sparseVectors: sparseVectors(for: documentChunks, hybrid: createOptions.hybrid),
             settings: settings,
             ingestedAt: ISO8601DateFormatter().string(from: Date())
         )
-        let distance: Distance
-        switch settings.qdrantDistanceMetric {
-        case "Dot": distance = .dot
-        case "Euclid": distance = .euclid
-        default: distance = .cosine
-        }
         try await uploadToQdrant(
             points: points,
             collectionName: settings.defaultCollection,
             vectorSize: vectorSize,
             batchSize: settings.qdrantBatchSize,
-            hybrid: false,
-            distance: distance,
+            createOptions: createOptions,
             dedupSource: job.fileName
         ) { progress in
             Task { @MainActor in
@@ -893,14 +859,36 @@ class DocumentProcessor: ObservableObject {
 
     /// Upload embedded chunks to Qdrant
     @MainActor
+    func sparseVectors(for chunks: [ChunkingService.DocumentChunk], hybrid: Bool) -> [SparseVector?] {
+        if hybrid {
+            return SparseVectorService.generateSparseVectors(texts: chunks.map { $0.text }).map { Optional($0) }
+        }
+        return Array(repeating: nil, count: chunks.count)
+    }
+
+    func distanceValue(_ distance: CollectionDistance) -> Distance {
+        switch distance {
+        case .dot: return .dot
+        case .euclid: return .euclid
+        case .cosine: return .cosine
+        }
+    }
+
+    func quantizationValue(_ options: CollectionCreateOptions) -> QuantizationConfig? {
+        let alwaysRam: Bool? = options.onDiskVectors == true ? false : true
+        switch options.quantization {
+        case .none: return nil
+        case .scalarInt8: return .scalar(quantile: nil, alwaysRam: alwaysRam)
+        case .binary: return .binary(alwaysRam: alwaysRam)
+        }
+    }
+
     func uploadToQdrant(
         points: [ChunkPoint],
         collectionName: String,
         vectorSize: Int,
         batchSize: Int,
-        hybrid: Bool = false,
-        distance: Distance = .cosine,
-        quantizationConfig: QuantizationConfig? = nil,
+        createOptions: CollectionCreateOptions,
         dedupSource: String? = nil,
         onProgress: @escaping (UploadProgress) -> Void
     ) async throws {
@@ -914,12 +902,20 @@ class DocumentProcessor: ObservableObject {
             throw QdrantError.notConnected
         }
 
+        if let expected = createOptions.expectedVectorSize, expected != vectorSize {
+            throw QdrantError.operationFailed(
+                "Collection \(collectionName) was saved with vector size \(expected), but the embedding model produced \(vectorSize)."
+            )
+        }
+
         try await service.createCollectionIfNeeded(
             name: collectionName,
             vectorSize: vectorSize,
-            hybrid: hybrid,
-            distance: distance,
-            quantizationConfig: quantizationConfig
+            hybrid: createOptions.hybrid,
+            distance: distanceValue(createOptions.distance),
+            onDiskVectors: createOptions.onDiskVectors,
+            onDiskPayload: createOptions.onDiskPayload,
+            quantizationConfig: quantizationValue(createOptions)
         )
 
         if let source = dedupSource {

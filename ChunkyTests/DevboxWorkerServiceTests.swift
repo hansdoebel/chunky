@@ -42,6 +42,38 @@ struct DevboxWorkerServiceTests {
         #expect(chunkOnly["mode"] as? String == "chunk_only")
     }
 
+    @Test func savedCollectionPlanChoosesCloudIngest() {
+        let settings = AppSettings()
+        let name = "plan-\(UUID().uuidString)"
+        let previousCollection = settings.defaultCollection
+        let previousTarget = settings.devboxIngestTarget
+        settings.defaultCollection = name
+        settings.devboxIngestTarget = .localDocker
+        defer {
+            UserDefaults.standard.removeObject(forKey: "chunky.collectionPlan.\(name)")
+            settings.defaultCollection = previousCollection
+            settings.devboxIngestTarget = previousTarget
+        }
+        var plan = CollectionPlan.preset(
+            .largeCloud, name: name, vectorSize: 1024,
+            embeddingBackend: "openai", embeddingModel: "Qwen/Qwen3-Embedding-0.6B"
+        )
+        plan.distance = .dot
+        CollectionPlanStore.save(plan)
+        settings.qdrantCloudURL = "https://example.cloud.qdrant.io"
+        settings.qdrantAPIKey = "cloud-key"
+        defer {
+            settings.qdrantAPIKey = ""
+            settings.qdrantCloudURL = ""
+        }
+        let cloud = DevboxJobPayload.settings(from: settings, mode: .full)
+        #expect(cloud["ingest_target"] as? String == "qdrant_cloud")
+        #expect(cloud["qdrant_distance"] as? String == "dot")
+        #expect(cloud["qdrant_hybrid"] as? Bool == true)
+        #expect(cloud["qdrant_quantization"] as? String == "scalar")
+        #expect(cloud["qdrant_on_disk"] as? Bool == true)
+    }
+
     @Test func errorsNameUnreachableUnauthorizedAndDimensionMismatch() {
         let denied = DevboxErrorMapper.classify(url: "http://worker/v1/models", status: 401, body: "nope")
         #expect(denied.errorDescription?.contains("401") == true)

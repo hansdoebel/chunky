@@ -29,6 +29,22 @@ enum CollectionDistance: String, Codable, CaseIterable, Identifiable {
         }
     }
 
+    var settingsValue: String {
+        switch self {
+        case .cosine: return DistanceMetric.cosine.rawValue
+        case .dot: return DistanceMetric.dot.rawValue
+        case .euclid: return DistanceMetric.euclidean.rawValue
+        }
+    }
+
+    init(settingsValue: String) {
+        switch settingsValue.lowercased() {
+        case "dot", "dot product": self = .dot
+        case "euclid", "euclidean": self = .euclid
+        default: self = .cosine
+        }
+    }
+
     // https://qdrant.tech/documentation/concepts/search/#metrics
     var hint: String {
         switch self {
@@ -54,6 +70,30 @@ enum CollectionQuantization: String, Codable, CaseIterable, Identifiable {
         case .none: return "None"
         case .scalarInt8: return "Scalar int8"
         case .binary: return "Binary"
+        }
+    }
+
+    var settingsValue: String {
+        switch self {
+        case .none: return Compression.none.rawValue
+        case .scalarInt8: return Compression.scalar.rawValue
+        case .binary: return Compression.binary.rawValue
+        }
+    }
+
+    var wireValue: String {
+        switch self {
+        case .none: return "none"
+        case .scalarInt8: return "scalar"
+        case .binary: return "binary"
+        }
+    }
+
+    init(settingsValue: String) {
+        switch settingsValue.lowercased() {
+        case "scalar": self = .scalarInt8
+        case "binary": self = .binary
+        default: self = .none
         }
     }
 
@@ -202,6 +242,24 @@ struct CollectionPlan: Codable, Equatable {
         return Estimate(ramBytes: total, diskBytes: total * 0.2)
     }
 
+    func connectionProblem(localURL: String, cloudURL: String, cloudAPIKey: String) -> String? {
+        switch target {
+        case .localDocker:
+            if localURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                return "Set the local Qdrant URL before saving a local collection."
+            }
+        case .qdrantCloud:
+            if cloudURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || cloudAPIKey.isEmpty {
+                return "Set the Qdrant Cloud URL and API key before saving a Cloud collection."
+            }
+        }
+        return nil
+    }
+
+    static func canSave(name: String, vectorVerified: Bool, connectionProblem: String?) -> Bool {
+        nameError(name) == nil && vectorVerified && connectionProblem == nil
+    }
+
     func mismatch(existingVectorSize: Int?, existingHybrid: Bool?) -> String? {
         if let existingVectorSize, existingVectorSize != vectorSize {
             return "Collection \(name) has vector size \(existingVectorSize), but this plan uses \(vectorSize)."
@@ -211,6 +269,18 @@ struct CollectionPlan: Codable, Equatable {
         }
         return nil
     }
+}
+
+struct CollectionCreateOptions: Equatable {
+    var hybrid: Bool
+    var distance: CollectionDistance
+    var quantization: CollectionQuantization
+    var onDiskVectors: Bool?
+    var onDiskPayload: Bool?
+    var target: CollectionTarget
+    var expectedVectorSize: Int?
+
+    var storesOnDisk: Bool { onDiskPayload == true }
 }
 
 enum CollectionPlanStore {
@@ -225,5 +295,45 @@ enum CollectionPlanStore {
     static func load(name: String, defaults: UserDefaults = .standard) -> CollectionPlan? {
         guard let data = defaults.data(forKey: prefix + name) else { return nil }
         return try? JSONDecoder().decode(CollectionPlan.self, from: data)
+    }
+
+    static func names(defaults: UserDefaults = .standard) -> [String] {
+        defaults.dictionaryRepresentation().keys.compactMap { key in
+            guard key.hasPrefix(prefix) else { return nil }
+            let name = String(key.dropFirst(prefix.count))
+            return name.isEmpty ? nil : name
+        }.sorted()
+    }
+
+    static func mergedNames(server: [String], defaults: UserDefaults = .standard) -> [String] {
+        var seen = Set(server)
+        var merged = server
+        for name in names(defaults: defaults) where seen.insert(name).inserted {
+            merged.append(name)
+        }
+        return merged
+    }
+
+    static func options(collection: String, settings: AppSettings, defaults: UserDefaults = .standard) -> CollectionCreateOptions {
+        if let plan = load(name: collection, defaults: defaults) {
+            return CollectionCreateOptions(
+                hybrid: plan.hybrid,
+                distance: plan.distance,
+                quantization: plan.quantization,
+                onDiskVectors: plan.onDisk,
+                onDiskPayload: plan.onDisk,
+                target: plan.target,
+                expectedVectorSize: plan.vectorSize
+            )
+        }
+        return CollectionCreateOptions(
+            hybrid: settings.hybridSearch,
+            distance: CollectionDistance(settingsValue: settings.qdrantDistanceMetric),
+            quantization: CollectionQuantization(settingsValue: settings.qdrantCompression),
+            onDiskVectors: nil,
+            onDiskPayload: settings.hybridSearch ? true : nil,
+            target: settings.devboxIngestTarget == .qdrantCloud ? .qdrantCloud : .localDocker,
+            expectedVectorSize: nil
+        )
     }
 }

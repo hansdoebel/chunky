@@ -6,6 +6,8 @@ struct NewCollectionSheet: View {
 
     @State private var preset: CollectionPreset = .recommended
     @State private var plan: CollectionPlan
+    @State private var vectorVerified = false
+    @State private var probeMessage = "Vector size is unverified until a probe succeeds."
 
     init(vectorSize: Int, embeddingBackend: String, embeddingModel: String) {
         _plan = State(initialValue: CollectionPlan.preset(
@@ -43,7 +45,10 @@ struct NewCollectionSheet: View {
                 }
             }
             LabeledContent("Embedding", value: "\(plan.embeddingBackend) · \(plan.embeddingModel)")
-            LabeledContent("Vector size", value: "\(plan.vectorSize)")
+            LabeledContent("Vector size", value: vectorVerified ? "\(plan.vectorSize)" : "unverified")
+            Text(probeMessage)
+                .font(.caption)
+                .foregroundStyle(vectorVerified ? .secondary : .orange)
             Text(plan.vectorSizeHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -86,19 +91,63 @@ struct NewCollectionSheet: View {
             if let exists = plan.existsWarning(existingNames: appState.availableCollections) {
                 Text(exists).font(.caption).foregroundStyle(.orange)
             }
+            if let connectionProblem {
+                Text(connectionProblem).font(.caption).foregroundStyle(.red)
+            }
             HStack {
                 Button("Cancel") { dismiss() }
                 Spacer()
                 Button("Save") { save() }
-                    .disabled(CollectionPlan.nameError(plan.name) != nil)
+                    .disabled(!canSave)
             }
         }
         .padding(20)
         .frame(width: 460)
+        .task { await probe() }
+    }
+
+    private var connectionProblem: String? {
+        plan.connectionProblem(
+            localURL: appState.settings.qdrantURL,
+            cloudURL: appState.settings.qdrantCloudURL,
+            cloudAPIKey: appState.settings.qdrantAPIKey
+        )
+    }
+
+    private var canSave: Bool {
+        CollectionPlan.canSave(
+            name: plan.name,
+            vectorVerified: vectorVerified,
+            connectionProblem: connectionProblem
+        )
+    }
+
+    private func probe() async {
+        probeMessage = "Probing \(plan.embeddingModel)..."
+        do {
+            let size = try await EmbeddingDimensionProbe.probe(
+                backend: plan.embeddingBackend,
+                model: plan.embeddingModel,
+                ollamaURL: appState.settings.ollamaURL,
+                apiURL: appState.settings.embeddingAPIURL
+            )
+            plan.vectorSize = size
+            vectorVerified = true
+            probeMessage = "Probed vector size \(size). \(plan.vectorSizeHint)"
+        } catch {
+            vectorVerified = false
+            probeMessage = "Vector size is unverified. The probe failed, so Save stays off."
+        }
     }
 
     private func save() {
+        guard canSave else { return }
         CollectionPlanStore.save(plan)
+        appState.settings.devboxIngestTarget = plan.target == .qdrantCloud ? .qdrantCloud : .localDocker
+        appState.settings.hybridSearch = plan.hybrid
+        appState.settings.qdrantDistanceMetric = plan.distance.settingsValue
+        appState.settings.qdrantCompression = plan.quantization.settingsValue
+        appState.settings.embeddingDimensions = plan.vectorSize
         if !appState.availableCollections.contains(plan.name) {
             appState.availableCollections.append(plan.name)
         }

@@ -110,8 +110,9 @@ enum DevboxJobPayload {
     }
 
     static func settings(from settings: AppSettings, mode: ProcessingMode) -> [String: Any] {
+        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
         let ingest: String
-        switch (mode, settings.devboxIngestTarget) {
+        switch (mode, options.target) {
         case (.chunkOnly, _):
             ingest = "none"
         case (.full, .qdrantCloud):
@@ -145,7 +146,10 @@ enum DevboxJobPayload {
             "picture_description_preset": settings.resolvedPictureDescriptionPreset,
             "vlm_server_url": settings.vlmServerURL,
             "qdrant_collection": settings.defaultCollection,
-            "qdrant_distance": settings.qdrantDistanceMetric,
+            "qdrant_distance": options.distance.rawValue,
+            "qdrant_hybrid": options.hybrid,
+            "qdrant_quantization": options.quantization.wireValue,
+            "qdrant_on_disk": options.storesOnDisk,
             "qdrant_batch_size": settings.qdrantBatchSize,
         ]
         if model != "standard" {

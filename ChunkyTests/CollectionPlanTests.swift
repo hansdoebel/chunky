@@ -58,6 +58,31 @@ struct CollectionPlanTests {
         #expect(scalar.binaryWarning != nil)
     }
 
+    @Test func savedPlanBecomesCreateOptions() {
+        let defaults = UserDefaults(suiteName: "chunky.collection-plan-tests")!
+        defaults.removePersistentDomain(forName: "chunky.collection-plan-tests")
+        let plan = CollectionPlan.preset(
+            .recommended, name: "docs", vectorSize: 1024,
+            embeddingBackend: "ollama", embeddingModel: "qwen3-embedding"
+        )
+        CollectionPlanStore.save(plan, defaults: defaults)
+        let options = CollectionPlanStore.options(collection: "docs", settings: AppSettings(), defaults: defaults)
+        #expect(options.hybrid)
+        #expect(options.quantization == .scalarInt8)
+        #expect(options.onDiskVectors == false)
+        #expect(options.onDiskPayload == false)
+        #expect(options.expectedVectorSize == 1024)
+        #expect(CollectionPlanStore.mergedNames(server: ["documents"], defaults: defaults) == ["documents", "docs"])
+        #expect(plan.connectionProblem(localURL: "http://localhost:6334", cloudURL: "", cloudAPIKey: "") == nil)
+        let cloud = CollectionPlan.preset(
+            .largeCloud, name: "cloud", vectorSize: 1024,
+            embeddingBackend: "openai", embeddingModel: "Qwen/Qwen3-Embedding-0.6B"
+        )
+        #expect(cloud.connectionProblem(localURL: "http://localhost:6334", cloudURL: "", cloudAPIKey: "") != nil)
+        #expect(CollectionPlan.canSave(name: "docs", vectorVerified: false, connectionProblem: nil) == false)
+        #expect(CollectionPlan.canSave(name: "docs", vectorVerified: true, connectionProblem: nil))
+    }
+
     @Test func mismatchDetectsDimensionAndHybrid() {
         let plan = CollectionPlan.preset(
             .recommended, name: "docs", vectorSize: 1024,

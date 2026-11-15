@@ -218,6 +218,9 @@ class JobRunner:
             vector_size=result.embedding_dim or len(points[0].vector),
             distance=distance,
             batch_size=job.settings.qdrant_batch_size,
+            hybrid=job.settings.qdrant_hybrid,
+            quantization=job.settings.qdrant_quantization,
+            on_disk=job.settings.qdrant_on_disk,
             on_progress=on_batch,
         )
         # Cloud path stores the vectors in Qdrant. Do not echo them back.

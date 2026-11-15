@@ -77,6 +77,9 @@ class JobSettings(BaseModel):
     qdrant_api_key: str | None = Field(default=None, repr=False)
     qdrant_collection: str = "documents"
     qdrant_distance: str = "cosine"
+    qdrant_hybrid: bool = False
+    qdrant_quantization: str = "none"
+    qdrant_on_disk: bool = False
     qdrant_batch_size: int = 250
     # Payload toggles match AppSettings metadata flags (all on by default).
     metadata_include_page: bool = True
