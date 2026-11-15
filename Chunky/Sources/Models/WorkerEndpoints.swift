@@ -1,6 +1,6 @@
 import Foundation
 
-struct WorkerEndpoint: Codable, Identifiable, Equatable {
+nonisolated struct WorkerEndpoint: Codable, Identifiable, Equatable, Sendable {
     var id: UUID
     var name: String
     var url: String
@@ -12,7 +12,7 @@ struct WorkerEndpoint: Codable, Identifiable, Equatable {
     }
 }
 
-enum WorkerEndpointStore {
+nonisolated enum WorkerEndpointStore {
     static let listKey = "chunky.workerEndpoints"
     static let activeKey = "chunky.workerEndpointActive"
 
@@ -43,7 +43,7 @@ enum WorkerEndpointStore {
     }
 }
 
-enum WorkerProbeKind: String, Equatable {
+nonisolated enum WorkerProbeKind: String, Equatable, Sendable {
     case invalidURL
     case unreachable
     case unauthorized
@@ -51,13 +51,13 @@ enum WorkerProbeKind: String, Equatable {
     case connected
 }
 
-struct WorkerProbeReport: Equatable {
+nonisolated struct WorkerProbeReport: Equatable, Sendable {
     var kind: WorkerProbeKind
     var latencyMs: Int
     var message: String
 }
 
-enum WorkerProbe {
+nonisolated enum WorkerProbe {
     static func isCurrent(started: Int, url: String, token: String, generation: Int, currentURL: String, currentToken: String) -> Bool {
         started == generation && url == currentURL && token == currentToken
     }

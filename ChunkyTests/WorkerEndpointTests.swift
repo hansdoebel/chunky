@@ -5,7 +5,7 @@ import Testing
 @testable import Chunky
 
 struct WorkerEndpointTests {
-    @Test func profilesKeepTokensOutOfUserDefaults() throws {
+    @Test @MainActor func profilesKeepTokensOutOfUserDefaults() throws {
         let settings = IsolatedSettings.make()
         settings.devboxWorkerURL = "http://192.0.2.10:8080"
         settings.workerToken = "existing-token"
@@ -24,10 +24,11 @@ struct WorkerEndpointTests {
         #expect(settings.devboxWorkerURL == "https://devbox.example.ts.net")
         #expect(settings.workerToken == "endpoint-secret")
         #expect(settings.workerEndpointToken(id: wifi.id) == "endpoint-secret")
-        let raw = settings.defaults.data(forKey: WorkerEndpointStore.listKey) ?? Data()
-        let text = String(data: raw, encoding: .utf8) ?? ""
+        let loaded = WorkerEndpointStore.load(defaults: settings.defaults)
+        #expect(loaded.contains { $0.url == "https://devbox.example.ts.net" })
+        let text = String(decoding: try JSONEncoder().encode(loaded), as: UTF8.self)
         #expect(!text.contains("endpoint-secret"))
-        #expect(text.contains("https://devbox.example.ts.net"))
+        #expect(!text.contains("existing-token"))
         #expect(WorkerProbe.accepts(url: "https://devbox.example.ts.net"))
         #expect(!WorkerProbe.accepts(url: "ftp://devbox"))
     }
