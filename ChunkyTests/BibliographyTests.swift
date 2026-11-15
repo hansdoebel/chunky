@@ -127,6 +127,7 @@ struct BibliographyTests {
         #expect(PaperIdentifierParser.parse("https://arxiv.org/abs/2101.00001") == .arxiv("2101.00001"))
         #expect(PaperIdentifierParser.parse("https://arxiv.org/pdf/2101.00001.pdf") == .arxiv("2101.00001"))
         #expect(PaperIdentifierParser.parse("https://export.arxiv.org/abs/hep-th/9901001") == .arxiv("hep-th/9901001"))
+        #expect(PaperIdentifierParser.parse("hep-th/9901001") == .arxiv("hep-th/9901001"))
         #expect(PaperIdentifierParser.parse("not a paper") == nil)
     }
 
@@ -157,7 +158,7 @@ struct BibliographyTests {
         let atom = """
         <feed><title>ArXiv Query</title>
         <entry>
-          <title>Measured  effect</title>
+          <title>A &amp; B</title>
           <author><name>Ada Lovelace</name></author>
           <author><name>Alan Turing</name></author>
           <published>2021-03-04T00:00:00Z</published>
@@ -170,7 +171,7 @@ struct BibliographyTests {
         let found = try #require(PaperLookup.result(identifier: .arxiv("2101.00001"), atom: atom))
         #expect(found.record.source == "arxiv")
         #expect(found.record.citeKey == "arxiv:2101.00001")
-        #expect(found.record.title == "Measured effect")
+        #expect(found.record.title == "A & B")
         #expect(found.record.authors == ["Ada Lovelace", "Alan Turing"])
         #expect(found.record.year == 2021)
         #expect(found.record.doi == "10.1000/xyz")
@@ -187,9 +188,17 @@ struct BibliographyTests {
         state.importBibliography([match])
         #expect(state.jobs.count == 1)
         #expect(state.jobs[0].bibliography?.source == "arxiv")
-        #expect(state.jobs[0].bibliography?.title == "Measured effect")
+        #expect(state.jobs[0].bibliography?.title == "A & B")
         state.importBibliography([BibliographyMatch(record: found.record, pdf: nil, warning: PaperLookup.needsPDF)])
         #expect(state.jobs.count == 1)
+        #expect(PaperLookup.isPDF(Data("%PDF-1.4".utf8)))
+        #expect(!PaperLookup.isPDF(Data("<html>login</html>".utf8)))
+        #expect(PaperLookup.attachIndex(in: [BibliographyMatch(record: found.record, pdf: nil, warning: PaperLookup.needsPDF)]) == 0)
+        let library = [
+            BibliographyMatch(record: found.record, pdf: pdf, warning: nil),
+            BibliographyMatch(record: found.record, pdf: nil, warning: PaperLookup.needsPDF),
+        ]
+        #expect(PaperLookup.attachIndex(in: library) == nil)
     }
 
     private func json(_ text: String) throws -> [String: Any] {

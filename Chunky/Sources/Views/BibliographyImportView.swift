@@ -132,7 +132,7 @@ struct BibliographyImportSheet: View {
             HStack {
                 Button("BibTeX…") { pickBibliography() }
                 Button("Load Zotero") { Task { await loadZotero() } }
-                if matches.contains(where: { $0.pdf == nil }) {
+                if matches.count == 1, matches[0].pdf == nil {
                     Button("Attach PDF…") { attachPDF() }
                 }
                 Spacer()
@@ -178,10 +178,10 @@ struct BibliographyImportSheet: View {
         let panel = NSOpenPanel()
         panel.allowedContentTypes = [.pdf]
         panel.allowsMultipleSelection = false
-        guard panel.runModal() == .OK, let url = panel.url, !matches.isEmpty else { return }
-        matches[0].pdf = url
-        matches[0].warning = nil
-        status = "Ready to import \(matches[0].record.title)."
+        guard panel.runModal() == .OK, let url = panel.url, let index = PaperLookup.attachIndex(in: matches) else { return }
+        matches[index].pdf = url
+        matches[index].warning = nil
+        status = "Ready to import \(matches[index].record.title)."
     }
 
     private func fetchPaper() async {
@@ -195,8 +195,9 @@ struct BibliographyImportSheet: View {
             let found = try await client.fetch(text)
             var pdf: URL?
             if let remote = found.pdfURL {
-                let data = try await client.download(remote)
-                pdf = try writePDF(data, name: found.record.citeKey)
+                if let data = try? await client.download(remote), PaperLookup.isPDF(data) {
+                    pdf = try? writePDF(data, name: found.record.citeKey)
+                }
             }
             let warning = pdf == nil ? PaperLookup.needsPDF : nil
             matches = [BibliographyMatch(record: found.record, pdf: pdf, warning: warning)]

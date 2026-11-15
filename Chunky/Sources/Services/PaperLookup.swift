@@ -26,11 +26,14 @@ enum PaperIdentifierParser {
         if let modern = wholeMatch(text, pattern: #"\d{4}\.\d{4,5}(?:v\d+)?"#) {
             return stripVersion(modern)
         }
+        if let legacy = wholeMatch(text, pattern: #"[A-Za-z-]+(?:\.[A-Za-z]{2})?/\d{7}"#) {
+            return legacy
+        }
         return nil
     }
 
     private static func doi(in text: String) -> String? {
-        guard let found = firstMatch(in: text, pattern: #"(?i)10\.\d{4,9}/[-._;()/:A-Z0-9]+"#) else { return nil }
+        guard let found = firstMatch(in: text, pattern: #"(?i)(10\.\d{4,9}/[-._;()/:A-Z0-9]+)"#) else { return nil }
         return found.trimmingCharacters(in: CharacterSet(charactersIn: ".,);"))
     }
 
@@ -126,21 +129,16 @@ enum CrossrefPaper {
 
 enum ArXivPaper {
     static func metadata(atom: String, id: String) -> BibliographicMetadata? {
-        guard let entry = slice(atom, start: "<entry>", end: "</entry>") else { return nil }
-        let title = plain(slice(entry, start: "<title>", end: "</title>") ?? "")
-        guard !title.isEmpty else { return nil }
-        let names = all(entry, start: "<name>", end: "</name>").map(plain).filter { !$0.isEmpty }
-        let published = slice(entry, start: "<published>", end: "</published>") ?? ""
-        let year = Int(published.prefix(4))
-        let doi = nonEmpty(slice(entry, start: "<arxiv:doi", end: "</arxiv:doi>")?.components(separatedBy: ">").last)
+        guard let entry = AtomEntry(atom: atom) else { return nil }
+        guard !entry.title.isEmpty else { return nil }
         return BibliographicMetadata(
             citeKey: "arxiv:\(id)",
-            title: title,
-            authors: names,
-            year: year,
-            doi: doi,
-            venue: nonEmpty(plain(slice(entry, start: "<arxiv:journal_ref", end: "</arxiv:journal_ref>")?.components(separatedBy: ">").last ?? "")),
-            abstract: nonEmpty(plain(slice(entry, start: "<summary>", end: "</summary>") ?? "")),
+            title: entry.title,
+            authors: entry.names,
+            year: entry.year,
+            doi: entry.doi,
+            venue: entry.journal,
+            abstract: entry.summary,
             source: "arxiv",
             pdfPath: nil
         )
@@ -155,33 +153,72 @@ enum ArXivPaper {
         components.queryItems = [URLQueryItem(name: "id_list", value: id)]
         return URLRequest(url: components.url!)
     }
+}
 
-    private static func slice(_ text: String, start: String, end: String) -> String? {
-        guard let open = text.range(of: start), let close = text.range(of: end, range: open.upperBound..<text.endIndex) else {
-            return nil
+private nonisolated final class AtomEntry: NSObject, XMLParserDelegate {
+    var title = ""
+    var names: [String] = []
+    var year: Int?
+    var doi: String?
+    var journal: String?
+    var summary: String?
+    private var inEntry = false
+    private var text = ""
+
+    init?(atom: String) {
+        super.init()
+        let xml = atom
+            .replacingOccurrences(of: "<arxiv:", with: "<")
+            .replacingOccurrences(of: "</arxiv:", with: "</")
+        let parser = XMLParser(data: Data(xml.utf8))
+        parser.delegate = self
+        guard parser.parse(), !title.isEmpty else { return nil }
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didStartElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?,
+        attributes attributeDict: [String: String] = [:]
+    ) {
+        let name = elementName.split(separator: ":").last.map(String.init) ?? elementName
+        if name == "entry" { inEntry = true }
+        if inEntry { text = "" }
+    }
+
+    func parser(_ parser: XMLParser, foundCharacters string: String) {
+        if inEntry { text += string }
+    }
+
+    func parser(
+        _ parser: XMLParser,
+        didEndElement elementName: String,
+        namespaceURI: String?,
+        qualifiedName qName: String?
+    ) {
+        let name = elementName.split(separator: ":").last.map(String.init) ?? elementName
+        guard inEntry else { return }
+        let value = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+        switch name {
+        case "title":
+            if title.isEmpty { title = value }
+        case "name":
+            if !value.isEmpty { names.append(value) }
+        case "published":
+            year = Int(value.prefix(4))
+        case "summary":
+            summary = value.isEmpty ? nil : value
+        case "doi":
+            doi = value.isEmpty ? nil : value
+        case "journal_ref":
+            journal = value.isEmpty ? nil : value
+        case "entry":
+            inEntry = false
+        default:
+            break
         }
-        return String(text[open.upperBound..<close.lowerBound])
-    }
-
-    private static func all(_ text: String, start: String, end: String) -> [String] {
-        var found: [String] = []
-        var rest = text[...]
-        while let open = rest.range(of: start), let close = rest.range(of: end, range: open.upperBound..<rest.endIndex) {
-            found.append(String(rest[open.upperBound..<close.lowerBound]))
-            rest = rest[close.upperBound...]
-        }
-        return found
-    }
-
-    private static func plain(_ value: String) -> String {
-        value.replacingOccurrences(of: "\n", with: " ")
-            .split(whereSeparator: \.isWhitespace)
-            .joined(separator: " ")
-    }
-
-    private static func nonEmpty(_ value: String?) -> String? {
-        let cleaned = value?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-        return cleaned.isEmpty ? nil : cleaned
+        text = ""
     }
 }
 
@@ -209,6 +246,15 @@ enum PaperLookup {
     static func result(identifier: PaperIdentifier, atom: String) -> PaperLookupResult? {
         guard case .arxiv(let id) = identifier, let record = ArXivPaper.metadata(atom: atom, id: id) else { return nil }
         return PaperLookupResult(record: record, pdfURL: ArXivPaper.pdfURL(id: id), notice: nil)
+    }
+
+    static func isPDF(_ data: Data) -> Bool {
+        data.starts(with: Data("%PDF".utf8))
+    }
+
+    static func attachIndex(in matches: [BibliographyMatch]) -> Int? {
+        guard matches.count == 1, matches[0].pdf == nil else { return nil }
+        return 0
     }
 }
 
@@ -240,7 +286,7 @@ struct PaperLookupClient: Sendable {
 
     func download(_ url: URL) async throws -> Data {
         let (data, response) = try await session.data(from: url)
-        guard let http = response as? HTTPURLResponse, http.statusCode == 200, !data.isEmpty else {
+        guard let http = response as? HTTPURLResponse, http.statusCode == 200, PaperLookup.isPDF(data) else {
             throw URLError(.badServerResponse)
         }
         return data
