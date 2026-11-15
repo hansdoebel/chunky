@@ -14,7 +14,8 @@ struct QdrantHealthTests {
         collections_vector_total 1000
         qdrant_collection_shard_segment_num_points{collection="documents"} 400
         qdrant_collection_shard_segment_num_points{collection="notes"} 100
-        node_rssanon_bytes 900
+        node_rssanon_bytes 100
+        container_memory_working_set_bytes 900
         kube_pod_container_resource_limits{resource="memory",container="qdrant"} 1000
         kube_pod_container_resource_limits{resource="cpu",container="qdrant"} 2
         kubelet_volume_stats_used_bytes 3500
@@ -23,16 +24,21 @@ struct QdrantHealthTests {
         """)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
         let last = now.addingTimeInterval(-(5 * 24 * 60 * 60))
-        let report = QdrantHealth.report(samples: samples, source: "Cloud metrics", lastSuccess: last, now: now)
+        let report = QdrantHealth.report(samples: samples, source: "Cloud metrics", lastSuccess: last, now: now, previousThrottle: 0)
         #expect(report.recoveryMode)
         #expect(report.cpuThrottled)
         #expect(report.collections == 2)
         #expect(report.points == 500)
         #expect(report.vectors == 1000)
         #expect(report.ramLimitBytes == 1000)
+        #expect(report.ramBytes == 900)
         #expect(report.warnings.contains { $0.contains("RAM is 90%") })
         #expect(report.warnings.contains { $0.contains("Disk is 88%") })
-        #expect(report.idleWarning?.contains("5 days") == true)
+        #expect(report.warnings.contains { $0.contains("since the last check") })
+        let unchanged = QdrantHealth.report(samples: samples, source: "Cloud metrics", lastSuccess: last, now: now, previousThrottle: 12)
+        #expect(!unchanged.cpuThrottled)
+        let first = QdrantHealth.report(samples: samples, source: "Cloud metrics", lastSuccess: last, now: now)
+        #expect(!first.cpuThrottled)
         #expect(QdrantIdle.warning(last: now.addingTimeInterval(-24 * 60 * 60), now: now) == nil)
     }
 
@@ -49,7 +55,7 @@ struct QdrantHealthTests {
         transport.bodies["/collections/documents/memory"] = (404, Data())
         let client = QdrantHealthClient(transport: transport)
         let now = Date(timeIntervalSince1970: 1_700_000_000)
-        let report = try await client.load(
+        let report = await client.load(
             baseURL: "http://127.0.0.1:6334",
             apiKey: "db-secret",
             collection: "documents",
@@ -74,6 +80,25 @@ struct QdrantHealthTests {
         ])
         #expect(transport.keys == ["db-secret", "db-secret", "db-secret", "db-secret"])
         #expect(QdrantHealthError.http(404).errorDescription?.contains("db-secret") == false)
+    }
+
+    @Test func aFailedMemoryRequestKeepsTheUsageReading() async {
+        let transport = ScriptedHealthTransport()
+        transport.bodies["/sys_metrics"] = (200, Data("""
+        container_memory_working_set_bytes 800
+        kube_pod_container_resource_limits{resource="memory"} 1000
+        """.utf8))
+        transport.failures = ["/collections/documents", "/collections/documents/memory"]
+        let report = await QdrantHealthClient(transport: transport).load(
+            baseURL: "http://127.0.0.1:6334",
+            apiKey: "db-secret",
+            collection: "documents",
+            lastSuccess: nil,
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        #expect(report.ramBytes == 800)
+        #expect(report.warnings.contains { $0.contains("80%") })
+        #expect(report.memoryNote == "Memory breakdown could not be loaded.")
     }
 
     @Test func memoryBreakdownGroupsHNSWAndQuantization() throws {
@@ -115,7 +140,8 @@ struct QdrantHealthTests {
             """),
             source: "Cloud metrics",
             lastSuccess: now.addingTimeInterval(-(6 * 24 * 60 * 60)),
-            now: now
+            now: now,
+            previousThrottle: 0
         )
         report.collection = CollectionHealth(
             name: "documents",
@@ -149,9 +175,14 @@ private final class ScriptedHealthTransport: QdrantHealthTransport, @unchecked S
     var paths: [String] = []
     var keys: [String] = []
 
+    var failures: Set<String> = []
+
     func get(url: URL, apiKey: String) async throws -> (status: Int, body: Data) {
         paths.append(url.path)
         keys.append(apiKey)
+        if failures.contains(url.path) {
+            throw URLError(.timedOut)
+        }
         return bodies[url.path] ?? (404, Data())
     }
 }

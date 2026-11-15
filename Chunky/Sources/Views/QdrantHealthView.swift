@@ -150,23 +150,23 @@ struct QdrantHealthRoot: View {
         let settings = appState.settings
         let collection = settings.defaultCollection
         let client = QdrantHealthClient(transport: LiveQdrantHealthTransport())
-        do {
-            let loaded = try await client.load(
-                baseURL: settings.qdrantURL,
-                apiKey: settings.qdrantAPIKey,
-                collection: collection,
-                lastSuccess: settings.qdrantLastSuccessAt,
-                now: Date()
-            )
-            report = loaded
-            settings.qdrantLastSuccessAt = Date()
-            status = collection.isEmpty ? "Choose a collection to see its memory." : "Updated \(collection)."
-        } catch {
-            status = error.localizedDescription
-            report.idleWarning = QdrantIdle.warning(last: settings.qdrantLastSuccessAt, now: Date())
-            if let idle = report.idleWarning, !report.warnings.contains(idle) {
-                report.warnings.append(idle)
+        let loaded = await client.load(
+            baseURL: settings.qdrantURL,
+            apiKey: settings.qdrantAPIKey,
+            collection: collection,
+            lastSuccess: settings.qdrantLastSuccessAt,
+            now: Date(),
+            previousThrottle: settings.qdrantThrottleCount
+        )
+        report = loaded
+        if loaded.source.isEmpty {
+            status = loaded.memoryNote ?? "Qdrant metrics could not be loaded."
+        } else {
+            settings.noteQdrantSuccess()
+            if let count = loaded.cpuThrottleCount {
+                settings.qdrantThrottleCount = count
             }
+            status = collection.isEmpty ? "Choose a collection to see its memory." : "Updated \(collection)."
         }
     }
 }

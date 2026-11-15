@@ -248,6 +248,7 @@ struct QdrantHealthReport: Equatable, Sendable {
     var vectors: Double?
     var recoveryMode: Bool
     var cpuThrottled: Bool
+    var cpuThrottleCount: Double?
     var collection: CollectionHealth?
     var memory: [MemoryComponent]
     var memoryNote: String?
@@ -265,6 +266,7 @@ struct QdrantHealthReport: Equatable, Sendable {
         vectors: nil,
         recoveryMode: false,
         cpuThrottled: false,
+        cpuThrottleCount: nil,
         collection: nil,
         memory: [],
         memoryNote: nil,
@@ -286,15 +288,22 @@ enum QdrantIdle {
 enum QdrantHealth {
     static let alertRatio = 0.8
 
-    static func report(samples: [PrometheusSample], source: String, lastSuccess: Date?, now: Date) -> QdrantHealthReport {
-        let ram = PrometheusText.total(samples, "node_rssanon_bytes")
-            ?? PrometheusText.total(samples, "container_memory_working_set_bytes")
+    static func report(
+        samples: [PrometheusSample],
+        source: String,
+        lastSuccess: Date?,
+        now: Date,
+        previousThrottle: Double? = nil
+    ) -> QdrantHealthReport {
+        let ram = PrometheusText.total(samples, "container_memory_working_set_bytes")
+            ?? PrometheusText.total(samples, "node_rssanon_bytes")
             ?? PrometheusText.total(samples, "memory_resident_bytes")
         let ramLimit = PrometheusText.total(samples, "kube_pod_container_resource_limits", label: "resource", equals: "memory")
         let disk = PrometheusText.total(samples, "kubelet_volume_stats_used_bytes")
         let diskLimit = PrometheusText.total(samples, "kubelet_volume_stats_capacity_bytes")
         let recovery = (PrometheusText.total(samples, "app_status_recovery_mode") ?? 0) >= 1
-        let throttled = (PrometheusText.total(samples, "container_cpu_cfs_throttled_periods_total") ?? 0) > 0
+        let throttleCount = PrometheusText.total(samples, "container_cpu_cfs_throttled_periods_total")
+        let throttled = QdrantHealth.throttleIncreased(current: throttleCount, previous: previousThrottle)
         let idle = QdrantIdle.warning(last: lastSuccess, now: now)
         return QdrantHealthReport(
             source: source,
@@ -308,6 +317,7 @@ enum QdrantHealth {
             vectors: PrometheusText.total(samples, "collections_vector_total"),
             recoveryMode: recovery,
             cpuThrottled: throttled,
+            cpuThrottleCount: throttleCount,
             collection: nil,
             memory: [],
             memoryNote: nil,
@@ -332,7 +342,7 @@ enum QdrantHealth {
             lines.append("Disk is \(percent(ratio)) of capacity. Qdrant Cloud alerts at 80%.")
         }
         if throttled {
-            lines.append("CPU demand has exceeded this instance. Requests may slow down.")
+            lines.append("CPU demand exceeded this instance since the last check. Requests may slow down.")
         }
         if let idle {
             lines.append(idle)
@@ -347,6 +357,11 @@ enum QdrantHealth {
 
     static func percent(_ ratio: Double) -> String {
         "\(Int((ratio * 100).rounded()))%"
+    }
+
+    static func throttleIncreased(current: Double?, previous: Double?) -> Bool {
+        guard let current, let previous else { return false }
+        return current > previous
     }
 }
 
@@ -371,34 +386,56 @@ protocol QdrantHealthTransport: Sendable {
 struct QdrantHealthClient: Sendable {
     var transport: any QdrantHealthTransport
 
-    func load(baseURL: String, apiKey: String, collection: String, lastSuccess: Date?, now: Date) async throws -> QdrantHealthReport {
-        let metrics = try await metrics(baseURL: baseURL, apiKey: apiKey)
-        var report = QdrantHealth.report(samples: metrics.samples, source: metrics.source, lastSuccess: now, now: now)
-        let idle = QdrantIdle.warning(last: lastSuccess, now: now)
-        report.idleWarning = idle
-        report.warnings = QdrantHealth.warnings(
-            ram: report.ramBytes,
-            ramLimit: report.ramLimitBytes,
-            disk: report.diskBytes,
-            diskLimit: report.diskLimitBytes,
-            throttled: report.cpuThrottled,
-            idle: idle
+    func load(
+        baseURL: String,
+        apiKey: String,
+        collection: String,
+        lastSuccess: Date?,
+        now: Date,
+        previousThrottle: Double? = nil
+    ) async -> QdrantHealthReport {
+        let metrics: (samples: [PrometheusSample], source: String)
+        do {
+            metrics = try await self.metrics(baseURL: baseURL, apiKey: apiKey)
+        } catch {
+            var report = QdrantHealthReport.empty
+            report.idleWarning = QdrantIdle.warning(last: lastSuccess, now: now)
+            report.warnings = report.idleWarning.map { [$0] } ?? []
+            report.memoryNote = error.localizedDescription
+            return report
+        }
+        var report = QdrantHealth.report(
+            samples: metrics.samples,
+            source: metrics.source,
+            lastSuccess: lastSuccess,
+            now: now,
+            previousThrottle: previousThrottle
         )
         guard !collection.isEmpty else { return report }
-        let infoURL = try Self.url(baseURL, "collections/\(collection)")
-        let info = try await transport.get(url: infoURL, apiKey: apiKey)
-        if (200..<300).contains(info.status), let parsed = CollectionHealthParser.parse(info.body, name: collection) {
-            report.collection = parsed
-            if report.points == nil, let points = parsed.points {
-                report.points = Double(points)
+        do {
+            let infoURL = try Self.url(baseURL, "collections/\(collection)")
+            let info = try await transport.get(url: infoURL, apiKey: apiKey)
+            if (200..<300).contains(info.status), let parsed = CollectionHealthParser.parse(info.body, name: collection) {
+                report.collection = parsed
+                if report.points == nil, let points = parsed.points {
+                    report.points = Double(points)
+                }
             }
+        } catch {
+            report.memoryNote = "Collection details could not be loaded."
         }
-        let memoryURL = try Self.url(baseURL, "collections/\(collection)/memory")
-        let memory = try await transport.get(url: memoryURL, apiKey: apiKey)
-        if (200..<300).contains(memory.status) {
-            report.memory = CollectionMemory.components(from: memory.body)
-        } else if memory.status == 404 {
-            report.memoryNote = "Memory breakdown needs Qdrant 1.18 or newer."
+        do {
+            let memoryURL = try Self.url(baseURL, "collections/\(collection)/memory")
+            let memory = try await transport.get(url: memoryURL, apiKey: apiKey)
+            if (200..<300).contains(memory.status) {
+                report.memory = CollectionMemory.components(from: memory.body)
+            } else if memory.status == 404 {
+                report.memoryNote = report.memoryNote ?? "Memory breakdown needs Qdrant 1.18 or newer."
+            } else {
+                report.memoryNote = "Memory breakdown could not be loaded."
+            }
+        } catch {
+            report.memoryNote = "Memory breakdown could not be loaded."
         }
         return report
     }

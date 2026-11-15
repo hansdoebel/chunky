@@ -1519,6 +1519,7 @@ class DocumentProcessor: ObservableObject {
             batchSize: batchSize,
             onProgress: onProgress
         )
+        appState.settings.noteQdrantSuccess()
     }
 }
 

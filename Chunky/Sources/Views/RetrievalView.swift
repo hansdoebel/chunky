@@ -612,6 +612,9 @@ struct RetrievalScreen: View {
             let result = try await service.search(request, index: index)
             hits = result.hits
             statusLine = result.statusLine
+            if request.route == .localQdrant {
+                appState.settings.noteQdrantSuccess()
+            }
         } catch {
             hits = []
             self.error = error.localizedDescription
