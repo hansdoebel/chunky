@@ -101,27 +101,18 @@ def similarity(left: str, right: str) -> float:
     return len(probe & haystack) / len(probe)
 
 
-def _lcs_length(left: list[str], right: list[str]) -> int:
-    if not left or not right:
-        return 0
-    previous = [0] * (len(right) + 1)
-    for word in left:
-        current = [0]
-        for index, other in enumerate(right, start=1):
-            if word == other:
-                current.append(previous[index - 1] + 1)
-            else:
-                current.append(max(previous[index], current[-1]))
-        previous = current
-    return previous[-1]
+def _shingle_index(chunk_texts: list[str]) -> set[tuple[str, ...]]:
+    indexed: set[tuple[str, ...]] = set()
+    for text in chunk_texts:
+        indexed.update(_shingles(normalize_text(text).split()))
+    return indexed
 
 
 def coverage_ratio(page_text: str, chunk_texts: list[str]) -> float:
-    page_words = normalize_text(page_text).split()
-    if not page_words:
+    page = _shingles(normalize_text(page_text).split())
+    if not page:
         return 1.0
-    chunk_words = normalize_text(" ".join(chunk_texts)).split()
-    return _lcs_length(page_words, chunk_words) / len(page_words)
+    return len(page & _shingle_index(chunk_texts)) / len(page)
 
 
 def status_for_coverage(coverage: float, *, green: float = GREEN_COVERAGE, yellow: float = YELLOW_COVERAGE) -> str:
@@ -168,28 +159,49 @@ def _page_number(value: Any) -> int | None:
     return None
 
 
-def chunk_bbox(chunk: dict[str, Any]) -> dict[str, Any] | None:
-    raw = chunk.get("bbox")
-    if not isinstance(raw, dict):
-        return None
+def _box_from(raw: dict[str, Any]) -> dict[str, Any] | None:
     try:
         box = {key: float(raw[key]) for key in ("l", "t", "r", "b")}
     except (KeyError, TypeError, ValueError):
         return None
     origin = str(raw.get("origin") or "bottom_left")
     box["origin"] = "top_left" if "top" in origin else "bottom_left"
+    page = _page_number(raw.get("page"))
+    if page is not None:
+        box["page"] = page
     return box
 
 
+def chunk_bbox(chunk: dict[str, Any], page: int | None = None) -> dict[str, Any] | None:
+    raw_boxes: list[dict[str, Any]] = []
+    single = chunk.get("bbox")
+    if isinstance(single, dict):
+        raw_boxes.append(single)
+    many = chunk.get("bboxes")
+    if isinstance(many, list):
+        raw_boxes.extend(item for item in many if isinstance(item, dict))
+    boxes = [box for item in raw_boxes if (box := _box_from(item)) is not None]
+    if page is not None:
+        exact = [box for box in boxes if box.get("page") == page]
+        if exact:
+            boxes = exact
+    if not boxes:
+        return None
+    chosen = dict(boxes[0])
+    chosen.pop("page", None)
+    return chosen
+
+
 def _page_checks(pages: list[str], chunks: list[dict[str, Any]], threshold: float) -> list[dict[str, Any]]:
-    texts = [chunk_text(chunk) for chunk in chunks]
+    indexed = _shingle_index([chunk_text(chunk) for chunk in chunks])
     checks = []
     for number, page in enumerate(pages, start=1):
         flags: list[str] = []
         if not normalize_text(page):
             checks.append({"page": number, "status": "yellow", "coverage": 1.0, "flags": ["no extractable text"]})
             continue
-        ratio = coverage_ratio(page, texts)
+        page_shingles = _shingles(normalize_text(page).split())
+        ratio = 1.0 if not page_shingles else len(page_shingles & indexed) / len(page_shingles)
         status = status_for_coverage(ratio, green=threshold)
         if ratio < threshold:
             flags.append(f"coverage {ratio:.0%} is below {threshold:.0%}")
@@ -308,6 +320,8 @@ def vector_spot_check(
     if not chosen:
         return {"status": "skipped", "samples": []}
     fresh = embed([chunk_text(chunk) for chunk in chosen])
+    if len(fresh) != len(chosen):
+        return {"status": "red", "samples": []}
     samples = []
     for chunk, vector in zip(chosen, fresh):
         stored = vectors_by_id[str(chunk.get("id"))]
@@ -334,12 +348,11 @@ def sample_queries(pages: list[str], chunks: list[dict[str, Any]], limit: int) -
                     best = chunk
             if best is None or best_score < 0.8:
                 continue
-            claimed = claimed_pages(best)
             queries.append(
                 {
                     "query": sentence,
                     "expected_chunk_id": str(best.get("id")),
-                    "expected_page": claimed[0] if claimed else number,
+                    "expected_page": number,
                 }
             )
             if len(queries) >= limit:
@@ -361,7 +374,15 @@ def retrieval_self_test(
         hits = search(item["query"]) or []
         top = hits[0] if hits else {}
         top_page = _page_number((top.get("payload") or {}).get("page", top.get("page")))
-        passed = str(top.get("id") or "") == item["expected_chunk_id"] and top_page == item["expected_page"]
+        expected_id = item["expected_chunk_id"]
+        claimed = claimed_pages(next((chunk for chunk in chunks if str(chunk.get("id")) == expected_id), {}))
+        same_page = top_page == item["expected_page"]
+        spanned = (
+            top_page in claimed
+            and item["expected_page"] in claimed
+            and len(claimed) > 1
+        )
+        passed = str(top.get("id") or "") == expected_id and (same_page or spanned)
         queries.append(
             {
                 **item,
@@ -403,11 +424,12 @@ def _spot_checks(chunks: list[dict[str, Any]], attributions: list[dict[str, Any]
         if chunk is None:
             continue
         claimed = claimed_pages(chunk)
+        page = claimed[0] if claimed else None
         checks.append(
             {
                 "chunk_id": chunk_id,
-                "page": claimed[0] if claimed else None,
-                "bbox": chunk_bbox(chunk),
+                "page": page,
+                "bbox": chunk_bbox(chunk, page),
                 "preview": _preview(chunk),
             }
         )
@@ -422,6 +444,7 @@ def build_report(
     chunk_source: str,
     pages: list[str] | None,
     text_note: str | None,
+    text_failed: bool = False,
     chunks: list[dict[str, Any]],
     points: list[dict[str, Any]] | None,
     vectors_by_id: dict[str, list[float]],
@@ -440,7 +463,12 @@ def build_report(
     store = store_check(chunks, points, model=model, expected_dim=expected_dim)
     vectors = vector_spot_check(chunks, vectors_by_id, embed)
     retrieval = retrieval_self_test(pages or [], chunks, search if pages is not None else None)
-    text_status = "skipped" if pages is None else worst_status([row["status"] for row in page_rows] or ["green"])
+    if text_failed:
+        text_status = "red"
+    elif pages is None:
+        text_status = "skipped"
+    else:
+        text_status = worst_status([row["status"] for row in page_rows] or ["green"])
     attribution_status = "skipped" if pages is None else worst_status(
         ["green" if row["matched"] else "red" for row in attributions] or ["green"]
     )
@@ -582,6 +610,7 @@ def verify_document(
     resolved, source = resolve_chunks(digest, chunks)
     pages = None
     note = None
+    text_failed = False
     width, height = 612.0, 792.0
     if pdf_path is None or pdf_path.suffix.lower() != ".pdf":
         note = "not a pdf"
@@ -591,6 +620,7 @@ def verify_document(
             pages = (extract_pages or extract_pdf_pages)(pdf_path)
         except Exception as exc:
             note = redact(str(exc), None)[:200]
+            text_failed = True
     by_id: dict[str, list[float]] = {}
     if vectors:
         stamped = [dict(chunk) for chunk in chunks]
@@ -604,6 +634,7 @@ def verify_document(
         chunk_source=source,
         pages=pages,
         text_note=note,
+        text_failed=text_failed,
         chunks=resolved,
         points=points,
         vectors_by_id=by_id,

@@ -217,6 +217,94 @@ def test_cache_records_are_reused_and_not_rewritten(monkeypatch, tmp_path: Path)
     assert resolve_chunks("pdf-hash", fallback)[1] == "cache"
 
 
+def test_unreadable_pdf_is_red_and_not_a_skipped_check(tmp_path: Path):
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF")
+
+    def explode(_path: Path) -> list[str]:
+        raise RuntimeError("encrypted")
+
+    report = verify_document(
+        pdf_path=pdf,
+        pdf_hash="hash",
+        filename="paper.pdf",
+        chunks=[_chunk(PAGE_ONE, 1, "c1")],
+        model="qwen3-embedding",
+        extract_pages=explode,
+        now="2026-11-15T00:00:00Z",
+    )
+    assert report["text"]["status"] == "red"
+    assert report["text"]["note"] == "encrypted"
+    assert report["status"] == "red"
+    assert report["pages"] == []
+
+
+def test_retrieval_expects_the_pdf_page_not_the_chunk_label():
+    chunks = [_chunk(PAGE_TWO, 1, "mislabeled", page_end=1)]
+    report = verify_document(
+        pdf_path=Path("paper.pdf"),
+        pdf_hash="hash",
+        filename="paper.pdf",
+        chunks=chunks,
+        model="qwen3-embedding",
+        search=lambda _query: [{"id": "mislabeled", "page": 1}],
+        extract_pages=lambda _path: [PAGE_ONE, PAGE_TWO],
+        now="2026-11-15T00:00:00Z",
+    )
+    query = next(item for item in report["retrieval"]["queries"] if "appendix" in item["query"])
+    assert query["expected_page"] == 2
+    assert query["passed"] is False
+
+
+def test_short_embedding_sample_fails():
+    chunks = [_chunk(PAGE_ONE, 1, "c1")]
+    report = verify_document(
+        pdf_path=None,
+        pdf_hash="hash",
+        filename="note.txt",
+        chunks=chunks,
+        model="qwen3-embedding",
+        vectors=[[1.0, 0.0]],
+        embed=lambda _texts: [],
+        now="2026-11-15T00:00:00Z",
+    )
+    assert report["vector_spot_check"]["status"] == "red"
+    assert report["vector_spot_check"]["samples"] == []
+
+
+def test_producer_bboxes_highlight_the_matching_page(tmp_path: Path):
+    pdf = tmp_path / "paper.pdf"
+    pdf.write_bytes(b"%PDF")
+    chunks = [
+        _chunk(
+            PAGE_ONE,
+            2,
+            "c1",
+            bboxes=[
+                {"l": 1, "t": 2, "r": 3, "b": 0, "page": 1},
+                {"l": 10, "t": 80, "r": 40, "b": 20, "page": 2},
+            ],
+        )
+    ]
+    report = verify_document(
+        pdf_path=pdf,
+        pdf_hash="hash",
+        filename="paper.pdf",
+        chunks=chunks,
+        model="qwen3-embedding",
+        extract_pages=lambda _path: ["", PAGE_ONE],
+        now="2026-11-15T00:00:00Z",
+    )
+    assert report["spot_checks"][0]["bbox"] == {
+        "l": 10.0,
+        "t": 80.0,
+        "r": 40.0,
+        "b": 20.0,
+        "origin": "bottom_left",
+    }
+    assert report["spot_checks"][0]["page"] == 2
+
+
 def test_stable_ids_follow_the_pdf_hash_and_text():
     first = stable_chunk_id("hash", {"text": "Hello", "chunk_index": 0}, 0)
     assert first == stable_chunk_id("hash", {"text": "Hello", "chunk_index": 0}, 0)
