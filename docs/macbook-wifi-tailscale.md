@@ -198,7 +198,7 @@ Check `tailscale ping devbox` and `tailscale status`. **via DERP** means relayed
 
 ## Profiles to keep
 
-Until the app stores more than one worker URL, change the URL by hand:
+Preferences, Documents, saves these named worker endpoints. Fill in the URL and token, then Use and Check reachability:
 
 | Profile | Typical URL | When to use |
 | --- | --- | --- |

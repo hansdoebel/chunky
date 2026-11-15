@@ -290,6 +290,42 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.workerTokenKey, newValue) }
     }
 
+    func workerEndpoints() -> [WorkerEndpoint] {
+        let stored = WorkerEndpointStore.load(defaults: defaults)
+        if !stored.isEmpty { return stored }
+        var seeded = WorkerEndpoint.starters()
+        if !devboxWorkerURL.isEmpty {
+            seeded[0].url = devboxWorkerURL
+            setWorkerEndpointToken(id: seeded[0].id, workerToken)
+            WorkerEndpointStore.setActive(seeded[0].id, defaults: defaults)
+        }
+        WorkerEndpointStore.save(seeded, defaults: defaults)
+        return seeded
+    }
+
+    func replaceWorkerEndpoints(_ endpoints: [WorkerEndpoint]) {
+        WorkerEndpointStore.save(endpoints, defaults: defaults)
+        objectWillChange.send()
+    }
+
+    func activeWorkerEndpointID() -> UUID? {
+        WorkerEndpointStore.activeID(defaults: defaults)
+    }
+
+    func workerEndpointToken(id: UUID) -> String {
+        secret(WorkerEndpointStore.tokenKey(id))
+    }
+
+    func setWorkerEndpointToken(id: UUID, _ token: String) {
+        setSecret(WorkerEndpointStore.tokenKey(id), token)
+    }
+
+    func useWorkerEndpoint(_ endpoint: WorkerEndpoint) {
+        WorkerEndpointStore.setActive(endpoint.id, defaults: defaults)
+        devboxWorkerURL = endpoint.url
+        workerToken = workerEndpointToken(id: endpoint.id)
+    }
+
     /// Qdrant Cloud URL sent with a devbox job. Local Docker stays in `qdrantURL`.
     var qdrantCloudURL: String {
         get { secret(KeychainService.qdrantCloudURLKey) }
