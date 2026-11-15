@@ -5,7 +5,9 @@ Chunky exposes two tools over stdio MCP:
 - `search` with `query`, `collection`, `top_k`, and `filters`
 - `list_collections`
 
-The server reads the Qdrant, embedding, and worker settings saved in the app, including the worker profile that Use last applied. API keys and the worker token come from the Keychain and are not written to logs. Search follows the Retrieval tab. It calls `POST /v1/search` on that worker when the processing host is Devbox and Devbox ingest is Qdrant Cloud. Otherwise it searches the Qdrant URL stored on the app machine. Hybrid fusion is dense plus BM25 with RRF. Rerank, Eval, and the in-app citation chat are not MCP tools.
+The server reads the Qdrant, embedding, and worker settings saved in the app, including the worker profile that Use last applied. Each search reloads the active paper library, so a change in the app is visible without restarting the server. API keys and the worker token come from the Keychain and are not written to logs. Search follows the Retrieval tab. It calls `POST /v1/search` on that worker when the processing host is Devbox and Devbox ingest is Qdrant Cloud. Otherwise it searches the Qdrant URL stored on the app machine. Hybrid fusion is dense plus BM25 with RRF. Rerank, Eval, and the in-app citation chat are not MCP tools.
+
+`search` also accepts `year_from`, `year_to`, `author`, `doi`, `title`, `heading`, and `content_type`. Those become the same payload filters as the Retrieval tab. `library` or `libraries` limits the search to those libraries. `all_libraries` searches every library. When none of those is set, the search uses the active library. Points with no library id stay in the default library.
 
 ## pi
 

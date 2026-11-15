@@ -106,9 +106,14 @@ RRF. Optional `rrf_weights` is two non-negative numbers, dense then BM25.
 Hybrid ingest creates a BM25 text index on `text` and does not store
 batch-local TF-IDF sparse vectors.
 
-`filters` is a list of payload conditions, combined with AND. Each item has
-`key` plus `match` (string, integer, or boolean) and/or a range (`gt`, `gte`,
-`lt`, `lte`). Example keys are `source`, `page`, and `content_type`.
+`filters` is a list of payload conditions. Required items are combined with AND.
+An item with `should` is one alternative inside a required group. Each item has
+`key` plus `match` (string, integer, or boolean), `text` (substring), `any`
+(one of several values), `empty`, and/or a range (`gt`, `gte`, `lt`, `lte`).
+`negate` excludes a match. Example keys are `source`, `page`, `year`, `doi`,
+`content_type`, and `library_id`. `papers_first` returns document summaries.
+`expand_section` replaces a hit with the stored sibling chunks that share its
+heading path when the sibling ratio is met. The ratio defaults to 0.5.
 
 A collection whose dense vector width does not match the query vector is
 refused with HTTP 409 and `error_type: dimension_mismatch` before the query.
