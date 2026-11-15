@@ -113,23 +113,27 @@ def make_embedding_backend(kind: str, base_url: str) -> EmbeddingBackend:
         return OpenAIEmbeddingBackend(base_url)
     return OllamaEmbeddingBackend(base_url)
 
-_TOKENIZERS = {
-    "qwen3-embedding": "Qwen/Qwen3-Embedding-0.6B",
-    "qwen3-embedding:latest": "Qwen/Qwen3-Embedding-0.6B",
-    "qwen3-embedding-0.6b": "Qwen/Qwen3-Embedding-0.6B",
-}
+DEFAULT_EMBEDDING_MODEL = "qwen3-embedding:0.6b"
+QWEN3_EMBED_0_6B = "Qwen/Qwen3-Embedding-0.6B"
+QWEN3_EMBED_4B = "Qwen/Qwen3-Embedding-4B"
+QWEN3_EMBED_8B = "Qwen/Qwen3-Embedding-8B"
+
 
 def tokenizer_for_embedding(model: str | None) -> str:
-    """Hugging Face tokenizer that matches the embedding model. Not MiniLM."""
     name = (model or "").strip()
-    if not name:
-        return "Qwen/Qwen3-Embedding-0.6B"
-    mapped = _TOKENIZERS.get(name.lower())
-    if mapped:
-        return mapped
+    lowered = name.lower()
+    if not lowered or lowered in {"qwen3-embedding", "qwen3-embedding:0.6b", "qwen3-embedding-0.6b"}:
+        return QWEN3_EMBED_0_6B
+    if "qwen3-embedding" in lowered and "0.6" in lowered:
+        return QWEN3_EMBED_0_6B
+    if "qwen3-embedding" in lowered and "4b" in lowered:
+        return QWEN3_EMBED_4B
+    if "qwen3-embedding" in lowered and ("8b" in lowered or lowered.endswith(":latest")):
+        return QWEN3_EMBED_8B
     if "/" in name:
         return name
-    return "Qwen/Qwen3-Embedding-0.6B"
+    return QWEN3_EMBED_0_6B
+
 
 class DimensionCache:
     """One probe embedding per model name. Later calls reuse the cached width."""

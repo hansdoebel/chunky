@@ -480,8 +480,14 @@ def _write_output(doc, output_format, output_file, image_export_mode):
 def _tokenizer_for_embedding(model: str | None) -> str:
     name = (model or "").strip()
     lowered = name.lower()
-    if lowered in {"qwen3-embedding", "qwen3-embedding:latest", "qwen3-embedding-0.6b"} or not name:
+    if not lowered or lowered in {"qwen3-embedding", "qwen3-embedding:0.6b", "qwen3-embedding-0.6b"}:
         return "Qwen/Qwen3-Embedding-0.6B"
+    if "qwen3-embedding" in lowered and "0.6" in lowered:
+        return "Qwen/Qwen3-Embedding-0.6B"
+    if "qwen3-embedding" in lowered and "4b" in lowered:
+        return "Qwen/Qwen3-Embedding-4B"
+    if "qwen3-embedding" in lowered and ("8b" in lowered or lowered.endswith(":latest")):
+        return "Qwen/Qwen3-Embedding-8B"
     if "/" in name:
         return name
     return "Qwen/Qwen3-Embedding-0.6B"

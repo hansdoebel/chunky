@@ -125,6 +125,10 @@ def test_dimension_cache_keeps_endpoints_apart():
 
 def test_tokenizer_follows_the_embedding_model():
     assert tokenizer_for_embedding("qwen3-embedding") == "Qwen/Qwen3-Embedding-0.6B"
+    assert tokenizer_for_embedding("qwen3-embedding:0.6b") == "Qwen/Qwen3-Embedding-0.6B"
+    assert tokenizer_for_embedding("qwen3-embedding:4b") == "Qwen/Qwen3-Embedding-4B"
+    assert tokenizer_for_embedding("qwen3-embedding:8b") == "Qwen/Qwen3-Embedding-8B"
+    assert tokenizer_for_embedding("qwen3-embedding:latest") == "Qwen/Qwen3-Embedding-8B"
     assert tokenizer_for_embedding("Qwen/Qwen3-Embedding-0.6B") == "Qwen/Qwen3-Embedding-0.6B"
     assert tokenizer_for_embedding("") == "Qwen/Qwen3-Embedding-0.6B"
     assert "MiniLM" not in tokenizer_for_embedding(None)

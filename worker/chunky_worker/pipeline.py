@@ -35,7 +35,7 @@ class DoclingPipeline:
         vlm_engine: str = "vllm",
         vllm_url: str = "http://127.0.0.1:8000",
         chart_vllm_url: str = "",
-        embedding_model: str = "qwen3-embedding",
+        embedding_model: str = "qwen3-embedding:0.6b",
     ) -> None:
         self.scripts_dir = scripts_dir
         self.vlm_engine = vlm_engine

@@ -7,7 +7,19 @@ Use the MacBook in two ways:
 
 The Mac Studio path over 10GbE stays the default for heavy ingest. See [devbox-setup.md](devbox-setup.md). This guide covers the MacBook over local Wi-Fi and an optional Tailscale path for a stable name and for access when you are not on the LAN.
 
-Do not commit addresses or the bearer token. There is no Tailscale SDK in the app. The worker is a URL plus the token.
+Do not commit addresses or the bearer token. There is no Tailscale SDK in the app. The worker is a URL plus the token. Model ids and why they were picked are in [models.md](models.md).
+
+## Install and test today
+
+This is the short path for the M4 Max against the devbox worker. Addresses stay on the machines.
+
+1. On the Mac: Xcode 27.2, then `make first-launch` and `make setup-venv` in this repo. Build with `make run`.
+2. On the devbox, the worker is already bound off loopback with a bearer token. Confirm `curl -sS http://DEVBOX_LAN_IP:8080/v1/health`.
+3. On the devbox, pull the embedding tag the collection uses: `ollama pull qwen3-embedding:0.6b`. Do not pull bare `qwen3-embedding`. That tag is the 8B model and its vectors are 4096 wide.
+4. In the app, Preferences, Documents: Processing host **Devbox**. Save a Wi-Fi LAN profile with `http://DEVBOX_LAN_IP:8080` or `http://HOSTNAME.local:8080` and the token. Press Use, then Check reachability. A green result includes a latency.
+5. Preferences, Qdrant: point Server URL at the Qdrant you will search. For a first devbox job, Devbox ingest **Qdrant Cloud** sends the Cloud URL and key with the job. Local Docker ingest returns vectors for the Mac to upsert.
+6. Embedding model `qwen3-embedding:0.6b`, dimensions 1024. VLM Granite-Docling (the devbox preset, not the MLX build). Layout Heron. Drop one PDF on the queue and run Chunk & Ingest.
+7. Open Retrieval, search that collection, and confirm a hit. Hybrid and rerank can wait until that search works. If the width is wrong, the job fails with `dimension_mismatch`. Create a new collection instead of reusing one built with another model.
 
 ## Recommendation
 

@@ -103,7 +103,7 @@ class Settings:
     chart_vllm_url: str = ""
 
     vlm_engine: str = "vllm"
-    embedding_model: str = "qwen3-embedding"
+    embedding_model: str = "qwen3-embedding:0.6b"
     embedding_backend: str = "ollama"
     embedding_url: str = ""
     qdrant_url: str = ""
@@ -123,7 +123,7 @@ class Settings:
             vllm_url=os.environ.get("CHUNKY_VLLM_URL", "http://127.0.0.1:8000"),
             chart_vllm_url=os.environ.get("CHUNKY_CHART_VLLM_URL", "").strip(),
             vlm_engine=normalize_vlm_engine(os.environ.get("CHUNKY_VLM_ENGINE", "vllm")),
-            embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding"),
+            embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding:0.6b"),
             embedding_backend=os.environ.get("CHUNKY_EMBEDDING_BACKEND", "ollama").strip().lower() or "ollama",
             embedding_url=os.environ.get("CHUNKY_EMBEDDING_URL", "").strip(),
             qdrant_url=os.environ.get("CHUNKY_QDRANT_URL", "").strip(),

@@ -53,6 +53,20 @@ struct EmbeddingDimensionTests {
         }
     }
 
+    @Test func qwen3TagsKeepWidthWithTheCollection() {
+        #expect(EmbeddingWidth.defaultModel == "qwen3-embedding:0.6b")
+        #expect(EmbeddingWidth.defaultDimensions == 1024)
+        #expect(EmbeddingWidth.expected(for: "qwen3-embedding:0.6b") == 1024)
+        #expect(EmbeddingWidth.expected(for: "qwen3-embedding") == 1024)
+        #expect(EmbeddingWidth.expected(for: "qwen3-embedding:4b") == 2560)
+        #expect(EmbeddingWidth.expected(for: "qwen3-embedding:8b") == 4096)
+        #expect(EmbeddingWidth.expected(for: "qwen3-embedding:latest") == 4096)
+        let settings = IsolatedSettings.make()
+        #expect(settings.embeddingModel == EmbeddingWidth.defaultModel)
+        #expect(settings.embeddingDimensions == 1024)
+        #expect(settings.layoutModel == LayoutModel.heron.rawValue)
+    }
+
     @Test func matchingOrMissingCollectionIsAllowed() throws {
         try EmbeddingDimensionError.validate(
             existing: 1024,

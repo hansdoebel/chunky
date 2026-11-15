@@ -42,6 +42,7 @@ def test_defaults_are_loopback(clean_env):
     assert settings.ollama_url == "http://127.0.0.1:11434"
     assert settings.vllm_url == "http://127.0.0.1:8000"
     assert settings.vlm_engine == "vllm"
+    assert settings.embedding_model == "qwen3-embedding:0.6b"
     assert settings.token is None
     assert settings.qdrant_url == ""
     assert settings.qdrant_api_key == ""

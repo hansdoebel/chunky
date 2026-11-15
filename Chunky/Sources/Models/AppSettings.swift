@@ -335,8 +335,8 @@ class AppSettings: ObservableObject {
 
         self.embeddingBackend = defaults.string(forKey: prefix + "embeddingBackend") ?? EmbeddingBackendKind.ollama.rawValue
         self.embeddingAPIURL = defaults.string(forKey: prefix + "embeddingAPIURL") ?? ""
-        self.embeddingModel = defaults.string(forKey: prefix + "embeddingModel") ?? "qwen3-embedding"
-        self.embeddingDimensions = defaults.object(forKey: prefix + "embeddingDimensions") as? Int ?? 1024
+        self.embeddingModel = defaults.string(forKey: prefix + "embeddingModel") ?? EmbeddingWidth.defaultModel
+        self.embeddingDimensions = defaults.object(forKey: prefix + "embeddingDimensions") as? Int ?? EmbeddingWidth.defaultDimensions
         self.embeddingBatchSize = defaults.object(forKey: prefix + "embeddingBatchSize") as? Int ?? 32
         self.embeddingConcurrency = defaults.object(forKey: prefix + "embeddingConcurrency") as? Int ?? 4
 
@@ -366,7 +366,7 @@ class AppSettings: ObservableObject {
             rawValue: defaults.string(forKey: prefix + "processingHost") ?? ""
         ) ?? .localMac
         self.doclingModel = defaults.string(forKey: prefix + "doclingModel") ?? DoclingModel.graniteDoclingMLX.rawValue
-        self.layoutModel = defaults.string(forKey: prefix + "layoutModel") ?? LayoutModel.standard.rawValue
+        self.layoutModel = defaults.string(forKey: prefix + "layoutModel") ?? LayoutModel.heron.rawValue
         self.doclingWorkers = defaults.object(forKey: prefix + "doclingWorkers") as? Int ?? 8
         self.ocrBatchSize = defaults.object(forKey: prefix + "ocrBatchSize") as? Int ?? 0
         self.layoutBatchSize = defaults.object(forKey: prefix + "layoutBatchSize") as? Int ?? 0

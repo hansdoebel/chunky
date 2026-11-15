@@ -829,28 +829,7 @@ struct PreferencesView: View {
     }
 
     private func dimensionsForModel(_ modelName: String) -> Int {
-        let name = modelName.lowercased()
-
-        if name.contains("qwen3") {
-            if name.contains("8b") { return 4096 }
-            if name.contains("4b") { return 2560 }
-            return 1024
-        }
-
-        if name.contains("snowflake") || name.contains("arctic") || name.contains("mxbai")
-            || name.contains("large") || name.contains("e5-large") || name.contains("gte-large")
-            || name.contains("bge-large") || name.contains("bge-m3")
-        {
-            return 1024
-        }
-
-        if name.contains("minilm") || name.contains("small") || name.contains("e5-small")
-            || name.contains("bge-small")
-        {
-            return 384
-        }
-
-        return 768
+        EmbeddingWidth.expected(for: modelName)
     }
 
     private func loadModels() async {
