@@ -960,6 +960,9 @@ def main():
         default=2,
         help="Number of worker threads (default: 2)",
     )
+    parser.add_argument("--ocr-batch-size", type=int, default=0, help="Override the OCR batch. 0 keeps the host default.")
+    parser.add_argument("--layout-batch-size", type=int, default=0, help="Override the layout batch. 0 keeps the host default.")
+    parser.add_argument("--table-batch-size", type=int, default=0, help="Override the table batch. 0 keeps the host default.")
 
     args = parser.parse_args()
 
@@ -989,6 +992,9 @@ def main():
         extract_schema=args.extract_schema,
         layout_model=args.layout_model,
         workers=args.workers,
+        ocr_batch_size=args.ocr_batch_size,
+        layout_batch_size=args.layout_batch_size,
+        table_batch_size=args.table_batch_size,
         chunk=args.chunk,
         chunk_max_tokens=args.chunk_max_tokens,
         chunk_merge_peers=args.chunk_merge_peers,

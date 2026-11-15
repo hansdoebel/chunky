@@ -86,6 +86,9 @@ class DocumentProcessor: ObservableObject {
             doclingOptions.vlmServerURL = settings.vlmServerURL
             doclingOptions.layoutModel = settings.layoutModel
             doclingOptions.workers = settings.doclingWorkers
+            doclingOptions.ocrBatchSize = settings.ocrBatchSize
+            doclingOptions.layoutBatchSize = settings.layoutBatchSize
+            doclingOptions.tableBatchSize = settings.tableBatchSize
             doclingOptions.timeout = settings.doclingTimeout
             if settings.doStructuredExtraction && !settings.extractionSchemaPath.isEmpty {
                 doclingOptions.extractionSchemaPath = settings.extractionSchemaPath

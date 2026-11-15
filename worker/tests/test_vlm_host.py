@@ -56,3 +56,15 @@ def test_pipeline_rewrites_mlx_before_convert(tmp_path: Path):
     assert seen["vlm_engine"] == "vllm"
     assert seen["vllm_url"] == "http://127.0.0.1:8000"
     assert seen["chart_host"] == "devbox"
+    assert seen["vlm_resident"] is True
+
+    seen.clear()
+    pipeline.convert_and_chunk(
+        input_path=tmp_path / "plain.pdf",
+        output_dir=tmp_path,
+        settings=JobSettings(vlm_model=None, accelerator="cuda"),
+        on_progress=lambda *_args: None,
+        cancel_event=threading.Event(),
+    )
+    assert seen["vlm_engine"] is None
+    assert seen["vlm_resident"] is False

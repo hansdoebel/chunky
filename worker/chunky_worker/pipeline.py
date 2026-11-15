@@ -116,7 +116,6 @@ class DoclingPipeline:
                 vlm_model
                 or settings.do_picture_description
                 or settings.do_chart_extraction
-                or self.vlm_engine == "vllm"
             ),
             ocr_batch_size=settings.ocr_batch_size,
             layout_batch_size=settings.layout_batch_size,

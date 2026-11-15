@@ -132,6 +132,9 @@ actor DoclingService {
         var extractionSchemaPath: String?
         var layoutModel: String = "default"
         var workers: Int = 8
+        var ocrBatchSize: Int = 0
+        var layoutBatchSize: Int = 0
+        var tableBatchSize: Int = 0
         var timeout: Int = 120
         var pythonPath: String = "~/.chunky-venv/bin/python3".expandingTildeInPath
         var enableChunking: Bool = false
@@ -391,6 +394,9 @@ actor DoclingService {
         if !options.vlmServerURL.isEmpty {
             cmd["vlm_server_url"] = options.vlmServerURL
         }
+        if options.ocrBatchSize > 0 { cmd["ocr_batch_size"] = options.ocrBatchSize }
+        if options.layoutBatchSize > 0 { cmd["layout_batch_size"] = options.layoutBatchSize }
+        if options.tableBatchSize > 0 { cmd["table_batch_size"] = options.tableBatchSize }
         if let inputFormat = options.inputFormat { cmd["input_format"] = inputFormat }
         if options.layoutModel != "default" { cmd["layout_model"] = options.layoutModel }
         if let schemaPath = options.extractionSchemaPath { cmd["extract_schema"] = schemaPath }
@@ -557,6 +563,15 @@ actor DoclingService {
         }
         if !options.vlmServerURL.isEmpty {
             arguments.append(contentsOf: ["--vlm-server-url", options.vlmServerURL])
+        }
+        if options.ocrBatchSize > 0 {
+            arguments.append(contentsOf: ["--ocr-batch-size", String(options.ocrBatchSize)])
+        }
+        if options.layoutBatchSize > 0 {
+            arguments.append(contentsOf: ["--layout-batch-size", String(options.layoutBatchSize)])
+        }
+        if options.tableBatchSize > 0 {
+            arguments.append(contentsOf: ["--table-batch-size", String(options.tableBatchSize)])
         }
 
         if let inputFormat = options.inputFormat {
