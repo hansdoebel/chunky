@@ -3,6 +3,7 @@ import SwiftUI
 struct WorkerEndpointsPane: View {
     var endpoints: [WorkerEndpoint]
     var selectedID: UUID?
+    var activeID: UUID?
     var name: String
     var url: String
     var token: String
@@ -19,11 +20,12 @@ struct WorkerEndpointsPane: View {
         VStack(alignment: .leading, spacing: 10) {
             Text("Worker endpoints")
                 .font(.headline)
-            Text("Each profile is a name, a URL, and a token. The token stays in the Keychain.")
+            Text("Save stores the name, URL, and Keychain token. Use applies that profile to new documents.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
             ForEach(endpoints) { endpoint in
                 let selected = endpoint.id == selectedID
+                let active = endpoint.id == activeID
                 HStack {
                     Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                         .foregroundStyle(selected ? Color.accentColor : Color.secondary)
@@ -36,6 +38,11 @@ struct WorkerEndpointsPane: View {
                             .lineLimit(1)
                     }
                     Spacer()
+                    if active {
+                        Text("In use")
+                            .font(.caption.weight(.semibold))
+                            .foregroundStyle(Color.accentColor)
+                    }
                 }
                 .padding(8)
                 .background(selected ? Color.accentColor.opacity(0.15) : Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))

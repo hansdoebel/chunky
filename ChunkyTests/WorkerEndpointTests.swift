@@ -18,6 +18,8 @@ struct WorkerEndpointTests {
         saved[1].url = "https://devbox.example.ts.net"
         settings.replaceWorkerEndpoints(saved)
         settings.setWorkerEndpointToken(id: wifi.id, "endpoint-secret")
+        #expect(settings.devboxWorkerURL == "http://192.0.2.10:8080")
+        #expect(settings.workerToken == "existing-token")
         settings.useWorkerEndpoint(saved[1])
         #expect(settings.devboxWorkerURL == "https://devbox.example.ts.net")
         #expect(settings.workerToken == "endpoint-secret")
@@ -89,6 +91,9 @@ struct WorkerEndpointTests {
             elapsed: 0
         )
         #expect(bad.kind == .invalidURL)
+        #expect(WorkerProbe.isCurrent(started: 2, url: "http://devbox.local:8080", token: "a", generation: 2, currentURL: "http://devbox.local:8080", currentToken: "a"))
+        #expect(!WorkerProbe.isCurrent(started: 2, url: "http://devbox.local:8080", token: "a", generation: 3, currentURL: "http://devbox.local:8080", currentToken: "a"))
+        #expect(!WorkerProbe.isCurrent(started: 2, url: "http://devbox.local:8080", token: "a", generation: 2, currentURL: "https://devbox.example.ts.net", currentToken: "a"))
     }
 
     @Test @MainActor func endpointPaneRendersAColoredScreenshot() throws {
@@ -101,6 +106,7 @@ struct WorkerEndpointTests {
         let view = WorkerEndpointsPane(
             endpoints: endpoints,
             selectedID: endpoints[1].id,
+            activeID: endpoints[1].id,
             name: "Wi-Fi LAN",
             url: "http://devbox.local:8080",
             token: "secret",

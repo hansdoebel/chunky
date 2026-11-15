@@ -58,6 +58,10 @@ struct WorkerProbeReport: Equatable {
 }
 
 enum WorkerProbe {
+    static func isCurrent(started: Int, url: String, token: String, generation: Int, currentURL: String, currentToken: String) -> Bool {
+        started == generation && url == currentURL && token == currentToken
+    }
+
     static func accepts(url: String) -> Bool {
         guard let parsed = URL(string: url),
               let scheme = parsed.scheme?.lowercased(),
