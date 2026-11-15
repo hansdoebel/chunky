@@ -508,7 +508,7 @@ private final class FakeWorker: RetrievalWorker {
     }
 }
 
-private struct RetrievalScreenshotHost: View {
+struct RetrievalScreenshotHost: View {
     var hits: [RetrievalHit]
     @State private var query = "revenue by year"
     @State private var collection = "documents"

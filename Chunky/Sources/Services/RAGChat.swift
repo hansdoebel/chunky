@@ -76,7 +76,20 @@ enum RAGCitationParser {
         if cursor < text.endIndex {
             segments.append(.text(String(text[cursor...])))
         }
-        return segments
+        return mergeText(segments)
+    }
+
+    private static func mergeText(_ segments: [RAGSegment]) -> [RAGSegment] {
+        var merged: [RAGSegment] = []
+        for segment in segments {
+            guard case .text(let next) = segment, case .text(let previous) = merged.last else {
+                merged.append(segment)
+                continue
+            }
+            merged.removeLast()
+            merged.append(.text(previous + next))
+        }
+        return merged
     }
 }
 

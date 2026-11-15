@@ -1,24 +1,72 @@
 import SwiftUI
 
-struct FlowCitationRow: View {
+struct RAGAnswerText: View {
+    var text: String
     var citations: [RAGCitation]
     var onSelect: (RAGCitation) -> Void
 
     var body: some View {
-        HStack(spacing: 8) {
-            ForEach(citations) { citation in
-                Button(action: { onSelect(citation) }) {
-                    Text(chip(citation))
-                        .font(.caption)
+        SegmentWrap {
+            ForEach(Array(RAGCitationParser.segments(in: text, citations: citations).enumerated()), id: \.offset) { _, segment in
+                switch segment {
+                case .text(let value):
+                    Text(value)
+                        .font(.body)
+                        .textSelection(.enabled)
+                case .citation(let citation):
+                    Button(action: { onSelect(citation) }) {
+                        Text("\(citation.marker) \(citation.id)")
+                            .font(.body.weight(.semibold))
+                    }
+                    .buttonStyle(.bordered)
+                    .help(citationHelp(citation))
                 }
-                .buttonStyle(.bordered)
             }
         }
     }
 
-    private func chip(_ citation: RAGCitation) -> String {
-        let page = citation.page.map { " p.\($0)" } ?? ""
-        return "\(citation.marker) \(citation.source)\(page) \(String(format: "%.3f", citation.score)) \(citation.id)"
+    private func citationHelp(_ citation: RAGCitation) -> String {
+        let page = citation.page.map { "page \($0)" } ?? "no page"
+        return "\(citation.id) \(citation.source) \(page) \(String(format: "%.3f", citation.score))"
+    }
+}
+
+struct SegmentWrap: Layout {
+    var spacing: CGFloat = 4
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+        let width = proposal.width ?? 640
+        var x: CGFloat = 0
+        var y: CGFloat = 0
+        var row: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > 0, x + size.width > width {
+                x = 0
+                y += row + spacing
+                row = 0
+            }
+            x += size.width + spacing
+            row = max(row, size.height)
+        }
+        return CGSize(width: width, height: y + row)
+    }
+
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+        var x = bounds.minX
+        var y = bounds.minY
+        var row: CGFloat = 0
+        for view in subviews {
+            let size = view.sizeThatFits(.unspecified)
+            if x > bounds.minX, x + size.width > bounds.maxX {
+                x = bounds.minX
+                y += row + spacing
+                row = 0
+            }
+            view.place(at: CGPoint(x: x, y: y), proposal: ProposedViewSize(width: size.width, height: size.height))
+            x += size.width + spacing
+            row = max(row, size.height)
+        }
     }
 }
 
@@ -143,7 +191,7 @@ struct RetrievalPlayground: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isSearching || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(isSearching || isAnswering || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             TextField("Generation model", text: $generationModel, prompt: Text("qwen3"))
                 .textFieldStyle(.roundedBorder)
             Button(action: onAsk) {
@@ -201,13 +249,7 @@ struct RetrievalPlayground: View {
 
     private var answerBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text(isAnswering && answer.isEmpty ? "Answering…" : answer)
-                .font(.body)
-                .fixedSize(horizontal: false, vertical: true)
-                .textSelection(.enabled)
-            if !citations.isEmpty {
-                FlowCitationRow(citations: citations, onSelect: onSelectCitation)
-            }
+            RAGAnswerText(text: answer.isEmpty && isAnswering ? "Answering…" : answer, citations: citations, onSelect: onSelectCitation)
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -297,6 +339,7 @@ struct RetrievalScreen: View {
     @State private var citations: [RAGCitation] = []
     @State private var selectedHitID: String?
     @State private var isAnswering = false
+    @State private var answerTask: Task<Void, Never>?
     private let service: RetrievalService
     private let chatFactory: (String, String, String) -> any RAGChatStreaming
 
@@ -342,15 +385,27 @@ struct RetrievalScreen: View {
             hits: hits,
             isSearching: isSearching,
             scrolls: true,
-            onSearch: { Task { await runSearch() } },
+            onSearch: {
+                answer = ""
+                citations = []
+                selectedHitID = nil
+                Task { await runSearch() }
+            },
             generationModel: $generationModel,
             answer: answer,
             citations: citations,
             selectedHitID: selectedHitID,
             isAnswering: isAnswering,
-            onAsk: { Task { await ask() } },
+            onAsk: {
+                answerTask?.cancel()
+                answerTask = Task { await ask() }
+            },
             onSelectCitation: { citation in selectedHitID = citation.id }
         )
+        .onDisappear {
+            answerTask?.cancel()
+            answerTask = nil
+        }
         .onAppear {
             guard !prepared else { return }
             prepared = true
@@ -368,32 +423,37 @@ struct RetrievalScreen: View {
     }
 
     private func ask() async {
+        let question = query
         isAnswering = true
         answer = ""
         citations = []
         selectedHitID = nil
         defer { isAnswering = false }
-        await runSearch()
-        guard error == nil, !hits.isEmpty else { return }
-        let bundle = RAGPrompt.assemble(question: query, hits: hits)
+        await runSearch(question: question)
+        guard !Task.isCancelled, error == nil, !hits.isEmpty else { return }
+        let bundle = RAGPrompt.assemble(question: question, hits: hits)
         citations = bundle.citations
         let chat = chatFactory(generationModel, appState.settings.chatAPIURL, appState.settings.chatAPIKey)
+        defer { Task { await chat.abort() } }
         do {
             for try await delta in chat.stream(system: bundle.system, user: bundle.user) {
+                if Task.isCancelled { break }
                 answer += delta
             }
         } catch {
-            self.error = error.localizedDescription
+            if !Task.isCancelled {
+                self.error = error.localizedDescription
+            }
         }
     }
 
-    private func runSearch() async {
+    private func runSearch(question: String? = nil) async {
         isSearching = true
         error = nil
         defer { isSearching = false }
         let selected = RetrievalMode(rawValue: mode) ?? .dense
         let request = RetrievalRequest.make(
-            text: query,
+            text: question ?? query,
             collection: collection,
             mode: selected,
             limit: limit,
