@@ -69,6 +69,11 @@ class JobSettings(BaseModel):
     metadata_source: str = ""
     metadata_chat_url: str = ""
     metadata_model: str = ""
+    contextual_enrich: bool = False
+    contextual_model: str = ""
+    contextual_chat_url: str = ""
+    contextual_prompt: str = "v1"
+    cache_options: str = ""
     ollama_url: str | None = None
     embedding_model: str | None = None
     embedding_backend: str = ""
