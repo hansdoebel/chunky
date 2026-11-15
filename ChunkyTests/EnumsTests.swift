@@ -9,7 +9,8 @@ struct EnumsTests {
     @Test func viewModeValues() {
         #expect(ViewMode.queue.rawValue == "Queue")
         #expect(ViewMode.collections.rawValue == "Collections")
-        #expect(ViewMode.allCases.count == 2)
+        #expect(ViewMode.analytics.rawValue == "Analytics")
+        #expect(ViewMode.allCases.count == 3)
     }
 
     // MARK: - ProcessingMode Tests

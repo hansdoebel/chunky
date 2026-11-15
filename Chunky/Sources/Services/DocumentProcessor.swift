@@ -48,6 +48,7 @@ class DocumentProcessor: ObservableObject {
 
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+        defer { appState?.storeFinishedRun(job, settings: settings) }
         if settings.processingHost == .devbox {
             await processOnDevbox(job: job, settings: settings, mode: mode)
             return
@@ -113,6 +114,7 @@ class DocumentProcessor: ObservableObject {
                 }
             }
             job.conversionTime = CFAbsoluteTimeGetCurrent() - convertStart
+            job.pageCount = result.pageCount
             try Task.checkCancellation()
 
             guard let outputPath = result.outputFile else {
@@ -171,6 +173,8 @@ class DocumentProcessor: ObservableObject {
 
             job.chunkingTime = CFAbsoluteTimeGetCurrent() - chunkStart
             job.chunksCount = chunks.count
+            let tokens = chunks.reduce(0) { $0 + $1.tokenCount }
+            job.tokenCount = tokens > 0 ? tokens : nil
             try Task.checkCancellation()
 
             if mode == .chunkOnly {
@@ -411,10 +415,12 @@ class DocumentProcessor: ObservableObject {
             job.status = .completed
 
         } catch is CancellationError {
+            captureFailure(job: job, settings: settings, started: jobStart)
             job.status = .failed
             job.error = "Cancelled"
             job.statusMessage = "Cancelled"
         } catch {
+            captureFailure(job: job, settings: settings, started: jobStart)
             job.status = .failed
             job.error = error.localizedDescription
             job.statusMessage = "Failed: \(error.localizedDescription)"
@@ -715,6 +721,27 @@ class DocumentProcessor: ObservableObject {
         job.status = .completed
     }
 
+    private func captureFailure(job: ProcessingJob, settings: AppSettings, started: CFAbsoluteTime) {
+        job.totalTime = CFAbsoluteTimeGetCurrent() - started
+        var metrics = job.metrics ?? JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+        let failedName: String
+        switch job.status {
+        case .uploading:
+            failedName = "qdrant_upsert"
+        case .embedding:
+            failedName = "embedding"
+        case .chunking:
+            failedName = job.conversionTime == nil ? "convert_layout" : "chunking"
+        default:
+            failedName = "convert_layout"
+        }
+        metrics = metrics.markingStageError(failedName, wallMs: (job.totalTime ?? 0) * 1000)
+        if let index = metrics.stages.firstIndex(where: { $0.name == failedName && $0.runtime == nil }) {
+            metrics.stages[index].runtime = failedName == "embedding" ? settings.embeddingBackend : (failedName == "qdrant_upsert" ? "qdrant" : "docling")
+        }
+        job.metrics = metrics
+    }
+
     func processBatch(
         jobs: [ProcessingJob],
         settings: AppSettings,
@@ -740,6 +767,7 @@ class DocumentProcessor: ObservableObject {
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
         if mode == .full && createOptions.target == .qdrantCloud {
             if settings.qdrantCloudURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.qdrantAPIKey.isEmpty {
+                captureFailure(job: job, settings: settings, started: started)
                 job.status = .failed
                 job.statusMessage = "Set the Qdrant Cloud URL and API key before ingesting \(settings.defaultCollection)."
                 return
@@ -778,12 +806,15 @@ class DocumentProcessor: ObservableObject {
                 return
             }
             job.chunksCount = parsed.chunks.count
+            job.pageCount = parsed.pageCount
+            job.tokenCount = (parsed.tokenCount ?? 0) > 0 ? parsed.tokenCount : nil
             switch payload["ingest_target"] as? String {
             case "qdrant_cloud":
                 let count = parsed.ingestUpserted ?? parsed.chunks.count
                 job.embeddedCount = count
                 job.statusMessage = "Upserted \(count) points to \(parsed.ingestCollection ?? settings.defaultCollection)"
             case "return_vectors":
+                job.status = .uploading
                 let uploadStarted = CFAbsoluteTimeGetCurrent()
                 try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed)
                 job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
@@ -801,10 +832,12 @@ class DocumentProcessor: ObservableObject {
             }
             job.status = .completed
         } catch is CancellationError {
+            captureFailure(job: job, settings: settings, started: started)
             job.status = .failed
             job.error = "Cancelled"
             job.statusMessage = "Cancelled"
         } catch {
+            captureFailure(job: job, settings: settings, started: started)
             job.status = .failed
             job.error = error.localizedDescription
             job.statusMessage = "Failed: \(error.localizedDescription)"

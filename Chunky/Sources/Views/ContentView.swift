@@ -18,6 +18,7 @@ struct ContentView: View {
         .frame(minWidth: 900, minHeight: 600)
         .onAppear {
             processor.appState = appState
+            appState.reloadHistory()
         }
     }
 }
@@ -37,6 +38,11 @@ struct SidebarView: View {
                 isSelected: appState.viewMode == .collections
             )
             .onTapGesture { appState.viewMode = .collections }
+            NavigationRow(
+                icon: "chart.bar", title: "Analytics",
+                isSelected: appState.viewMode == .analytics
+            )
+            .onTapGesture { appState.viewMode = .analytics }
 
             Section {
                 HStack(spacing: 8) {
@@ -167,8 +173,10 @@ struct MainContentView: View {
                 } else {
                     FileListView(processor: processor)
                 }
-            } else {
+            } else if appState.viewMode == .collections {
                 CollectionBrowserView()
+            } else {
+                AnalyticsView(runs: appState.finishedRuns, warning: appState.historyWarning)
             }
 
             Divider()
@@ -332,6 +340,13 @@ struct FileListView: View {
                 .onMove(perform: moveJobs)
             }
             .listStyle(.plain)
+
+            if let job = appState.jobs.first(where: { $0.id == selectedJobID }),
+               job.status == .completed || job.status == .failed {
+                Divider()
+                PostJobPanel(run: RunDraft.make(job: job, settings: appState.settings, contentHash: ""))
+                    .padding(12)
+            }
         }
         .background(isTargeted ? AppTheme.badgeBackgroundActive : Color.clear)
     }

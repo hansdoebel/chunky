@@ -2,8 +2,8 @@ import Foundation
 
 struct StageMetric: Codable, Equatable {
     var name: String
-    var durationMs: Double
-    var status: String
+    var durationMs: Double = 0
+    var status: String = "skipped"
     var runtime: String?
     var pages: Int?
     var chunks: Int?
@@ -117,6 +117,22 @@ struct JobMetrics: Codable, Equatable {
         case "qdrant_upsert": return "qdrant"
         default: return settings.processingHost == .devbox ? "docling" : "docling"
         }
+    }
+
+    func markingStageError(_ name: String, wallMs: Double) -> JobMetrics {
+        var copy = self
+        let others = stages.filter { $0.name != name }.map(\.durationMs).reduce(0, +)
+        copy.stages = stages.map { stage in
+            guard stage.name == name else { return stage }
+            var updated = stage
+            updated.status = "error"
+            if updated.durationMs <= 0 {
+                updated.durationMs = max(0, wallMs - others)
+            }
+            return updated
+        }
+        copy.wallMs = wallMs
+        return copy
     }
 
     func addingLocalUpload(seconds: TimeInterval) -> JobMetrics {

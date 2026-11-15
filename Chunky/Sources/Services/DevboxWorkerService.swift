@@ -102,6 +102,8 @@ struct ParsedWorkerJob {
     var year: Int?
     var ingestUpserted: Int?
     var ingestCollection: String?
+    var pageCount: Int?
+    var tokenCount: Int?
     var metrics: JobMetrics?
 }
 
@@ -212,6 +214,8 @@ enum DevboxJobPayload {
             year: (result?["year"] as? NSNumber)?.intValue,
             ingestUpserted: (ingest?["upserted"] as? NSNumber)?.intValue,
             ingestCollection: ingest?["collection"] as? String,
+            pageCount: (result?["page_count"] as? NSNumber)?.intValue,
+            tokenCount: chunks.reduce(0) { $0 + (($1["token_count"] as? NSNumber)?.intValue ?? 0) },
             metrics: metrics
         )
     }

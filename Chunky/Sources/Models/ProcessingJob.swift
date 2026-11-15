@@ -22,6 +22,10 @@ class ProcessingJob: ObservableObject, Identifiable {
     @Published var uploadTime: TimeInterval?
     @Published var totalTime: TimeInterval?
     var metrics: JobMetrics?
+    var pageCount: Int?
+    var tokenCount: Int?
+    var analyticsStored = false
+    var analyticsPending = false
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }
