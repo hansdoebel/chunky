@@ -109,7 +109,7 @@ def normalize_chunk(raw: dict[str, Any]) -> dict[str, Any]:
                 "coord_origin": origin if isinstance(origin, str) and origin else None,
             }
         )
-    return {
+    record = {
         "text": str(raw.get("text") or ""),
         "embedding_text": str(raw.get("embedding_text") or raw.get("text") or ""),
         "page": page,
@@ -132,6 +132,10 @@ def normalize_chunk(raw: dict[str, Any]) -> dict[str, Any]:
         "picture_class": _text(raw.get("picture_class")),
         "table_markdown": _text(raw.get("table_markdown")),
     }
+    prefix = _text(raw.get("context_prefix"))
+    if prefix:
+        record["context_prefix"] = prefix
+    return record
 
 
 def apply_identity(chunks: list[dict[str, Any]], identity: dict[str, Any]) -> list[dict[str, Any]]:

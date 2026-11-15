@@ -94,10 +94,10 @@ def create_app(
         settings.embedding_url or settings.ollama_url,
     )
     store = store or JobStore()
-    runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
+    chunk_cache = chunk_cache or ChunkCache(settings.cache_dir, settings.cache_limit_bytes)
+    runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor, chunk_cache=chunk_cache)
     searcher = searcher or QdrantPointSearcher()
     downloads = DownloadManager(downloader, ollama_url=settings.ollama_url)
-    chunk_cache = chunk_cache or ChunkCache(settings.cache_dir, settings.cache_limit_bytes)
 
     app = FastAPI(title="Chunky worker", version="0.1.0")
     app.state.settings = settings

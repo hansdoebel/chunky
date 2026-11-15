@@ -101,14 +101,14 @@ def _message_text(body: Any) -> str:
     return str(message.get("content") or "")
 
 
-def _llm_complete(settings: JobSettings, prompt: str) -> str:
+def _chat_complete(url: str, model: str, prompt: str) -> str:
     import httpx
 
     try:
         response = httpx.post(
-            settings.metadata_chat_url,
+            url,
             json={
-                "model": settings.metadata_model or "chunky",
+                "model": model or "chunky",
                 "temperature": 0,
                 "messages": [{"role": "user", "content": prompt}],
             },
@@ -123,6 +123,56 @@ def _llm_complete(settings: JobSettings, prompt: str) -> str:
     except ValueError:
         return ""
     return _message_text(body)
+
+
+def _llm_complete(settings: JobSettings, prompt: str) -> str:
+    return _chat_complete(settings.metadata_chat_url, settings.metadata_model, prompt)
+
+
+def _enrich_context(
+    chunks: list[dict[str, Any]],
+    pdf_path: Path,
+    settings: JobSettings,
+    raw: dict[str, Any],
+    cache: Any,
+    cancel_event: threading.Event | None = None,
+) -> list[dict[str, Any]]:
+    import sys
+
+    if not settings.contextual_enrich:
+        return chunks
+    scripts = str(Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from contextual import EnrichmentStopped, cache_options, load_or_enrich, metadata_key
+
+    base = settings.cache_options or ""
+    if settings.page_offset is not None and "pageOffset=" not in base:
+        base = f"{base}\npageOffset={settings.page_offset}" if base else f"pageOffset={settings.page_offset}"
+    meta = metadata_key(chunks[0] if chunks else {})
+    options = cache_options(base, settings.contextual_model, settings.contextual_prompt or "v1", meta)
+    key = {
+        "content_sha256": hash_file(pdf_path),
+        "docling_version": str(raw.get("docling_version") or ""),
+        "pipeline": (settings.vlm_model or "standard").strip() or "standard",
+        "tokenizer": settings.chunk_tokenizer or "",
+        "max_tokens": settings.chunk_max_tokens,
+        "options": options,
+    }
+    llm = None
+    if settings.contextual_chat_url:
+        llm = lambda prompt: _chat_complete(settings.contextual_chat_url, settings.contextual_model, prompt)
+    try:
+        return load_or_enrich(
+            cache,
+            key,
+            chunks,
+            llm,
+            enabled=True,
+            should_stop=cancel_event.is_set if cancel_event is not None else None,
+        )
+    except EnrichmentStopped:
+        raise JobCanceled() from None
 
 
 def _crossref_lookup(doi: str) -> dict[str, Any] | None:
@@ -249,12 +299,14 @@ class JobRunner:
         pipeline: DocumentPipeline,
         embeddings: EmbeddingBackend,
         ingestor: QdrantIngestor | None = None,
+        chunk_cache: Any | None = None,
     ) -> None:
         self.store = store
         self.settings = settings
         self.pipeline = pipeline
         self.embeddings = embeddings
         self.ingestor = ingestor or QdrantCloudIngestor()
+        self.chunk_cache = chunk_cache
         self.dimensions = DimensionCache()
         self.resources = lambda: {
             "gpu_name": None,
@@ -446,6 +498,7 @@ class JobRunner:
             chunks = _apply_printed_labels(chunks, input_path, job.settings)
             if job.settings.metadata_enrich:
                 chunks = _enrich_bibliography(chunks, input_path, job.settings, raw)
+            chunks = _enrich_context(chunks, input_path, job.settings, raw, self.chunk_cache, cancel_event)
             raw["chunks"] = chunks
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset
