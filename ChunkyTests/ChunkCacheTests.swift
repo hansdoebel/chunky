@@ -1,4 +1,6 @@
+import AppKit
 import Foundation
+import SwiftUI
 import Testing
 
 @testable import Chunky
@@ -86,6 +88,83 @@ struct ChunkCacheTests {
         }
     }
 
+    @Test func reuseSkipsConversionAndEmbeddingOnlyWhenVectorsMatch() async throws {
+        let settings = IsolatedSettings.make()
+        settings.recordedDoclingVersion = "2.64.0"
+        settings.doclingModel = "standard"
+        settings.chunkTokenizer = ""
+        settings.maxTokensPerChunk = 512
+        settings.embeddingModel = "qwen3-embedding"
+        settings.embeddingDimensions = 2
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("chunk-cache-bridge-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: root) }
+        let bridge = ChunkCacheBridge(settings: settings, directory: root, remote: nil)
+        #expect(await bridge.load(digest: "abc", force: false) == nil)
+        #expect(ChunkCachePolicy.use(force: true, chunkCount: 2, vectorCount: 2) == .miss)
+        #expect(ChunkCachePolicy.use(force: false, chunkCount: 2, vectorCount: nil) == .hit)
+        #expect(ChunkCachePolicy.use(force: false, chunkCount: 2, vectorCount: 2) == .vectors)
+        let chunk = ChunkCacheChunk.normalize(["text": "Hello", "source": "paper.pdf", "page": 1])
+        let document = try JSONSerialization.data(withJSONObject: ["name": "paper.pdf"])
+        try bridge.store(digest: "abc", document: document, chunks: [chunk], vectors: [[0.5, 0.25]])
+        let loaded = await bridge.load(digest: "abc", force: false)
+        #expect(loaded?.chunks.first?.source == "paper.pdf")
+        #expect(loaded?.vectors?.first == [0.5, 0.25])
+        #expect(await bridge.load(digest: "abc", force: true) == nil)
+        let job = ProcessingJob(url: URL(fileURLWithPath: "/tmp/paper.pdf"))
+        job.cacheStatus = "hit"
+        job.totalTime = 1
+        #expect(job.timingSummary?.contains("cache hit") == true)
+    }
+
+    @Test @MainActor func cacheSettingsRenderAColoredScreenshot() throws {
+        let light = try render(scheme: .light)
+        let dark = try render(scheme: .dark)
+        try light.png.write(to: URL(fileURLWithPath: "/tmp/chunky-cache.png"))
+        #expect(light.colored > 20)
+        #expect(dark.colored > 20)
+        #expect(dark.luminance < light.luminance)
+    }
+
+    @MainActor
+    private func render(scheme: ColorScheme) throws -> (png: Data, colored: Int, luminance: Double) {
+        let view = ChunkCacheScreenshot(scheme: scheme)
+            .frame(width: 720, height: 420)
+            .background(scheme == .dark ? Color(white: 0.12) : Color(white: 0.94))
+            .environment(\.colorScheme, scheme)
+        let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        let previous = NSAppearance.current
+        NSAppearance.current = appearance
+        defer { NSAppearance.current = previous }
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        let image = try #require(renderer.nsImage)
+        let tiff = try #require(image.tiffRepresentation)
+        let rep = try #require(NSBitmapImageRep(data: tiff))
+        let png = try #require(rep.representation(using: .png, properties: [:]))
+        let bitmap = rep.converting(to: .sRGB, renderingIntent: .relativeColorimetric) ?? rep
+        var colored = 0
+        var luminance = 0.0
+        var samples = 0
+        let stepX = max(1, bitmap.pixelsWide / 40)
+        let stepY = max(1, bitmap.pixelsHigh / 40)
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: stepY) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: stepX) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                var red: CGFloat = 0
+                var green: CGFloat = 0
+                var blue: CGFloat = 0
+                var alpha: CGFloat = 0
+                color.getRed(&red, green: &green, blue: &blue, alpha: &alpha)
+                if alpha > 0.1 && (red < 0.97 || green < 0.97 || blue < 0.97) {
+                    colored += 1
+                }
+                luminance += (0.2126 * red + 0.7152 * green + 0.0722 * blue) * alpha
+                samples += 1
+            }
+        }
+        return (png, colored, samples == 0 ? 1 : luminance / Double(samples))
+    }
+
     @Test func workerLookupDecodesACacheHit() async throws {
         let payload: [String: Any] = [
             "hit": true,
@@ -102,6 +181,29 @@ struct ChunkCacheTests {
         #expect(hit.chunks.first?.source == "paper.pdf")
         #expect(hit.chunks.first?.docTitle == "Paper")
         #expect(hit.vectors?.first == [0.5, 0.25])
+    }
+}
+
+private struct ChunkCacheScreenshot: View {
+    var scheme: ColorScheme
+    @State private var limitMB = 2048
+    @State private var force = true
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 16) {
+            Text("Chunk cache")
+                .font(.title2.weight(.semibold))
+            ChunkCacheSettingsPane(limitMB: $limitMB, onClear: {})
+            Toggle("Reconvert", isOn: $force)
+            Text("paper.pdf")
+                .font(.headline)
+            Text("12 chunks")
+            Text("cache hit")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(24)
+        .environment(\.colorScheme, scheme)
     }
 }
 

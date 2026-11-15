@@ -31,6 +31,9 @@ class ProcessingJob: ObservableObject, Identifiable {
     var ingestCloud = false
     @Published var verification: VerificationReport?
     @Published var verificationNote: String?
+    @Published var forceReconvert = false
+    @Published var cacheStatus: String?
+    var preparedEmbeddings: [[Float]]?
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }
@@ -39,6 +42,7 @@ class ProcessingJob: ObservableObject, Identifiable {
         if convertTotal > 0 { parts.append("convert \(Self.formatDuration(convertTotal))") }
         if let t = embeddingTime { parts.append("embed \(Self.formatDuration(t))") }
         if let t = uploadTime { parts.append("upload \(Self.formatDuration(t))") }
+        if let cacheStatus { parts.append("cache \(cacheStatus)") }
         let detail = parts.joined(separator: " | ")
         return "Total \(Self.formatDuration(total)) (\(detail))"
     }

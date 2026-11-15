@@ -42,6 +42,7 @@ struct JobMetrics: Codable, Equatable {
     var embeddingsPerSecond: Double?
     var stages: [StageMetric]
     var resources: ResourceSample
+    var cache: String? = nil
 
     enum CodingKeys: String, CodingKey {
         case host
@@ -51,6 +52,7 @@ struct JobMetrics: Codable, Equatable {
         case embeddingsPerSecond = "embeddings_per_s"
         case stages
         case resources
+        case cache
     }
 
     static let stageNames = [
@@ -85,7 +87,8 @@ struct JobMetrics: Codable, Equatable {
             chunksPerSecond: chunks > 0 && seconds > 0 ? Double(chunks) / seconds : nil,
             embeddingsPerSecond: embeddings > 0 && seconds > 0 ? Double(embeddings) / seconds : nil,
             stages: stages,
-            resources: ResourceSample(gpuName: nil, vramUsedMb: nil, vramTotalMb: nil, utilization: [])
+            resources: ResourceSample(gpuName: nil, vramUsedMb: nil, vramTotalMb: nil, utilization: []),
+            cache: job.cacheStatus
         )
     }
 
