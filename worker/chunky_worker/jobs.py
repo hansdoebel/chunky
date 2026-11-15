@@ -82,18 +82,24 @@ def _enrich_bibliography(chunks: list[dict[str, Any]], pdf_path: Path, settings:
 def _llm_complete(settings: JobSettings, prompt: str) -> str:
     import httpx
 
-    response = httpx.post(
-        settings.metadata_chat_url,
-        json={
-            "model": settings.metadata_model or "chunky",
-            "temperature": 0,
-            "messages": [{"role": "user", "content": prompt}],
-        },
-        timeout=30,
-    )
+    try:
+        response = httpx.post(
+            settings.metadata_chat_url,
+            json={
+                "model": settings.metadata_model or "chunky",
+                "temperature": 0,
+                "messages": [{"role": "user", "content": prompt}],
+            },
+            timeout=30,
+        )
+    except httpx.HTTPError:
+        return ""
     if response.status_code != 200:
         return ""
-    body = response.json()
+    try:
+        body = response.json()
+    except ValueError:
+        return ""
     choices = body.get("choices") or []
     if not choices:
         return ""
@@ -106,14 +112,21 @@ def _crossref_lookup(doi: str) -> dict[str, Any] | None:
 
     from bibliographic import crossref_fields
 
-    response = httpx.get(
-        f"https://api.crossref.org/works/{doi}",
-        headers={"User-Agent": "chunky-worker (mailto:chunky@localhost)"},
-        timeout=10,
-    )
+    try:
+        response = httpx.get(
+            f"https://api.crossref.org/works/{doi}",
+            headers={"User-Agent": "chunky-worker (mailto:chunky@localhost)"},
+            timeout=10,
+        )
+    except httpx.HTTPError:
+        return None
     if response.status_code != 200:
         return None
-    return crossref_fields(response.json())
+    try:
+        payload = response.json()
+    except ValueError:
+        return None
+    return crossref_fields(payload)
 
 TERMINAL = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
 
@@ -419,6 +432,10 @@ class JobRunner:
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset
             vectors: list[list[float]] | None = None
+            first = chunks[0] if chunks else {}
+            year = first.get("year")
+            if isinstance(year, bool) or not isinstance(year, int):
+                year = raw.get("year")
             result = JobResult(
                 mode=job.settings.mode,
                 success=True,
@@ -428,10 +445,10 @@ class JobRunner:
                 page_count=raw.get("page_count"),
                 text_items_count=raw.get("text_items_count"),
                 table_count=raw.get("table_count"),
-                doc_title=raw.get("doc_title"),
-                authors=raw.get("authors"),
+                doc_title=first.get("doc_title") or raw.get("doc_title"),
+                authors=first.get("authors") or raw.get("authors"),
                 language=raw.get("language"),
-                year=raw.get("year"),
+                year=year,
                 chunks=chunks,
             )
 
