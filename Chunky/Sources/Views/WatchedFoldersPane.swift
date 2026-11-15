@@ -1,4 +1,3 @@
-import AppKit
 import SwiftUI
 
 struct WatchedFoldersPane: View {
@@ -20,38 +19,13 @@ struct WatchedFoldersPane: View {
                 Text("No watched folders")
                     .foregroundStyle(.secondary)
             }
-            ForEach(0..<folders.count, id: \.self) { index in
-                let folder = folders[index]
-                VStack(alignment: .leading, spacing: 4) {
-                    HStack {
-                        Text((folder.path as NSString).lastPathComponent)
-                            .font(.body.weight(.semibold))
-                        Spacer()
-                        Text(folder.paused ? "Paused" : "Watching")
-                            .font(.caption.weight(.semibold))
-                            .foregroundStyle(folder.paused ? .secondary : .green)
-                    }
-                    Text(folder.path)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .lineLimit(1)
-                    Text(folder.collection)
-                        .font(.caption)
-                    HStack {
-                        Button(folder.paused ? "Resume" : "Pause") { onTogglePause(folder.id) }
-                        Toggle("Delete removed files", isOn: Binding(
-                            get: { folder.deleteRemoved },
-                            set: { _ in onToggleDelete(folder.id) }
-                        ))
-                        .toggleStyle(.checkbox)
-                        Spacer()
-                        Button("Remove") { onRemove(folder.id) }
-                    }
-                    .font(.caption)
-                }
-                .padding(8)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+            ForEach(folders) { folder in
+                WatchedFolderRow(
+                    folder: folder,
+                    onTogglePause: onTogglePause,
+                    onToggleDelete: onToggleDelete,
+                    onRemove: onRemove
+                )
             }
             HStack {
                 Button("Add folder", action: onAdd)
@@ -64,6 +38,46 @@ struct WatchedFoldersPane: View {
                     .foregroundStyle(.secondary)
             }
         }
+    }
+}
+
+struct WatchedFolderRow: View {
+    var folder: WatchedFolder
+    var onTogglePause: (UUID) -> Void
+    var onToggleDelete: (UUID) -> Void
+    var onRemove: (UUID) -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack {
+                Text(URL(fileURLWithPath: folder.path).lastPathComponent)
+                    .font(.body.weight(.semibold))
+                Spacer()
+                Text(folder.paused ? "Paused" : "Watching")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(folder.paused ? .secondary : .green)
+            }
+            Text(folder.path)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            Text(folder.collection)
+                .font(.caption)
+            HStack {
+                Button(folder.paused ? "Resume" : "Pause") { onTogglePause(folder.id) }
+                Toggle("Delete removed files", isOn: Binding(
+                    get: { folder.deleteRemoved },
+                    set: { _ in onToggleDelete(folder.id) }
+                ))
+                .toggleStyle(.checkbox)
+                Spacer()
+                Button("Remove") { onRemove(folder.id) }
+            }
+            .font(.caption)
+        }
+        .padding(8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Color.gray.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 }
 

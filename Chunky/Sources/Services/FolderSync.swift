@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 nonisolated struct WatchedFolder: Codable, Equatable, Identifiable, Sendable {
-    var id: UUID
+    nonisolated var id: UUID
     var path: String
     var collection: String
     var paused: Bool
