@@ -102,9 +102,9 @@ struct BenchmarkScreen: View {
     @ObservedObject var processor: DocumentProcessor
     @State private var selectedHosts: Set<String> = Set(ProcessingHost.allCases.map(\.rawValue))
     @State private var selectedRuntimes: Set<String> = []
+    @State private var preparedRuntimes = false
     @State private var collectionName = ""
     @State private var status = "Idle"
-    @State private var running = false
 
     var body: some View {
         let runtimes = BenchmarkPlanner.offeredRuntimes(settings: appState.settings)
@@ -113,7 +113,7 @@ struct BenchmarkScreen: View {
             runtimes: runtimes,
             samples: BenchmarkPlanner.samples,
             selectedHosts: selectedHosts,
-            selectedRuntimes: selectedRuntimes.isEmpty ? Set(runtimes.map(\.id)) : selectedRuntimes,
+            selectedRuntimes: selectedRuntimes,
             productionCollection: appState.settings.defaultCollection,
             collectionName: collectionName.isEmpty ? "chunky-benchmark-…" : collectionName,
             status: status,
@@ -125,24 +125,40 @@ struct BenchmarkScreen: View {
                 }
             },
             onToggleRuntime: { runtime in
-                var current = selectedRuntimes.isEmpty ? Set(runtimes.map(\.id)) : selectedRuntimes
-                if current.contains(runtime.id) {
-                    current.remove(runtime.id)
+                if selectedRuntimes.contains(runtime.id) {
+                    selectedRuntimes.remove(runtime.id)
                 } else {
-                    current.insert(runtime.id)
+                    selectedRuntimes.insert(runtime.id)
                 }
-                selectedRuntimes = current
             },
-            onRun: { Task { await run(runtimes: runtimes) } }
+            onRun: { start(runtimes: runtimes) }
         )
-        .disabled(running)
+        .disabled(appState.isProcessing)
+        .onAppear {
+            guard !preparedRuntimes else { return }
+            selectedRuntimes = Set(runtimes.map(\.id))
+            preparedRuntimes = true
+        }
+    }
+
+    @MainActor
+    private func start(runtimes: [BenchmarkRuntime]) {
+        guard !appState.isProcessing else {
+            status = "Wait for the current run to finish."
+            return
+        }
+        appState.isProcessing = true
+        appState.resetCancellation()
+        appState.benchmarkTask = Task {
+            await run(runtimes: runtimes)
+            appState.isProcessing = false
+            appState.benchmarkTask = nil
+        }
     }
 
     @MainActor
     private func run(runtimes: [BenchmarkRuntime]) async {
-        let chosenRuntimes = runtimes.filter {
-            (selectedRuntimes.isEmpty ? Set(runtimes.map(\.id)) : selectedRuntimes).contains($0.id)
-        }
+        let chosenRuntimes = runtimes.filter { selectedRuntimes.contains($0.id) }
         let chosenHosts = ProcessingHost.allCases.filter { selectedHosts.contains($0.rawValue) }
         let cells = BenchmarkPlanner.cells(hosts: chosenHosts, runtimes: chosenRuntimes, samples: BenchmarkPlanner.samples)
         let collection = BenchmarkPlanner.collectionName(production: appState.settings.defaultCollection)
@@ -151,22 +167,37 @@ struct BenchmarkScreen: View {
             return
         }
         collectionName = collection
-        running = true
-        defer { running = false }
+        var completed = 0
+        var failed = 0
+        var skipped = 0
+        var cancelled = false
         for (index, cell) in cells.enumerated() {
-            if appState.isCancellationRequested { break }
+            if Task.isCancelled || appState.isCancellationRequested {
+                cancelled = true
+                skipped += cells.count - index
+                break
+            }
             status = "\(index + 1)/\(cells.count) \(cell.host.rawValue) \(cell.runtime.label) \(cell.sample.kind) \(cell.phase.label)"
             guard let url = BenchmarkPlanner.url(for: cell.sample) else {
-                status = "Missing \(cell.sample.filename)"
+                skipped += 1
                 continue
             }
             let settings = appState.settings.benchmarkCopy(collection: collection, host: cell.host, runtime: cell.runtime)
-            guard settings.defaultCollection == collection else { continue }
+            guard settings.defaultCollection == collection, !settings.enableEmbeddingCache else {
+                skipped += 1
+                continue
+            }
             let job = ProcessingJob(url: url)
-            job.fileName = "\(cell.sample.kind) \(cell.phase.label)"
+            job.fileName = "\(cell.sample.kind) \(cell.runtime.label) \(cell.phase.label)"
+            job.analyticsRuntime = cell.runtime.label
             await processor.process(job: job, settings: settings, mode: .full)
+            switch job.status {
+            case .completed: completed += 1
+            case .failed: failed += 1
+            default: skipped += 1
+            }
         }
-        status = "Finished \(cells.count) passes"
+        status = BenchmarkPlanner.summary(completed: completed, failed: failed, skipped: skipped, cancelled: cancelled)
         appState.reloadHistory()
     }
 }

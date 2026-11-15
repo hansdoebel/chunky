@@ -26,6 +26,7 @@ class ProcessingJob: ObservableObject, Identifiable {
     var tokenCount: Int?
     var analyticsStored = false
     var analyticsPending = false
+    var analyticsRuntime: String?
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }

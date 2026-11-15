@@ -141,7 +141,8 @@ struct RunDraft: Identifiable, Codable, Equatable {
             .map { RunHistory.redact($0, secrets: secrets) }
             .filter { !$0.isEmpty }
             .joined(separator: "; ")
-        let runtime = stages.first { $0.name == "embedding" }?.runtime
+        let runtime = job.analyticsRuntime
+            ?? stages.first { $0.name == "embedding" }?.runtime
             ?? stages.compactMap(\.runtime).first
             ?? "docling"
         return RunDraft(

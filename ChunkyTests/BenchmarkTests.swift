@@ -30,17 +30,32 @@ struct BenchmarkTests {
         settings.defaultCollection = "documents"
         settings.embeddingModel = "qwen3-embedding"
         settings.doclingModel = "standard"
+        settings.doclingAccelerator = "cuda"
+        settings.enableEmbeddingCache = true
         settings.qdrantAPIKey = "super-secret-key-12345"
         let runtime = BenchmarkRuntime(id: "ocr", label: "OCR", embeddingModel: "other-model", embeddingBackend: "ollama", vlmModel: "standard", ocr: true)
         let copy = settings.benchmarkCopy(collection: "chunky-benchmark-abcd1234", host: .devbox, runtime: runtime)
         #expect(settings.defaultCollection == "documents")
         #expect(copy.defaultCollection == "chunky-benchmark-abcd1234")
         #expect(copy.processingHost == .devbox)
+        #expect(copy.doclingAccelerator == ProcessingHost.devbox.defaultAccelerator.rawValue)
+        #expect(copy.enableEmbeddingCache == false)
+        #expect(settings.doclingAccelerator == "cuda")
+        #expect(settings.enableEmbeddingCache == true)
+        let mac = settings.benchmarkCopy(collection: "chunky-benchmark-mac", host: .localMac, runtime: runtime)
+        #expect(mac.doclingAccelerator == ProcessingHost.localMac.defaultAccelerator.rawValue)
         #expect(copy.embeddingModel == "other-model")
         #expect(copy.doOCR == true)
         #expect(copy.devboxIngestTarget == .localDocker)
         #expect(copy.qdrantAPIKey == "super-secret-key-12345")
         #expect(BenchmarkPlanner.accepts(collection: copy.defaultCollection, production: settings.defaultCollection))
+        let job = ProcessingJob(url: URL(fileURLWithPath: "/tmp/paper.pdf"))
+        job.analyticsRuntime = "OCR"
+        job.totalTime = 1
+        let draft = RunDraft.make(job: job, settings: settings, contentHash: "abc")
+        #expect(draft.runtime == "OCR")
+        #expect(BenchmarkPlanner.summary(completed: 2, failed: 1, skipped: 3, cancelled: true) == "Cancelled. 2 completed, 1 failed, 3 skipped.")
+        #expect(BenchmarkPlanner.summary(completed: 4, failed: 0, skipped: 0, cancelled: false) == "4 completed.")
     }
 
     @Test @MainActor func benchmarkViewRendersAColoredScreenshot() throws {

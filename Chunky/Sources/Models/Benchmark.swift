@@ -95,6 +95,17 @@ enum BenchmarkPlanner {
         return planned
     }
 
+    static func summary(completed: Int, failed: Int, skipped: Int, cancelled: Bool) -> String {
+        let counts = "\(completed) completed, \(failed) failed, \(skipped) skipped"
+        if cancelled {
+            return "Cancelled. \(counts)."
+        }
+        if failed > 0 || skipped > 0 {
+            return counts + "."
+        }
+        return "\(completed) completed."
+    }
+
     static func url(for sample: BenchmarkSample) -> URL? {
         let stem = (sample.filename as NSString).deletingPathExtension
         if let bundled = Bundle.main.url(forResource: stem, withExtension: "pdf", subdirectory: "Benchmark") {
@@ -121,11 +132,13 @@ extension AppSettings {
         let copy = AppSettings(defaults: suite, secrets: memory)
         copy.defaultCollection = collection
         copy.processingHost = host
+        copy.doclingAccelerator = host.defaultAccelerator.rawValue
         copy.embeddingModel = runtime.embeddingModel
         copy.embeddingBackend = runtime.embeddingBackend
         copy.doclingModel = runtime.vlmModel
         copy.doOCR = runtime.ocr
         copy.devboxIngestTarget = .localDocker
+        copy.enableEmbeddingCache = false
         return copy
     }
 }

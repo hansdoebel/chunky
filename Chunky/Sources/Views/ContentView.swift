@@ -556,6 +556,7 @@ struct BottomBarView: View {
                     appState.requestCancellation()
                     processor.cancel()
                     processingTask?.cancel()
+                    appState.benchmarkTask?.cancel()
                 } label: {
                     Text("Stop")
                         .fontWeight(.medium)
