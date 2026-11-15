@@ -373,6 +373,20 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.qdrantAPIKeyKey, newValue) }
     }
 
+    var qdrantLastSuccessAt: Date? {
+        get {
+            let value = defaults.double(forKey: prefix + "qdrantLastSuccessAt")
+            return value == 0 ? nil : Date(timeIntervalSince1970: value)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue.timeIntervalSince1970, forKey: prefix + "qdrantLastSuccessAt")
+            } else {
+                defaults.removeObject(forKey: prefix + "qdrantLastSuccessAt")
+            }
+        }
+    }
+
     init(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) {
         self.defaults = defaults
         self.secrets = secrets

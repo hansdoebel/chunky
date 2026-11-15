@@ -112,8 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
-          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots
-          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots
+          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots
+          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -198,4 +198,19 @@ jobs:
         with:
           name: citation-screenshots
           path: citation-screenshots/*.png
+          if-no-files-found: error
+
+      - name: Stage health screenshots
+        if: always()
+        run: |
+          mkdir -p health-screenshots
+          cp -f /tmp/chunky-health-screenshots/*.png health-screenshots/ || true
+          ls -la health-screenshots
+
+      - name: Upload health screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: health-screenshots
+          path: health-screenshots/*.png
           if-no-files-found: error
