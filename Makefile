@@ -1,4 +1,4 @@
-.PHONY: build run test test-python test-all clean open-xcode \
+.PHONY: build run test test-python test-worker test-all clean open-xcode \
        services qdrant ollama \
        setup-venv first-launch
 
@@ -17,7 +17,10 @@ test-python:
 test-integration:
 	cd Chunky/Resources/Scripts && ~/.chunky-venv/bin/python3 -m unittest test_docling_integration -v
 
-test-all: test test-python test-integration
+test-worker:
+	cd worker && python3 -m pytest -q
+
+test-all: test test-python test-worker test-integration
 
 clean:
 	xcodebuild -project Chunky.xcodeproj -scheme Chunky clean

@@ -404,6 +404,7 @@ def convert_document(
     chunk_max_tokens: int = 512,
     chunk_merge_peers: bool = True,
     chunk_tokenizer: str = "",
+    on_progress=None,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -435,7 +436,9 @@ def convert_document(
     output_file = out_dir / f"{input_file.stem}.{output_format}"
 
     def progress_callback(message: str, percent: float | None = None):
-        if report_progress:
+        if on_progress is not None:
+            on_progress(message, percent)
+        elif report_progress:
             progress: dict[str, str | float] = {"type": "progress", "message": message}
             if percent is not None:
                 progress["percent"] = percent
