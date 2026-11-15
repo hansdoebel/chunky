@@ -120,7 +120,8 @@ struct RetrievalEvalView: View {
                 )
                 .foregroundStyle(by: .value("Setup", bucket.label))
             }
-            .chartLegend(.hidden)
+            .chartXAxis(.hidden)
+            .chartLegend(position: .bottom)
             .chartYAxisLabel(metric.rawValue)
             .frame(height: 220)
         }
