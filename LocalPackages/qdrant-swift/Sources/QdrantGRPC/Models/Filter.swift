@@ -11,7 +11,7 @@ public typealias GeoPoint = QdrantCore.GeoPoint
 public typealias GeoCondition = QdrantCore.GeoCondition
 
 extension Filter {
-    /// Converts to the gRPC Filter representation.
+
     internal var grpc: Qdrant_Filter {
         var filter = Qdrant_Filter()
         filter.must = must.map { $0.grpc }
@@ -22,7 +22,7 @@ extension Filter {
 }
 
 extension Condition {
-    /// Converts to the gRPC Condition representation.
+
     internal var grpc: Qdrant_Condition {
         var condition = Qdrant_Condition()
         switch self {
@@ -48,7 +48,7 @@ extension Condition {
 }
 
 extension FieldCondition {
-    /// Converts to the gRPC FieldCondition representation.
+
     internal var grpc: Qdrant_FieldCondition {
         var field = Qdrant_FieldCondition()
         field.key = key
@@ -81,7 +81,7 @@ extension FieldCondition {
 }
 
 extension Match {
-    /// Converts to the gRPC Match representation.
+
     internal var grpc: Qdrant_Match {
         var match = Qdrant_Match()
         switch self {
@@ -115,7 +115,7 @@ extension Match {
 }
 
 extension Range {
-    /// Converts to the gRPC Range representation.
+
     internal var grpc: Qdrant_Range {
         var range = Qdrant_Range()
         if let lt = lt { range.lt = lt }
@@ -127,7 +127,7 @@ extension Range {
 }
 
 extension GeoPoint {
-    /// Converts to the gRPC GeoPoint representation.
+
     internal var grpc: Qdrant_GeoPoint {
         var point = Qdrant_GeoPoint()
         point.lat = lat

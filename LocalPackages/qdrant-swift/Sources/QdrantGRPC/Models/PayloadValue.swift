@@ -5,7 +5,7 @@ import QdrantProto
 public typealias PayloadValue = QdrantCore.PayloadValue
 
 extension PayloadValue {
-    /// Converts to the gRPC Value representation.
+
     internal var grpc: Qdrant_Value {
         var value = Qdrant_Value()
         switch self {
@@ -33,7 +33,6 @@ extension PayloadValue {
         return value
     }
 
-    /// Creates from the gRPC Value representation.
     internal init(grpc: Qdrant_Value) {
         self =
             switch grpc.kind {

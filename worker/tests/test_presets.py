@@ -16,7 +16,6 @@ from presets import (  # noqa: E402
     layout_preset_id,
 )
 
-
 def test_heron_maps_to_the_docling_layout_preset():
     assert layout_preset_id("heron") == "layout_heron_default"
     assert layout_preset_id("egret-medium") == "layout_egret_medium"
@@ -25,14 +24,12 @@ def test_heron_maps_to_the_docling_layout_preset():
     assert layout_preset_id("default") is None
     assert layout_preset_id(None) is None
 
-
 class ChartOptions:
     model_fields = {"chart_extraction_options": None, "do_chart_extraction": None}
 
     def __init__(self):
         self.chart_extraction_options = None
         self.do_chart_extraction = False
-
 
 class ChartFactory:
     def __init__(self):
@@ -42,11 +39,9 @@ class ChartFactory:
         self.calls.append((preset, kwargs))
         return {"preset": preset, **kwargs}
 
-
 class Api:
     def __init__(self, **kwargs):
         self.kwargs = kwargs
-
 
 def _apply(host, engine="transformers", enabled=True, url="http://127.0.0.1:8000"):
     factory = ChartFactory()
@@ -63,7 +58,6 @@ def _apply(host, engine="transformers", enabled=True, url="http://127.0.0.1:8000
         },
     )
     return options, factory
-
 
 def test_chart_extraction_uses_mlx_on_mac_and_transformers_or_api_on_devbox():
     mac, mac_factory = _apply("mac")
@@ -91,7 +85,6 @@ def test_chart_extraction_uses_mlx_on_mac_and_transformers_or_api_on_devbox():
     assert chart_extraction_plan(host="devbox", vlm_engine="vllm", vllm_url="")["engine"] == "transformers"
     assert chart_extraction_plan(host="devbox")["engine"] == "transformers"
 
-
 class PictureFactory:
     def __init__(self):
         self.calls = []
@@ -100,13 +93,11 @@ class PictureFactory:
         self.calls.append((preset, kwargs))
         return {"preset": preset, **kwargs}
 
-
 class PictureOptions:
     model_fields = {"picture_description_options": None}
 
     def __init__(self):
         self.picture_description_options = None
-
 
 def test_picture_presets_map_to_docling_options():
     from presets import apply_picture_description, picture_description_plan, qdrant_quality_profile
@@ -143,7 +134,6 @@ def test_picture_presets_map_to_docling_options():
     assert quality["do_picture_classification"] is True
     assert quality["picture_description_preset"] == "granite_vision"
 
-
 def test_batch_plan_matches_the_host_and_keeps_page_batches_large_enough():
     from presets import DOCUMENTED_NVIDIA_VLM_CONCURRENCY, batch_plan
 
@@ -172,7 +162,6 @@ def test_batch_plan_matches_the_host_and_keeps_page_batches_large_enough():
 
     override = batch_plan(host="devbox", ocr_batch_size=12)
     assert override["ocr_batch_size"] == 12
-
 
 def test_cli_forwards_picture_preset_and_server(monkeypatch):
     import docling_convert
@@ -203,7 +192,6 @@ def test_cli_forwards_picture_preset_and_server(monkeypatch):
     assert seen["picture_description_preset"] == "api"
     assert seen["vlm_server_url"] == "http://127.0.0.1:8001"
     assert seen["do_picture_description"] is True
-
 
 def test_chart_preset_is_left_alone_when_extraction_is_off():
     options, factory = _apply("mac", enabled=False)

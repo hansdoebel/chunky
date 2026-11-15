@@ -5,12 +5,9 @@ import Testing
 
 struct AppSettingsTests {
 
-    // MARK: - Initialization Tests
-
     @Test func settingsCanBeCreated() {
         let settings = IsolatedSettings.make()
 
-        // Verify embedding settings exist and have valid ranges
         #expect(!settings.embeddingModel.isEmpty)
         #expect(settings.embeddingDimensions > 0)
         #expect(settings.embeddingBatchSize >= 1 && settings.embeddingBatchSize <= 32)
@@ -30,7 +27,6 @@ struct AppSettingsTests {
     @Test func metadataSettingsAreBooleans() {
         let settings = IsolatedSettings.make()
 
-        // These should be booleans - verify they can be read without error
         _ = settings.metadataIncludeFilename
         _ = settings.metadataIncludePageNumber
         _ = settings.metadataIncludeHeadings
@@ -40,11 +36,10 @@ struct AppSettingsTests {
     @Test func doclingSettingsHaveValidRanges() {
         let settings = IsolatedSettings.make()
 
-        // Model should be a valid value
         #expect(!settings.doclingModel.isEmpty)
         #expect(settings.doclingWorkers >= 1 && settings.doclingWorkers <= 16)
         #expect(settings.doclingTimeout >= 60 && settings.doclingTimeout <= 600)
-        #expect(settings.doclingMaxPages >= 0)  // 0 means unlimited
+        #expect(settings.doclingMaxPages >= 0)
         #expect(settings.maxTokensPerChunk >= 128 && settings.maxTokensPerChunk <= 2048)
         #expect(settings.chunkOverlap >= 0 && settings.chunkOverlap <= 256)
         #expect(TableMode.allCases.map { $0.rawValue }.contains(settings.tableMode))
@@ -53,11 +48,8 @@ struct AppSettingsTests {
     @Test func exportSettingsExist() {
         let settings = IsolatedSettings.make()
 
-        // Export format should be a valid enum value
         #expect(ExportFormat.allCases.map { $0.rawValue }.contains(settings.exportFormat))
     }
-
-    // MARK: - Settings Modification Tests
 
     @Test func embeddingModelCanBeChanged() {
         let settings = IsolatedSettings.make()
@@ -76,7 +68,6 @@ struct AppSettingsTests {
     @Test func embeddingBatchSizeRange() {
         let settings = IsolatedSettings.make()
 
-        // Test valid range (1-32 according to UI)
         settings.embeddingBatchSize = 1
         #expect(settings.embeddingBatchSize == 1)
 

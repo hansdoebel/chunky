@@ -45,7 +45,6 @@ enum CollectionDistance: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    // https://qdrant.tech/documentation/concepts/search/#metrics
     var hint: String {
         switch self {
         case .cosine:
@@ -97,7 +96,6 @@ enum CollectionQuantization: String, Codable, CaseIterable, Identifiable {
         }
     }
 
-    // https://qdrant.tech/documentation/guides/quantization/
     var hint: String {
         switch self {
         case .none:
@@ -184,7 +182,6 @@ struct CollectionPlan: Codable, Equatable {
         }
     }
 
-    // Collection names: letters, numbers, hyphens, and underscores.
     static func nameError(_ name: String) -> String? {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.isEmpty { return "Enter a collection name." }
@@ -209,16 +206,14 @@ struct CollectionPlan: Codable, Equatable {
         return nil
     }
 
-    // https://qdrant.tech/documentation/concepts/storage/
     var storageHint: String {
         onDisk
             ? "On-disk vectors and payload suit large collections and the Qdrant Cloud free tier."
             : "In-memory storage is faster and uses more RAM."
     }
 
-    // https://qdrant.tech/documentation/concepts/hybrid-queries/
     var hybridHint: String {
-        "Named dense plus a sparse BM25 vector. Better keyword and exact-term recall, with a small amount of extra storage. Query-time fusion is PER-84."
+        "Named dense plus a sparse BM25 vector. Better keyword and exact-term recall, with a small amount of extra storage. Retrieval fuses the dense vector with BM25 using RRF."
     }
 
     var vectorSizeHint: String {

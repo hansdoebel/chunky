@@ -15,7 +15,6 @@ log = logging.getLogger(__name__)
 
 ProgressFn = Callable[[str, float | None], None]
 
-
 class DocumentPipeline(Protocol):
     def convert_and_chunk(
         self,
@@ -26,7 +25,6 @@ class DocumentPipeline(Protocol):
         cancel_event,
     ) -> dict:
         """Convert a file and optionally chunk it. Must honor cancel_event."""
-
 
 class DoclingPipeline:
     """Wraps ``convert_document`` from Chunky/Resources/Scripts/docling_convert.py."""

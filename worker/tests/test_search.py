@@ -21,38 +21,31 @@ from tests.conftest import TEST_TOKEN, FakeEmbeddings, FakePipeline, auth_header
 API_KEY = "super-secret-cloud-key"
 QUERY = "revenue by year"
 
-
 class FakePoint:
     def __init__(self, id, score, payload):
         self.id = id
         self.score = score
         self.payload = payload
 
-
 class FakeQueryResponse:
     def __init__(self, points):
         self.points = points
-
 
 class VectorParams:
     def __init__(self, size):
         self.size = size
 
-
 class CollectionParams:
     def __init__(self, vectors):
         self.vectors = vectors
-
 
 class CollectionConfig:
     def __init__(self, vectors):
         self.params = CollectionParams(vectors)
 
-
 class CollectionInfo:
     def __init__(self, vectors):
         self.config = CollectionConfig(vectors)
-
 
 class FakeQdrant:
     def __init__(self, *, size=3, named="dense", exists=True, points=None, fail=None):
@@ -88,7 +81,6 @@ class FakeQdrant:
     def close(self):
         self.closed += 1
 
-
 def _app(tmp_settings, embeddings, searcher):
     return create_app(
         settings=tmp_settings,
@@ -100,7 +92,6 @@ def _app(tmp_settings, embeddings, searcher):
         model_server=lambda: [],
         ollama_tags=lambda: ([], None),
     )
-
 
 def _install_embed_mock(monkeypatch, *, kind="ollama", vector=None):
     seen = []
@@ -118,7 +109,6 @@ def _install_embed_mock(monkeypatch, *, kind="ollama", vector=None):
     monkeypatch.setattr(httpx, "post", fake_post)
     return seen
 
-
 def _client(tmp_settings, embeddings, fake, factory_log):
     def factory(url, api_key):
         factory_log.append((url, api_key))
@@ -126,7 +116,6 @@ def _client(tmp_settings, embeddings, fake, factory_log):
 
     app = _app(tmp_settings, embeddings, QdrantPointSearcher(client_factory=factory))
     return TestClient(app, headers=auth_headers(tmp_settings.token or TEST_TOKEN))
-
 
 def test_hybrid_rrf_request_uses_text_query_and_optional_weights():
     from qdrant_client.models import RrfQuery, TextQuery
@@ -168,7 +157,6 @@ def test_hybrid_rrf_request_uses_text_query_and_optional_weights():
     assert plain["prefetch"][0].using is None
     assert plain["query_filter"] is None
 
-
 def test_build_query_filter_ands_match_and_range():
     query_filter = build_query_filter(
         [
@@ -187,7 +175,6 @@ def test_build_query_filter_ands_match_and_range():
     assert must[3].range.lte == 2024
     assert must[3].match is None
     assert build_query_filter([]) is None
-
 
 def test_searcher_sends_dense_query_shape():
     fake = FakeQdrant(named="dense")
@@ -231,14 +218,12 @@ def test_searcher_sends_dense_query_shape():
     ]
     assert fake.closed == 2
 
-
 def test_unnamed_vector_omits_using_name():
     fake = FakeQdrant(named=None)
     searcher = QdrantPointSearcher(client_factory=lambda url, api_key: fake)
     layout = searcher.describe(url="http://127.0.0.1:6333", api_key="", collection="documents")
     assert layout.using is None
     assert layout.vector_size == 3
-
 
 def test_search_embeds_then_queries_mock_qdrant(tmp_settings, monkeypatch):
     seen = _install_embed_mock(monkeypatch)
@@ -294,7 +279,6 @@ def test_search_embeds_then_queries_mock_qdrant(tmp_settings, monkeypatch):
     assert API_KEY not in log_text
     assert "collection=documents" in log_text
 
-
 def test_short_page_has_no_next_offset(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)
     fake = FakeQdrant(points=[FakePoint("only", 0.5, {"text": "one"})])
@@ -313,7 +297,6 @@ def test_short_page_has_no_next_offset(tmp_settings, monkeypatch):
     assert fake.query_calls[0]["limit"] == 10
     assert fake.query_calls[0]["offset"] == 0
     assert fake.query_calls[0]["query_filter"] is None
-
 
 def test_openai_backend_posts_to_embeddings_endpoint(tmp_settings, monkeypatch):
     seen = _install_embed_mock(monkeypatch, kind="openai", vector=[0.5, 0.25, 0.0])
@@ -339,7 +322,6 @@ def test_openai_backend_posts_to_embeddings_endpoint(tmp_settings, monkeypatch):
     assert isinstance(embeddings, OllamaEmbeddingBackend)
     assert OpenAIEmbeddingBackend("http://127.0.0.1:8002").base_url == "http://127.0.0.1:8002"
 
-
 def test_configured_qdrant_target_is_used_when_the_body_omits_it(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)
     tmp_settings.qdrant_url = "http://10.0.0.8:6333"
@@ -354,7 +336,6 @@ def test_configured_qdrant_target_is_used_when_the_body_omits_it(tmp_settings, m
     assert opened[0] == ("http://10.0.0.8:6333", API_KEY)
     assert fake.query_calls[0]["using"] is None
     assert fake.query_calls[0]["collection_name"] == "local"
-
 
 def test_configured_key_stays_on_the_configured_url(tmp_settings):
     tmp_settings.qdrant_url = "https://example.cloud.qdrant.io/"
@@ -377,7 +358,6 @@ def test_configured_key_stays_on_the_configured_url(tmp_settings):
     assert resolve_target(other, tmp_settings) == ("https://attacker.example", "")
     assert resolve_target(explicit, tmp_settings) == ("https://attacker.example", "caller-key")
 
-
 def test_overridden_url_does_not_receive_the_configured_key(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)
     tmp_settings.qdrant_url = "https://example.cloud.qdrant.io"
@@ -396,7 +376,6 @@ def test_overridden_url_does_not_receive_the_configured_key(tmp_settings, monkey
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
 
-
 def test_non_numeric_embedding_is_an_embedding_error(tmp_settings, monkeypatch):
     def fake_post(url, json=None, timeout=None):
         request = httpx.Request("POST", url)
@@ -414,7 +393,6 @@ def test_non_numeric_embedding_is_an_embedding_error(tmp_settings, monkeypatch):
     assert response.json()["error_type"] == "embedding_error"
     assert "non-numeric" in response.json()["detail"]
     assert fake.query_calls == []
-
 
 def test_dimension_mismatch_is_refused_before_query(tmp_settings, monkeypatch):
     seen = _install_embed_mock(monkeypatch, vector=[0.1, 0.2, 0.3])
@@ -439,7 +417,6 @@ def test_dimension_mismatch_is_refused_before_query(tmp_settings, monkeypatch):
     assert seen
     assert fake.query_calls == []
 
-
 def test_missing_collection_is_404_and_does_not_embed(tmp_settings, monkeypatch):
     seen = _install_embed_mock(monkeypatch)
     fake = FakeQdrant(exists=False)
@@ -453,7 +430,6 @@ def test_missing_collection_is_404_and_does_not_embed(tmp_settings, monkeypatch)
     assert response.json()["error_type"] == "not_found"
     assert seen == []
     assert fake.query_calls == []
-
 
 def test_qdrant_errors_are_redacted(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)
@@ -474,7 +450,6 @@ def test_qdrant_errors_are_redacted(tmp_settings, monkeypatch):
     assert API_KEY not in response.text
     assert "[redacted]" in response.text
 
-
 def test_embed_server_failure_is_502(tmp_settings, monkeypatch):
     def fake_post(url, json=None, timeout=None):
         request = httpx.Request("POST", url)
@@ -491,7 +466,6 @@ def test_embed_server_failure_is_502(tmp_settings, monkeypatch):
     assert response.status_code == 502
     assert response.json()["error_type"] == "embedding_error"
     assert fake.query_calls == []
-
 
 def test_invalid_limit_filter_and_backend_are_400(tmp_settings):
     embeddings = FakeEmbeddings()
@@ -539,7 +513,6 @@ def test_invalid_limit_filter_and_backend_are_400(tmp_settings):
     assert missing_url.status_code == 400
     assert embeddings.embed_calls == []
     assert fake.query_calls == []
-
 
 def test_request_model_rejects_a_negative_offset():
     try:

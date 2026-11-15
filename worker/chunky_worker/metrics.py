@@ -21,7 +21,6 @@ STAGE_NAMES = (
     "qdrant_upsert",
 )
 
-
 class StageMetric(BaseModel):
     name: str
     duration_ms: float = 0
@@ -31,13 +30,11 @@ class StageMetric(BaseModel):
     chunks: int | None = None
     tokens: int | None = None
 
-
 class ResourceSample(BaseModel):
     gpu_name: str | None = None
     vram_used_mb: float | None = None
     vram_total_mb: float | None = None
     utilization: list[float] = Field(default_factory=list)
-
 
 class JobMetrics(BaseModel):
     host: str
@@ -47,7 +44,6 @@ class JobMetrics(BaseModel):
     embeddings_per_s: float | None = None
     stages: list[StageMetric] = Field(default_factory=list)
     resources: ResourceSample = Field(default_factory=ResourceSample)
-
 
 def stage_enabled(name: str, settings) -> bool:
     if name == "ocr":
@@ -66,7 +62,6 @@ def stage_enabled(name: str, settings) -> bool:
         return settings.ingest_target != IngestTarget.NONE
     return True
 
-
 def empty_resources() -> dict[str, Any]:
     return {
         "gpu_name": None,
@@ -75,11 +70,9 @@ def empty_resources() -> dict[str, Any]:
         "utilization": [],
     }
 
-
 def sample_amd_smi() -> dict[str, Any]:
     """Best-effort ROCm sample. Missing amd-smi returns an empty sample."""
     return empty_resources()
-
 
 class MetricsRecorder:
     def __init__(

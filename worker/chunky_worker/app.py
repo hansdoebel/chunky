@@ -32,7 +32,6 @@ from chunky_worker.vlm import GRANITE_PRESET, GRANITE_REPO_ID, gpu_probe
 
 log = logging.getLogger(__name__)
 
-# Known VLM ids from docling_daemon.LOCAL_VLM_MODELS. MLX cannot run on the worker.
 TRANSFORMERS_VLM_MODELS = (
     "granite-docling-transformers",
     "smoldocling-transformers",
@@ -42,14 +41,12 @@ MLX_VLM_MODELS = (
     "smoldocling-mlx",
 )
 
-
 def docling_import_status() -> tuple[bool, str | None]:
     try:
         import docling  # noqa: F401
     except ImportError as exc:
         return False, str(exc)
     return True, None
-
 
 def create_app(
     settings: Settings | None = None,
@@ -94,8 +91,6 @@ def create_app(
     app.state.searcher = searcher
     _log_startup(settings)
 
-    # /v1/health stays open so a reachability probe and systemd can check the
-    # process without the bearer token. Every other /v1 route requires it.
     api = APIRouter(dependencies=[Depends(require_bearer)])
 
     @app.get("/v1/health")
@@ -228,19 +223,18 @@ def create_app(
             payload = {}
         try:
             job_settings = JobSettings.model_validate(payload)
-        except Exception as exc:  # pydantic ValidationError
+        except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Invalid settings: {exc}") from exc
 
         original_name = file.filename or "upload.bin"
         job = store.create(original_name, job_settings)
         job_dir = settings.work_dir / job.id
         job_dir.mkdir(parents=True, exist_ok=True)
-        # Keep a simple basename; job id already isolates the directory.
+
         safe_name = Path(original_name).name or "upload.bin"
         dest = job_dir / safe_name
         dest.write_bytes(await file.read())
 
-        # Capture the accept status before the worker thread can finish.
         accepted = job.status.value
         runner.start(job.id, dest)
         return {"id": job.id, "status": accepted}
@@ -287,7 +281,6 @@ def create_app(
     app.include_router(api)
     return app
 
-
 def _log_startup(settings: Settings) -> None:
     if settings.token:
         log.info("Bearer auth enabled for /v1 routes except /v1/health")
@@ -310,7 +303,6 @@ def _log_startup(settings: Settings) -> None:
         gpu["cuda"],
         gpu["arch_list"],
     )
-
 
 def _job_payload(job: Job) -> dict:
     body = {

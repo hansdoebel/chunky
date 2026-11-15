@@ -4,8 +4,6 @@ import Testing
 
 struct EnumsTests {
 
-    // MARK: - ViewMode Tests
-
     @Test func viewModeValues() {
         #expect(ViewMode.queue.rawValue == "Queue")
         #expect(ViewMode.collections.rawValue == "Collections")
@@ -16,15 +14,11 @@ struct EnumsTests {
         #expect(ViewMode.allCases.count == 6)
     }
 
-    // MARK: - ProcessingMode Tests
-
     @Test func processingModeValues() {
         #expect(ProcessingMode.chunkOnly.rawValue == "Chunk Only")
         #expect(ProcessingMode.full.rawValue == "Chunk & Ingest")
         #expect(ProcessingMode.allCases.count == 2)
     }
-
-    // MARK: - ExportFormat Tests
 
     @Test func exportFormatValues() {
         #expect(ExportFormat.docling.displayName == "Markdown")
@@ -51,8 +45,6 @@ struct EnumsTests {
         #expect(ExportFormat.text.description == "Plain text, minimal formatting")
     }
 
-    // MARK: - JobStatus Tests
-
     @Test func jobStatusAllCases() {
         let statuses: [JobStatus] = [
             .pending, .chunking, .embedding, .uploading, .completed, .failed,
@@ -60,14 +52,10 @@ struct EnumsTests {
         #expect(statuses.count == 6)
     }
 
-    // MARK: - JobType Tests
-
     @Test func jobTypeAllCases() {
         let types: [JobType] = [.pdf, .chunkedJSON, .embeddedJSON, .markdown]
         #expect(types.count == 4)
     }
-
-    // MARK: - Accelerator Tests
 
     @Test func acceleratorValues() {
         #expect(Accelerator.auto.displayName == "AUTO")
@@ -77,15 +65,11 @@ struct EnumsTests {
         #expect(Accelerator.allCases.count == 4)
     }
 
-    // MARK: - TableMode Tests
-
     @Test func tableModeValues() {
         #expect(TableMode.fast.displayName == "Fast")
         #expect(TableMode.accurate.displayName == "Accurate")
         #expect(TableMode.allCases.count == 2)
     }
-
-    // MARK: - Compression Tests
 
     @Test func compressionValues() {
         #expect(Compression.none.displayName == "None")
@@ -93,8 +77,6 @@ struct EnumsTests {
         #expect(Compression.binary.displayName == "Binary")
         #expect(Compression.allCases.count == 3)
     }
-
-    // MARK: - DistanceMetric Tests
 
     @Test func distanceMetricValues() {
         #expect(DistanceMetric.cosine.rawValue == "Cosine")
@@ -115,8 +97,6 @@ struct EnumsTests {
         #expect(DistanceMetric.euclidean.description == "For geometric similarity")
     }
 
-    // MARK: - DoclingModel Tests
-
     @Test func doclingModelValues() {
         #expect(DoclingModel.standard.rawValue == "standard")
         #expect(DoclingModel.graniteDoclingMLX.rawValue == "granite-docling-mlx")
@@ -128,8 +108,6 @@ struct EnumsTests {
             #expect(!model.description.isEmpty)
         }
     }
-
-    // MARK: - ImageExportMode Tests
 
     @Test func imageExportModeValues() {
         #expect(ImageExportMode.embedded.rawValue == "embedded")
@@ -149,8 +127,6 @@ struct EnumsTests {
         #expect(ImageExportMode.placeholder.description == "Image placeholders only")
         #expect(ImageExportMode.referenced.description == "Images saved as separate files")
     }
-
-    // MARK: - OCRLanguage Tests
 
     @Test func ocrLanguageValues() {
         #expect(OCRLanguage.english.rawValue == "en")

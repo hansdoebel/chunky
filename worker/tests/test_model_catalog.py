@@ -10,7 +10,6 @@ from chunky_worker.model_catalog import (
     vlm_report,
 )
 
-
 def test_ollama_tags_keep_digest_size_and_quantization():
     rows = parse_ollama_tags(
         {
@@ -34,7 +33,6 @@ def test_ollama_tags_keep_digest_size_and_quantization():
         }
     ]
 
-
 def test_hf_cache_and_server_models_mark_availability():
     cache = parse_hf_cache(
         [{"repo_id": "ibm-granite/granite-docling-258M", "revision": "rev1", "size": 100}]
@@ -52,7 +50,6 @@ def test_hf_cache_and_server_models_mark_availability():
         "ibm-granite/granite-vision-3.3-2b",
     ]
 
-
 def test_pull_event_decoder():
     event = parse_pull_event('{"status":"pulling","completed":50,"total":100}\n')
     assert event["percent"] == 50
@@ -62,12 +59,10 @@ def test_pull_event_decoder():
         "Qwen/Qwen3-Embedding-0.6B"
     ]
 
-
 def test_granite_engine_follows_the_worker_setting():
     report = {item["name"]: item for item in vlm_report([], granite_engine="vllm")}
     assert report["granite-docling-transformers"]["engine"] == "vllm"
     assert report["smoldocling-transformers"]["engine"] == "transformers"
-
 
 def test_same_target_reuses_the_running_download_and_cancel_waits():
     import threading
@@ -92,7 +87,6 @@ def test_same_target_reuses_the_running_download_and_cancel_waits():
             break
         time.sleep(0.02)
     assert manager.get(first)["status"] == "canceled"
-
 
 def test_download_manager_reports_progress_without_a_network_call():
     seen = {}

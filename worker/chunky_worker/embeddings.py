@@ -7,9 +7,7 @@ from typing import Protocol
 
 import httpx
 
-# Stable probe text. The dimension is cached per model name for the process.
 PROBE_TEXT = "chunky"
-
 
 class EmbeddingBackend(Protocol):
     def health(self) -> tuple[bool, str | None]:
@@ -20,7 +18,6 @@ class EmbeddingBackend(Protocol):
 
     def embed(self, texts: list[str], model: str) -> list[list[float]]:
         """Return one vector per input text."""
-
 
 class OllamaEmbeddingBackend:
     def __init__(self, base_url: str = "http://127.0.0.1:11434", timeout: float = 5.0) -> None:
@@ -68,7 +65,6 @@ class OllamaEmbeddingBackend:
             raise RuntimeError("Ollama /api/embed response missing embeddings")
         return embeddings
 
-
 class OpenAIEmbeddingBackend:
     """OpenAI-compatible ``/v1/embeddings`` (vLLM pooling, Infinity, llama-server, MLX)."""
 
@@ -112,19 +108,16 @@ class OpenAIEmbeddingBackend:
             raise RuntimeError("OpenAI /v1/embeddings response missing embeddings")
         return vectors
 
-
 def make_embedding_backend(kind: str, base_url: str) -> EmbeddingBackend:
     if kind.strip().lower() == "openai":
         return OpenAIEmbeddingBackend(base_url)
     return OllamaEmbeddingBackend(base_url)
-
 
 _TOKENIZERS = {
     "qwen3-embedding": "Qwen/Qwen3-Embedding-0.6B",
     "qwen3-embedding:latest": "Qwen/Qwen3-Embedding-0.6B",
     "qwen3-embedding-0.6b": "Qwen/Qwen3-Embedding-0.6B",
 }
-
 
 def tokenizer_for_embedding(model: str | None) -> str:
     """Hugging Face tokenizer that matches the embedding model. Not MiniLM."""
@@ -137,7 +130,6 @@ def tokenizer_for_embedding(model: str | None) -> str:
     if "/" in name:
         return name
     return "Qwen/Qwen3-Embedding-0.6B"
-
 
 class DimensionCache:
     """One probe embedding per model name. Later calls reuse the cached width."""

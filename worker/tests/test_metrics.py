@@ -3,7 +3,6 @@ import time
 from chunky_worker.metrics import JobMetrics, MetricsRecorder
 from chunky_worker.models import JobSettings
 
-
 def test_metrics_round_trip_and_skipped_stages():
     settings = JobSettings(enable_ocr=False, do_picture_description=False, vlm_model=None, chunk=True)
     clock = {"now": 0.0}
@@ -47,7 +46,6 @@ def test_metrics_round_trip_and_skipped_stages():
     assert ("embedding", "end") in kinds
     assert restored.wall_ms == 100
     time.sleep(0)
-
 
 def test_disabled_chunking_is_skipped_and_stage_events_emit_immediately():
     settings = JobSettings(chunk=False)

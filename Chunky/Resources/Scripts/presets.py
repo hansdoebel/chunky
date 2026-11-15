@@ -33,20 +33,16 @@ PICTURE_PRESETS = {
     },
 }
 
-
 def layout_preset_id(layout_model: str | None) -> str | None:
     """Docling layout preset for a picker value. ``default`` stays unset."""
     if not layout_model or layout_model == "default":
         return None
     return LAYOUT_PRESETS.get(layout_model)
 
-
 DOCUMENTED_NVIDIA_VLM_CONCURRENCY = 64
-
 
 def _is_mac(host: str | None) -> bool:
     return (host or default_chart_host()).strip().lower() in {"mac", "darwin", "local", "localmac"}
-
 
 def batch_plan(
     *,
@@ -111,10 +107,8 @@ def batch_plan(
     plan["documented_nvidia_vlm_concurrency"] = DOCUMENTED_NVIDIA_VLM_CONCURRENCY
     return plan
 
-
 def default_chart_host() -> str:
     return "mac" if sys.platform == "darwin" else "devbox"
-
 
 def chart_extraction_plan(
     *,
@@ -150,7 +144,6 @@ def chart_extraction_plan(
         }
     return {"preset": CHART_TRANSFORMERS_PRESET, "engine": "transformers", "repo_id": CHART_REPO_ID}
 
-
 def apply_chart_extraction(
     options,
     *,
@@ -185,14 +178,12 @@ def apply_chart_extraction(
     )
     return options
 
-
 def default_picture_preset(host: str | None = None) -> str:
     """SmolVLM on the Mac. Granite Vision 3.3-2B on the devbox."""
     selected = (host or default_chart_host()).strip().lower()
     if selected in {"mac", "darwin", "local", "localmac"}:
         return "smolvlm"
     return "granite_vision"
-
 
 def qdrant_quality_profile(host: str | None = None) -> dict:
     """Retrieval-quality ingest: describe and classify pictures."""
@@ -202,7 +193,6 @@ def qdrant_quality_profile(host: str | None = None) -> dict:
         "picture_description_preset": default_picture_preset(host),
     }
 
-
 def _chat_url(base: str) -> str:
     trimmed = base.strip().rstrip("/")
     if trimmed.endswith("/chat/completions"):
@@ -210,7 +200,6 @@ def _chat_url(base: str) -> str:
     if trimmed.endswith("/v1"):
         return trimmed + "/chat/completions"
     return trimmed + "/v1/chat/completions"
-
 
 def picture_description_plan(
     preset: str | None = None,
@@ -242,7 +231,6 @@ def picture_description_plan(
     spec = dict(PICTURE_PRESETS[chosen])
     spec.update({"engine": "inline", "picker": chosen})
     return spec
-
 
 def apply_picture_description(
     options,
@@ -278,7 +266,6 @@ def apply_picture_description(
     )
     return options
 
-
 def _picture_factories() -> dict:
     from docling.datamodel.pipeline_options import PictureDescriptionVlmEngineOptions
     from docling.datamodel.vlm_engine_options import ApiVlmEngineOptions
@@ -287,7 +274,6 @@ def _picture_factories() -> dict:
         "PictureDescriptionVlmEngineOptions": PictureDescriptionVlmEngineOptions,
         "ApiVlmEngineOptions": ApiVlmEngineOptions,
     }
-
 
 def _chart_factories() -> dict:
     from docling.datamodel.pipeline_options import ChartExtractionVlmEngineOptions

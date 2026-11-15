@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for search operations.
 internal final class SearchService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class SearchService: Sendable {
         self.base = base
     }
 
-    /// Searches for similar vectors.
     func search(
         collection: String,
         vector: [Float],
@@ -65,7 +63,6 @@ internal final class SearchService: Sendable {
         }
     }
 
-    /// Performs multiple searches in a single request.
     func searchBatch(
         collection: String,
         searches: [SearchRequest]
@@ -108,7 +105,6 @@ internal final class SearchService: Sendable {
         }
     }
 
-    /// Searches for groups of similar vectors.
     func searchGroups(
         collection: String,
         vector: [Float],
@@ -146,7 +142,6 @@ internal final class SearchService: Sendable {
         }
     }
 
-    /// Computes distance matrix between sampled points (pairs format).
     func searchMatrixPairs(
         collection: String,
         filter: Filter?,
@@ -180,7 +175,6 @@ internal final class SearchService: Sendable {
         }
     }
 
-    /// Computes distance matrix between sampled points (offsets format).
     func searchMatrixOffsets(
         collection: String,
         filter: Filter?,

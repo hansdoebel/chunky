@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for recommend operations.
 internal final class RecommendService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class RecommendService: Sendable {
         self.base = base
     }
 
-    /// Finds points similar to the given positive examples and dissimilar to negative examples.
     func recommend(
         collection: String,
         positive: [PointID],
@@ -57,7 +55,6 @@ internal final class RecommendService: Sendable {
         }
     }
 
-    /// Performs multiple recommend requests in a single batch.
     func recommendBatch(
         collection: String,
         requests: [RecommendRequest]
@@ -97,7 +94,6 @@ internal final class RecommendService: Sendable {
         }
     }
 
-    /// Finds groups of points similar to positive examples.
     func recommendGroups(
         collection: String,
         positive: [PointID],

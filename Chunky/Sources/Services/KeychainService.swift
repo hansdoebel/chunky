@@ -1,7 +1,6 @@
 import Foundation
 import Security
 
-/// Service for secure storage of credentials in the macOS Keychain
 struct KeychainService {
 
     private static let service = "com.chunkyapp.Chunky"
@@ -26,7 +25,6 @@ struct KeychainService {
         }
     }
 
-    /// Save a string value to the Keychain
     static func save(key: String, value: String) throws {
         guard let data = value.data(using: .utf8) else {
             throw KeychainError.invalidData
@@ -39,7 +37,6 @@ struct KeychainService {
             kSecValueData as String: data
         ]
 
-        // Try to delete existing item first
         SecItemDelete(query as CFDictionary)
 
         let status = SecItemAdd(query as CFDictionary, nil)
@@ -49,7 +46,6 @@ struct KeychainService {
         }
     }
 
-    /// Retrieve a string value from the Keychain
     static func get(key: String) -> String? {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -71,7 +67,6 @@ struct KeychainService {
         return string
     }
 
-    /// Delete a value from the Keychain
     static func delete(key: String) {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -82,7 +77,6 @@ struct KeychainService {
         SecItemDelete(query as CFDictionary)
     }
 
-    /// Check if a key exists in the Keychain
     static func exists(key: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
@@ -95,8 +89,6 @@ struct KeychainService {
         return status == errSecSuccess
     }
 }
-
-// MARK: - Keychain Keys
 
 extension KeychainService {
     static let qdrantAPIKeyKey = "qdrant_api_key"

@@ -3,8 +3,6 @@ import Testing
 
 struct QdrantModelsTests {
 
-    // MARK: - ChunkPoint Tests
-
     @Test func chunkPointCreation() {
         let point = ChunkPoint(
             id: "test-id",
@@ -32,7 +30,7 @@ struct QdrantModelsTests {
             source: "file.txt"
         )
 
-        #expect(!point.id.isEmpty) // Auto-generated UUID
+        #expect(!point.id.isEmpty)
         #expect(point.page == nil)
         #expect(point.headings.isEmpty)
         #expect(point.metadata.isEmpty)
@@ -44,8 +42,6 @@ struct QdrantModelsTests {
 
         #expect(point1.id != point2.id)
     }
-
-    // MARK: - SearchResult Tests
 
     @Test func searchResultCreation() {
         let result = SearchResult(
@@ -64,8 +60,6 @@ struct QdrantModelsTests {
         #expect(result.page == 10)
         #expect(result.headings == ["Introduction"])
     }
-
-    // MARK: - CollectionInfo Tests
 
     @Test func collectionInfoCreation() {
         let info = CollectionInfo(
@@ -87,8 +81,6 @@ struct QdrantModelsTests {
         #expect(CollectionInfo.CollectionStatus.red.rawValue == "red")
         #expect(CollectionInfo.CollectionStatus.unknown.rawValue == "unknown")
     }
-
-    // MARK: - UploadProgress Tests
 
     @Test func uploadProgressFraction() {
         let progress = UploadProgress(
@@ -125,8 +117,6 @@ struct QdrantModelsTests {
         #expect(progress.fraction == 1.0)
         #expect(progress.percentComplete == 100)
     }
-
-    // MARK: - QdrantError Tests
 
     @Test func errorDescriptions() {
         let errors: [(QdrantError, String)] = [

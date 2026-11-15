@@ -20,13 +20,11 @@ MAX_LIMIT = 100
 _KEY_PATTERN = re.compile(r"^[A-Za-z_][A-Za-z0-9_.]*$")
 _BACKENDS = {"ollama", "openai"}
 
-
 class SearchError(Exception):
     def __init__(self, message: str, *, status_code: int = 400, error_type: str | None = None) -> None:
         super().__init__(message)
         self.status_code = status_code
         self.error_type = error_type
-
 
 class PayloadFilter(BaseModel):
     key: str
@@ -61,7 +59,6 @@ class PayloadFilter(BaseModel):
     def check_complete(self) -> None:
         if self.match is None and not self.has_range():
             raise ValueError(f"Filter {self.key!r} needs a match or a range")
-
 
 class SearchRequest(BaseModel):
     query: str
@@ -115,19 +112,16 @@ class SearchRequest(BaseModel):
             raise ValueError("embedding_backend must be ollama or openai")
         return kind
 
-
 @dataclass
 class CollectionLayout:
     vector_size: int | None
     using: str | None
-
 
 @dataclass
 class ScoredHit:
     id: str
     score: float
     payload: dict[str, Any]
-
 
 class QdrantSearcher(Protocol):
     def describe(self, *, url: str, api_key: str, collection: str) -> CollectionLayout | None:
@@ -165,7 +159,6 @@ class QdrantSearcher(Protocol):
     ) -> list[ScoredHit]:
         ...
 
-
 def hybrid_query_arguments(
     *,
     vector: list[float],
@@ -193,7 +186,6 @@ def hybrid_query_arguments(
         "with_vectors": False,
     }
 
-
 def build_query_filter(filters: list[PayloadFilter]):
     if not filters:
         return None
@@ -210,13 +202,11 @@ def build_query_filter(filters: list[PayloadFilter]):
         must.append(FieldCondition(**kwargs))
     return Filter(must=must)
 
-
 def _http_url(value: str, label: str) -> str:
     parsed = urlparse(value)
     if parsed.scheme not in {"http", "https"} or not parsed.netloc:
         raise SearchError(f"{label} must be an http(s) URL")
     return value
-
 
 def _destination_key(url: str) -> str:
     parsed = urlparse(url.strip())
@@ -224,7 +214,6 @@ def _destination_key(url: str) -> str:
     port = f":{parsed.port}" if parsed.port is not None else ""
     path = parsed.path.rstrip("/")
     return f"{parsed.scheme.lower()}://{host}{port}{path}"
-
 
 def resolve_target(request: SearchRequest, settings: Settings) -> tuple[str, str]:
     configured_url = (settings.qdrant_url or "").strip()
@@ -242,7 +231,6 @@ def resolve_target(request: SearchRequest, settings: Settings) -> tuple[str, str
     else:
         api_key = ""
     return url, api_key
-
 
 def resolve_backend(
     request: SearchRequest,
@@ -265,7 +253,6 @@ def resolve_backend(
     url = _http_url(url, "embedding_url")
     return make_embedding_backend(resolved, url), resolved, model
 
-
 def parse_search_request(payload: Any) -> SearchRequest:
     if not isinstance(payload, dict):
         raise SearchError("Search body must be a JSON object")
@@ -281,7 +268,6 @@ def parse_search_request(payload: Any) -> SearchRequest:
         except ValueError as exc:
             raise SearchError(str(exc)) from None
     return request
-
 
 def run_search(
     request: SearchRequest,
@@ -394,7 +380,6 @@ def run_search(
         "collection": collection,
     }
 
-
 def _default_client(url: str, api_key: str):
     try:
         from qdrant_client import QdrantClient
@@ -403,7 +388,6 @@ def _default_client(url: str, api_key: str):
     if api_key:
         return QdrantClient(url=url, api_key=api_key, timeout=30)
     return QdrantClient(url=url, timeout=30)
-
 
 def _payload_dict(payload: Any) -> dict[str, Any]:
     if payload is None:
@@ -416,7 +400,6 @@ def _payload_dict(payload: Any) -> dict[str, Any]:
         if isinstance(data, dict):
             return data
     return dict(payload)
-
 
 class QdrantPointSearcher:
     def __init__(self, client_factory: Callable[[str, str], Any] | None = None) -> None:

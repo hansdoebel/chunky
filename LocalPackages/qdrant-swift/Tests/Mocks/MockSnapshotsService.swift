@@ -1,15 +1,7 @@
 import Foundation
 import QdrantCore
 
-/// A mock implementation of `SnapshotsServiceProtocol` for unit testing.
-///
-/// This mock allows you to:
-/// - Track which methods were called and with what arguments
-/// - Configure return values and errors for each method
-/// - Verify interactions in your tests
 public final class MockSnapshotsService: SnapshotsServiceProtocol, @unchecked Sendable {
-
-    // MARK: - Call Tracking
 
     public private(set) var createCallCount = 0
     public private(set) var createCalls: [String] = []
@@ -27,8 +19,6 @@ public final class MockSnapshotsService: SnapshotsServiceProtocol, @unchecked Se
     public private(set) var deleteFullCallCount = 0
     public private(set) var deleteFullCalls: [String] = []
 
-    // MARK: - Stubbed Results
-
     public var createResult: Result<SnapshotDescription, Error> = .success(
         SnapshotDescription(name: "test-snapshot", size: 1024)
     )
@@ -40,11 +30,7 @@ public final class MockSnapshotsService: SnapshotsServiceProtocol, @unchecked Se
     public var listFullResult: Result<[SnapshotDescription], Error> = .success([])
     public var deleteFullResult: Result<Void, Error> = .success(())
 
-    // MARK: - Initialization
-
     public init() {}
-
-    // MARK: - Reset
 
     public func reset() {
         createCallCount = 0
@@ -58,8 +44,6 @@ public final class MockSnapshotsService: SnapshotsServiceProtocol, @unchecked Se
         deleteFullCallCount = 0
         deleteFullCalls = []
     }
-
-    // MARK: - SnapshotsServiceProtocol
 
     public func create(collection: String) async throws -> SnapshotDescription {
         createCallCount += 1

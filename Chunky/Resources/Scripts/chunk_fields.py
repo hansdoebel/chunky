@@ -2,23 +2,19 @@
 
 from __future__ import annotations
 
-
 PICTURE_LABELS = {"picture", "figure", "chart"}
 TABLE_LABELS = {"table"}
-
 
 def _label(item) -> str:
     label = getattr(item, "label", "")
     value = getattr(label, "value", label)
     return str(value or "").strip().lower()
 
-
 def _text(value) -> str | None:
     if value is None:
         return None
     text = str(value).strip()
     return text or None
-
 
 def _class_name(entry) -> tuple[str | None, float | None]:
     if isinstance(entry, dict):
@@ -31,7 +27,6 @@ def _class_name(entry) -> tuple[str | None, float | None]:
         score = None
     return name, score
 
-
 def _best_class(classes) -> str | None:
     best_name = None
     best_score = None
@@ -43,7 +38,6 @@ def _best_class(classes) -> str | None:
             best_name = name
             best_score = score
     return best_name
-
 
 def _picture_fields(item) -> tuple[str | None, str | None]:
     description = None
@@ -73,14 +67,12 @@ def _picture_fields(item) -> tuple[str | None, str | None]:
             description = "\n".join(captions)
     return description, classification
 
-
 def _markdown_cell(cell) -> str:
     if isinstance(cell, dict):
         text = cell.get("text")
     else:
         text = getattr(cell, "text", "")
     return str(text or "").replace("\n", " ").replace("|", "\\|").strip()
-
 
 def _markdown_from_grid(grid) -> str | None:
     rows = []
@@ -93,7 +85,6 @@ def _markdown_from_grid(grid) -> str | None:
     columns = max(row.count("|") - 1 for row in rows)
     separator = "| " + " | ".join(["---"] * max(columns, 1)) + " |"
     return "\n".join([rows[0], separator, *rows[1:]])
-
 
 def _table_markdown(item, doc) -> str | None:
     exporter = getattr(item, "export_to_markdown", None)
@@ -115,7 +106,6 @@ def _table_markdown(item, doc) -> str | None:
     if grid is None and isinstance(item, dict):
         grid = item.get("grid") or (item.get("data") or {}).get("grid")
     return _markdown_from_grid(grid)
-
 
 def visual_fields(doc_items, doc=None) -> dict[str, str]:
     """Picture description, picture class, and table markdown for one chunk."""
@@ -143,7 +133,6 @@ def visual_fields(doc_items, doc=None) -> dict[str, str]:
         fields["table_markdown"] = "\n\n".join(tables)
     return fields
 
-
 def _page_number(item) -> int | None:
     prov = getattr(item, "prov", None)
     if not prov:
@@ -155,7 +144,6 @@ def _page_number(item) -> int | None:
     if isinstance(page, int):
         return page
     return None
-
 
 def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     """One chunk dict. ``text`` stays raw. ``embedding_text`` is the serialized form."""

@@ -25,7 +25,6 @@ LOCAL_VLM_MODELS = {
 
 _converter_cache = {}
 
-
 def _setup_env(vlm_model, accelerator):
     if vlm_model in LOCAL_VLM_MODELS:
         return
@@ -38,13 +37,11 @@ def _setup_env(vlm_model, accelerator):
         os.environ["DEVICE"] = "cpu"
         os.environ["ACCELERATOR"] = "cpu"
 
-
 def _progress(message, percent=None):
     payload = {"type": "progress", "message": message}
     if percent is not None:
         payload["percent"] = percent
     print(json.dumps(payload), file=sys.stderr, flush=True)
-
 
 def _get_converter(cmd):
     from docling_convert import (
@@ -128,7 +125,6 @@ def _get_converter(cmd):
     converter = DocumentConverter(format_options=format_options)
     _converter_cache[cache_key] = converter
     return converter
-
 
 def _handle_convert(cmd):
     from docling_convert import _write_output, _chunk_document
@@ -276,7 +272,6 @@ def _handle_convert(cmd):
     _progress("Conversion complete", 100)
     return result_data
 
-
 def _redirect_stdout():
     real_stdout = os.dup(1)
     devnull = os.open(os.devnull, os.O_WRONLY)
@@ -284,16 +279,13 @@ def _redirect_stdout():
     os.close(devnull)
     return real_stdout
 
-
 def _restore_stdout(real_stdout_fd):
     os.dup2(real_stdout_fd, 1)
     os.close(real_stdout_fd)
 
-
 def _send(real_stdout_fd, obj):
     data = json.dumps(obj, ensure_ascii=False) + "\n"
     os.write(real_stdout_fd, data.encode("utf-8"))
-
 
 def main():
     os.environ.setdefault("OMP_NUM_THREADS", "4")
@@ -357,7 +349,6 @@ def main():
 
     _restore_stdout(real_stdout_fd)
     log.info("Daemon exiting")
-
 
 if __name__ == "__main__":
     main()

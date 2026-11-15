@@ -5,7 +5,7 @@ import QdrantProto
 public typealias Distance = QdrantCore.Distance
 
 extension Distance {
-    /// Converts to the gRPC representation.
+
     internal var grpc: Qdrant_Distance {
         switch self {
         case .cosine: .cosine
@@ -15,7 +15,6 @@ extension Distance {
         }
     }
 
-    /// Creates from the gRPC representation.
     internal init?(grpc: Qdrant_Distance) {
         switch grpc {
         case .cosine: self = .cosine

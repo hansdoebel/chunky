@@ -40,10 +40,8 @@ LOCAL_VLM_MODELS = {
     "granite-docling-transformers": "GRANITEDOCLING_TRANSFORMERS",
 }
 
-
 def _setup_cpu_mode():
-    # Skip CPU enforcement when a local VLM model is specified,
-    # since those models manage their own device selection.
+
     vlm_model = None
     accelerator = "cpu"
     for i, arg in enumerate(sys.argv):
@@ -64,7 +62,6 @@ def _setup_cpu_mode():
         os.environ["DEVICE"] = "cpu"
         os.environ["ACCELERATOR"] = "cpu"
 
-
 _setup_cpu_mode()
 
 import argparse  # noqa: E402
@@ -72,7 +69,6 @@ import json  # noqa: E402
 import tempfile  # noqa: E402
 from pathlib import Path  # noqa: E402
 from typing import NotRequired, TypedDict  # noqa: E402
-
 
 class ConversionResult(TypedDict):
     success: bool
@@ -87,7 +83,6 @@ class ConversionResult(TypedDict):
     table_count: NotRequired[int]
     extraction_output: NotRequired[str]
     extraction_count: NotRequired[int]
-
 
 def _non_pdf_format_options():
     from docling.backend.asciidoc_backend import AsciiDocBackend
@@ -119,7 +114,6 @@ def _non_pdf_format_options():
         InputFormat.XML_JATS: FormatOption(backend=JatsDocumentBackend, pipeline_cls=SimplePipeline),
         InputFormat.XML_XBRL: FormatOption(backend=XBRLDocumentBackend, pipeline_cls=SimplePipeline),
     }
-
 
 def _build_vlm_format_options(
     vlm_model,
@@ -153,7 +147,7 @@ def _build_vlm_format_options(
 
     is_local_vlm = vlm_model in LOCAL_VLM_MODELS
     if is_local_vlm:
-        # Import only the requested spec so the worker never loads MLX.
+
         if vlm_model == "granite-docling-transformers":
             from docling.datamodel.vlm_model_specs import GRANITEDOCLING_TRANSFORMERS
 
@@ -234,24 +228,20 @@ def _build_vlm_format_options(
     }
     return format_options
 
-
 def _apply_pipeline_enrichment(pipeline_options, **enrichment):
     from enrichment import apply_enrichment
 
     return apply_enrichment(pipeline_options, **enrichment)
-
 
 def _apply_chart_extraction(pipeline_options, **kwargs):
     from presets import apply_chart_extraction
 
     return apply_chart_extraction(pipeline_options, **kwargs)
 
-
 def _apply_picture_description(pipeline_options, **kwargs):
     from presets import apply_picture_description
 
     return apply_picture_description(pipeline_options, **kwargs)
-
 
 def _build_granite_format_options(
     vlm_engine,
@@ -303,7 +293,6 @@ def _build_granite_format_options(
         **_non_pdf_format_options(),
     }
     return format_options
-
 
 def _build_standard_format_options(
     accelerator,
@@ -428,7 +417,6 @@ def _build_standard_format_options(
     }
     return format_options
 
-
 def _write_output(doc, output_format, output_file, image_export_mode):
     """Export the converted document to a file atomically.
 
@@ -480,7 +468,7 @@ def _write_output(doc, output_format, output_file, image_export_mode):
             f.write(content)
         os.replace(tmp_path, output_file)
     except BaseException:
-        # Clean up temp file on any failure
+
         try:
             os.unlink(tmp_path)
         except OSError:
@@ -488,7 +476,6 @@ def _write_output(doc, output_format, output_file, image_export_mode):
         raise
 
     return True, None
-
 
 def _tokenizer_for_embedding(model: str | None) -> str:
     name = (model or "").strip()
@@ -499,7 +486,6 @@ def _tokenizer_for_embedding(model: str | None) -> str:
         return name
     return "Qwen/Qwen3-Embedding-0.6B"
 
-
 def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, progress_callback, embedding_model=""):
     try:
         from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
@@ -509,8 +495,6 @@ def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, p
 
     progress_callback("Chunking document...", 88)
 
-    # docling-core 2.107 takes a HuggingFaceTokenizer. Passing max_tokens on
-    # HybridChunker itself is the deprecated path.
     from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 
     tokenizer_name = chunk_tokenizer or _tokenizer_for_embedding(embedding_model)
@@ -539,7 +523,6 @@ def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, p
     progress_callback(f"Chunked into {len(chunk_list)} chunks", 92)
     return chunk_list
 
-
 def _conversion_stage_ms(
     convert_ms,
     chunk_ms,
@@ -562,7 +545,6 @@ def _conversion_stage_ms(
     if chunk:
         stages["chunking"] = chunk_ms
     return stages
-
 
 def convert_document(
     input_path: str,
@@ -856,7 +838,6 @@ def convert_document(
             "traceback": traceback.format_exc(),
         }
 
-
 def main():
     parser = argparse.ArgumentParser(description="Convert documents using docling")
     parser.add_argument("input", help="Input file path or URL")
@@ -1055,7 +1036,6 @@ def main():
     print(json.dumps(result, indent=2))
 
     sys.exit(0 if result.get("success") else 1)
-
 
 if __name__ == "__main__":
     main()

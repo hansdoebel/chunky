@@ -1,9 +1,6 @@
 import Foundation
 
-/// Service for generating embeddings using Ollama
 actor OllamaService {
-
-    // MARK: - Types
 
     struct EmbeddingRequest: Codable {
         let model: String
@@ -67,15 +64,11 @@ actor OllamaService {
         }
     }
 
-    // MARK: - Properties
-
     private let baseURL: URL
-    /// The URL string this client was created with. A different string means a new client.
+
     nonisolated let configuredURL: String
     private let session: URLSession
     private var dimensionCache = EmbeddingDimensionCache()
-
-    // MARK: - Initialization
 
     init(baseURL: String = "http://localhost:11434") throws {
         guard let url = URL(string: baseURL) else {
@@ -85,14 +78,11 @@ actor OllamaService {
         self.configuredURL = baseURL
 
         let config = URLSessionConfiguration.default
-        config.timeoutIntervalForRequest = 300 // 5 minutes for large batches
+        config.timeoutIntervalForRequest = 300
         config.timeoutIntervalForResource = 600
         self.session = URLSession(configuration: config)
     }
 
-    // MARK: - Public Methods
-
-    /// Check if Ollama is running
     func isAvailable() async -> Bool {
         let url = baseURL.appendingPathComponent("api/tags")
         var request = URLRequest(url: url)
@@ -121,25 +111,12 @@ actor OllamaService {
         return data
     }
 
-    /// Fetch available models
     func listModels() async throws -> [ModelInfo] {
         let data = try await tagsData()
         let modelsResponse = try JSONDecoder().decode(ModelsResponse.self, from: data)
         return modelsResponse.models
     }
 
-    /// Fetch models that support embeddings
-    func listEmbeddingModels() async throws -> [ModelInfo] {
-        let models = try await listModels()
-        // Filter for known embedding models
-        let embeddingKeywords = ["embed", "nomic", "mxbai", "bge", "e5", "gte"]
-        return models.filter { model in
-            let name = model.name.lowercased()
-            return embeddingKeywords.contains { name.contains($0) }
-        }
-    }
-
-    /// Embed one probe string and remember the width for this model.
     func probeDimension(model: String) async throws -> Int {
         if let cached = dimensionCache.cached(model) {
             return cached
@@ -148,7 +125,6 @@ actor OllamaService {
         return try dimensionCache.store(model: model, vector: vector)
     }
 
-    /// Generate embeddings for a single text
     func embed(text: String, model: String) async throws -> [Float] {
         let embeddings = try await embedBatch(texts: [text], model: model)
         guard let first = embeddings.first else {
@@ -157,7 +133,6 @@ actor OllamaService {
         return first
     }
 
-    /// Generate embeddings for multiple texts
     func embedBatch(texts: [String], model: String) async throws -> [[Float]] {
         guard !texts.isEmpty else { return [] }
 
@@ -188,7 +163,6 @@ actor OllamaService {
         return embeddingResponse.embeddings
     }
 
-    /// Generate embeddings for texts in batches with progress reporting
     func embedWithProgress(
         texts: [String],
         model: String,
@@ -262,12 +236,5 @@ private final class UnsafeSendableCounter: @unchecked Sendable {
         defer { lock.unlock() }
         value += 1
         return value
-    }
-}
-
-extension OllamaService {
-    /// Get the embedding dimension for a model. Uses the cached probe.
-    func getEmbeddingDimension(model: String) async throws -> Int {
-        try await probeDimension(model: model)
     }
 }

@@ -10,7 +10,6 @@ from chunky_worker.app import MLX_VLM_MODELS, TRANSFORMERS_VLM_MODELS, create_ap
 from chunky_worker.jobs import JobStore
 from tests.conftest import FakeEmbeddings, FakePipeline, auth_headers, wait_for_status
 
-
 def _upload(client, content=b"hello", filename="note.txt", settings=None):
     data = {}
     if settings is not None:
@@ -20,7 +19,6 @@ def _upload(client, content=b"hello", filename="note.txt", settings=None):
         files={"file": (filename, content, "text/plain")},
         data=data,
     )
-
 
 def test_health_ok_when_backends_mocked(client, monkeypatch):
     monkeypatch.setattr("chunky_worker.app.docling_import_status", lambda: (True, None))
@@ -38,7 +36,6 @@ def test_health_ok_when_backends_mocked(client, monkeypatch):
     assert body["vlm"]["flash_attention2"] is False
     assert body["vlm"]["mlx"] is False
 
-
 def test_health_degraded_when_docling_missing_and_ollama_down(tmp_settings, monkeypatch):
     monkeypatch.setattr("chunky_worker.app.docling_import_status", lambda: (False, "No module named 'docling'"))
     app = create_app(
@@ -54,7 +51,6 @@ def test_health_degraded_when_docling_missing_and_ollama_down(tmp_settings, monk
     assert "docling" in (body["docling"]["error"] or "").lower()
     assert body["embeddings"]["reachable"] is False
 
-
 def test_models_lists_embeddings_and_known_vlms(client):
     body = client.get("/v1/models").json()
     names = [item["name"] for item in body["embeddings"]]
@@ -68,7 +64,6 @@ def test_models_lists_embeddings_and_known_vlms(client):
         assert "Apple-only" in vlm_names[name]["reason"]
     assert "qwen3-embedding" in body["recommended"]["devbox"]
     assert body["recommended"]["mac"] == ["granite-docling-mlx"]
-
 
 def test_cached_model_is_available_and_download_stays_local(tmp_settings):
     def fake_download(repo_id, revision, on_progress, cancel_event):
@@ -113,11 +108,9 @@ def test_cached_model_is_available_and_download_stays_local(tmp_settings):
         assert record["status"] == "succeeded"
         assert record["repo_id"] == "ibm-granite/granite-docling-258M"
 
-
 def test_create_job_requires_file(client):
     response = client.post("/v1/jobs", data={"settings": "{}"})
     assert response.status_code == 422
-
 
 def test_invalid_settings_json_is_400(client):
     response = client.post(
@@ -127,7 +120,6 @@ def test_invalid_settings_json_is_400(client):
     )
     assert response.status_code == 400
     assert "Invalid settings JSON" in response.json()["detail"]
-
 
 def test_chunk_only_job_returns_artifacts(client, pipeline):
     response = _upload(client, filename="paper.txt", settings={"mode": "chunk_only"})
@@ -152,7 +144,6 @@ def test_chunk_only_job_returns_artifacts(client, pipeline):
     assert stages["convert_layout"]["status"] == "ok"
     assert result["metrics"]["host"] == "devbox"
 
-
 def test_chunk_and_embed_uses_mock_backend(client, embeddings):
     response = _upload(
         client,
@@ -171,7 +162,6 @@ def test_chunk_and_embed_uses_mock_backend(client, embeddings):
     assert texts == ["Hello world", "Second chunk"]
     assert model == "qwen3-embedding"
 
-
 def test_conversion_failure_marks_job_failed(tmp_settings, embeddings):
     from fastapi.testclient import TestClient
 
@@ -188,13 +178,11 @@ def test_conversion_failure_marks_job_failed(tmp_settings, embeddings):
     assert body["error_type"] == "conversion_error"
     assert body["result"] is None
 
-
 def test_unknown_job_is_404(client):
     missing = "00000000-0000-0000-0000-000000000000"
     assert client.get(f"/v1/jobs/{missing}").status_code == 404
     assert client.post(f"/v1/jobs/{missing}/cancel").status_code == 404
     assert client.get(f"/v1/jobs/{missing}/events").status_code == 404
-
 
 def test_cancel_running_job(tmp_settings, embeddings):
     from fastapi.testclient import TestClient
@@ -214,14 +202,12 @@ def test_cancel_running_job(tmp_settings, embeddings):
         body = wait_for_status(client, job_id, "canceled")
         assert body["status"] == "canceled"
 
-
 def test_cancel_after_success_is_conflict(client):
     job_id = _upload(client).json()["id"]
     wait_for_status(client, job_id, "succeeded")
     response = client.post(f"/v1/jobs/{job_id}/cancel")
     assert response.status_code == 409
     assert response.json()["status"] == "succeeded"
-
 
 def test_sse_streams_progress_and_completion(client):
     job_id = _upload(client, settings={"mode": "chunk_only"}).json()["id"]
@@ -239,7 +225,6 @@ def test_sse_streams_progress_and_completion(client):
     assert events[-1]["status"] == "succeeded"
     assert any(event.get("percent") == 0 for event in events)
     assert any("Converting" in (event.get("message") or "") for event in events)
-
 
 def test_job_settings_map_daemon_fields(client, pipeline):
     settings = {

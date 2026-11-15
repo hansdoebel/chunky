@@ -1,7 +1,5 @@
 import SwiftUI
 
-// MARK: - View Mode
-
 enum ViewMode: String, CaseIterable {
     case queue = "Queue"
     case collections = "Collections"
@@ -11,21 +9,17 @@ enum ViewMode: String, CaseIterable {
     case benchmark = "Benchmark"
 }
 
-// MARK: - Processing Mode
-
 enum ProcessingMode: String, CaseIterable {
     case chunkOnly = "Chunk Only"
     case full = "Chunk & Ingest"
 }
 
-/// Where document conversion runs. The devbox has no MLX.
 enum ProcessingHost: String, CaseIterable, Identifiable {
     case localMac = "Local Mac"
     case devbox = "Devbox"
 
     var id: String { rawValue }
 
-    /// Standard-pipeline accelerator. ROCm reports the GPU as CUDA.
     var defaultAccelerator: Accelerator {
         switch self {
         case .localMac: return .mps
@@ -34,15 +28,12 @@ enum ProcessingHost: String, CaseIterable, Identifiable {
     }
 }
 
-/// Where a Devbox Chunk & Ingest job writes vectors. Local Mac ignores this.
 enum DevboxIngestTarget: String, CaseIterable, Identifiable {
     case localDocker = "Local Docker"
     case qdrantCloud = "Qdrant Cloud"
 
     var id: String { rawValue }
 }
-
-// MARK: - Export Format (for chunk export)
 
 enum ExportFormat: String, CaseIterable {
     case docling = "docling"
@@ -75,33 +66,23 @@ enum ExportFormat: String, CaseIterable {
     }
 }
 
-// MARK: - Job Status
-
 enum JobStatus {
     case pending, chunking, embedding, uploading, completed, failed
 }
 
-// MARK: - Job Type
-
 enum JobType {
     case pdf, chunkedJSON, embeddedJSON, markdown
 }
-
-// MARK: - Accelerator
 
 enum Accelerator: String, CaseIterable {
     case auto, cpu, mps, cuda
     var displayName: String { rawValue.uppercased() }
 }
 
-// MARK: - Table Mode
-
 enum TableMode: String, CaseIterable {
     case fast, accurate
     var displayName: String { rawValue.capitalized }
 }
-
-// MARK: - Distance Metric
 
 enum DistanceMetric: String, CaseIterable {
     case cosine = "Cosine"
@@ -125,8 +106,6 @@ enum DistanceMetric: String, CaseIterable {
     }
 }
 
-// MARK: - Compression
-
 enum Compression: String, CaseIterable {
     case none = "None"
     case scalar = "Scalar"
@@ -148,8 +127,6 @@ enum Compression: String, CaseIterable {
         }
     }
 }
-
-// MARK: - Docling Model
 
 enum DoclingModel: String, CaseIterable {
     case standard = "standard"
@@ -178,12 +155,10 @@ enum DoclingModel: String, CaseIterable {
         }
     }
 
-    /// Whether this model runs locally (not via Ollama)
     var isLocal: Bool { self != .standard }
 
     var isMLX: Bool { rawValue.hasSuffix("-mlx") }
 
-    /// Transformers id the worker can run. MLX models map to that equivalent.
     var devboxModel: DoclingModel {
         switch self {
         case .graniteDoclingMLX: return .graniteDoclingTransformers
@@ -199,7 +174,6 @@ enum DoclingModel: String, CaseIterable {
         }
     }
 
-    /// Model id to send to the worker. MLX ids are rewritten.
     static func workerModelID(_ raw: String) -> String {
         guard let model = DoclingModel(rawValue: raw) else {
             if raw.hasSuffix("-mlx") {
@@ -208,24 +182,6 @@ enum DoclingModel: String, CaseIterable {
             return raw
         }
         return model.devboxModel.rawValue
-    }
-}
-
-// MARK: - XML Document Format
-
-enum XMLDocumentFormat: String, CaseIterable {
-    case auto = "auto"
-    case uspto = "xml_uspto"
-    case jats = "xml_jats"
-    case xbrl = "xbrl"
-
-    var displayName: String {
-        switch self {
-        case .auto: return "Auto-detect"
-        case .uspto: return "USPTO Patent"
-        case .jats: return "JATS Article"
-        case .xbrl: return "XBRL Financial"
-        }
     }
 }
 
@@ -282,8 +238,6 @@ enum QdrantProfile: String, CaseIterable, Identifiable {
     var pictureClassification: Bool { self == .quality }
 }
 
-// MARK: - Layout Model
-
 enum LayoutModel: String, CaseIterable {
     case standard = "default"
     case heron = "heron"
@@ -312,8 +266,6 @@ enum LayoutModel: String, CaseIterable {
     }
 }
 
-// MARK: - Image Export Mode
-
 enum ImageExportMode: String, CaseIterable {
     case embedded = "embedded"
     case placeholder = "placeholder"
@@ -332,10 +284,8 @@ enum ImageExportMode: String, CaseIterable {
     }
 }
 
-// MARK: - OCR Language
-
 enum OCRLanguage: String, CaseIterable {
-    // Alphabetically sorted by display name
+
     case english = "en"
     case french = "fr"
     case german = "de"

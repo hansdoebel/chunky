@@ -8,7 +8,7 @@ public typealias SparseVectorParams = QdrantCore.SparseVectorParams
 public typealias SparseVectorModifier = QdrantCore.SparseVectorModifier
 
 extension VectorConfig {
-    /// Converts to the gRPC VectorParams representation.
+
     internal var grpcParams: Qdrant_VectorParams {
         var params = Qdrant_VectorParams()
         params.size = size
@@ -21,7 +21,7 @@ extension VectorConfig {
 }
 
 extension VectorsConfig {
-    /// Converts to the gRPC VectorsConfig representation.
+
     internal var grpc: Qdrant_VectorsConfig {
         var config = Qdrant_VectorsConfig()
         switch self {

@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for field index and facet operations.
 internal final class IndexService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class IndexService: Sendable {
         self.base = base
     }
 
-    /// Creates an index on a payload field.
     func createFieldIndex(
         collection: String,
         fieldName: String,
@@ -44,7 +42,6 @@ internal final class IndexService: Sendable {
         }
     }
 
-    /// Deletes an index on a payload field.
     func deleteFieldIndex(
         collection: String,
         fieldName: String,
@@ -74,7 +71,6 @@ internal final class IndexService: Sendable {
         }
     }
 
-    /// Performs faceted search to get value counts.
     func facet(
         collection: String,
         key: String,

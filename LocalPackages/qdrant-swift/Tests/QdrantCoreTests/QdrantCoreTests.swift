@@ -5,8 +5,6 @@ import Foundation
 @Suite("QdrantCore Model Tests")
 struct QdrantCoreTests {
 
-    // MARK: - PointID Tests
-
     @Test("PointID Integer")
     func pointIDInteger() {
         let id: PointID = .integer(42)
@@ -68,8 +66,6 @@ struct QdrantCoreTests {
             Issue.record("Expected uuid point id")
         }
     }
-
-    // MARK: - PayloadValue Tests
 
     @Test("PayloadValue String")
     func payloadValueString() {
@@ -144,8 +140,6 @@ struct QdrantCoreTests {
         }
     }
 
-    // MARK: - Filter Tests
-
     @Test("Filter Creation")
     func filterCreation() {
         let filter = Filter(
@@ -173,8 +167,6 @@ struct QdrantCoreTests {
         #expect(point.lon == -74.0060)
     }
 
-    // MARK: - Distance Tests
-
     @Test("Distance enum values")
     func distanceEnumValues() {
         #expect(Distance.cosine == .cosine)
@@ -196,8 +188,6 @@ struct QdrantCoreTests {
         let decoded = try decoder.decode(Distance.self, from: data)
         #expect(decoded == .cosine)
     }
-
-    // MARK: - VectorData Tests
 
     @Test("VectorData Dense")
     func vectorDataDense() {
@@ -252,8 +242,6 @@ struct QdrantCoreTests {
             Issue.record("Expected named vectors")
         }
     }
-
-    // MARK: - Point Tests
 
     @Test("Point Creation")
     func pointCreation() {

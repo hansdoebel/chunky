@@ -1,6 +1,3 @@
-// swift-tools-version: 6.4
-// Matches Xcode 27.2 (Swift 6.4). Deployment target is macOS 27.
-
 import PackageDescription
 
 let package = Package(

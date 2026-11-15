@@ -1,7 +1,6 @@
 import Foundation
 import QdrantCore
 
-/// Service for managing points in Qdrant collections via REST API.
 public final class RestPointsService: Sendable {
     private let client: HTTPClient
 
@@ -9,11 +8,6 @@ public final class RestPointsService: Sendable {
         self.client = client
     }
 
-    /// Inserts or updates points in a collection.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - points: The points to upsert.
-    ///   - wait: Whether to wait for the operation to complete.
     public func upsert(
         collection: String,
         points: [Point],
@@ -28,13 +22,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Retrieves points by their IDs.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs to retrieve.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: An array of retrieved points.
     public func get(
         collection: String,
         ids: [PointID],
@@ -49,11 +36,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Deletes points by their IDs.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs to delete.
-    ///   - wait: Whether to wait for the operation to complete.
     public func delete(
         collection: String,
         ids: [PointID],
@@ -68,11 +50,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Deletes points matching a filter.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - filter: The filter to match points to delete.
-    ///   - wait: Whether to wait for the operation to complete.
     public func delete(
         collection: String,
         filter: Filter,
@@ -87,15 +64,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Scrolls through points in a collection.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - filter: Optional filter to apply.
-    ///   - limit: Maximum number of points to return.
-    ///   - offset: Offset point ID to start from.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: A scroll result with points and next page offset.
     public func scroll(
         collection: String,
         filter: Filter? = nil,
@@ -121,12 +89,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Counts the number of points in a collection.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - filter: Optional filter to apply.
-    ///   - exact: Whether to perform exact count.
-    /// - Returns: The number of points.
     public func count(
         collection: String,
         filter: Filter? = nil,
@@ -140,18 +102,6 @@ public final class RestPointsService: Sendable {
         return response.result?.count ?? 0
     }
 
-    /// Searches for similar vectors.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - vector: The query vector.
-    ///   - limit: Maximum number of results.
-    ///   - filter: Optional filter to apply.
-    ///   - scoreThreshold: Minimum score threshold.
-    ///   - offset: Number of results to skip.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    ///   - vectorName: Name of the vector field (for multi-vector collections).
-    /// - Returns: An array of scored points.
     public func search(
         collection: String,
         vector: [Float],
@@ -179,18 +129,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Universal query API.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - query: The query to perform.
-    ///   - prefetch: Sub-queries to perform first.
-    ///   - using: Vector name to use.
-    ///   - filter: Filter conditions.
-    ///   - limit: Maximum number of results.
-    ///   - offset: Number of results to skip.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: Array of scored points.
     public func query(
         collection: String,
         query: RestQuery? = nil,
@@ -219,16 +157,6 @@ public final class RestPointsService: Sendable {
         return response.result?.points ?? []
     }
 
-    /// Finds points similar to positive examples.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - positive: Point IDs to use as positive examples.
-    ///   - negative: Point IDs to use as negative examples.
-    ///   - limit: Maximum number of results.
-    ///   - filter: Optional filter to apply.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: An array of scored points.
     public func recommend(
         collection: String,
         positive: [PointID],
@@ -253,12 +181,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Sets payload values for specific points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs to update.
-    ///   - payload: The payload values to set.
-    ///   - wait: Whether to wait for the operation to complete.
     public func setPayload(
         collection: String,
         ids: [PointID],
@@ -274,12 +196,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Deletes specific payload keys from points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs to update.
-    ///   - keys: The payload keys to delete.
-    ///   - wait: Whether to wait for the operation to complete.
     public func deletePayload(
         collection: String,
         ids: [PointID],
@@ -295,11 +211,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Clears all payload from points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs to clear payload from.
-    ///   - wait: Whether to wait for the operation to complete.
     public func clearPayload(
         collection: String,
         ids: [PointID],
@@ -314,12 +225,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Overwrites the entire payload for specific points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs to update.
-    ///   - payload: The payload to set (replaces existing).
-    ///   - wait: Whether to wait for the operation to complete.
     public func overwritePayload(
         collection: String,
         ids: [PointID],
@@ -335,11 +240,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Updates vectors for existing points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - points: The point vector updates.
-    ///   - wait: Whether to wait for the operation to complete.
     public func updateVectors(
         collection: String,
         points: [PointVectorUpdate],
@@ -354,12 +254,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Deletes vectors from existing points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - ids: The point IDs.
-    ///   - vectors: The vector names to delete.
-    ///   - wait: Whether to wait for the operation to complete.
     public func deleteVectors(
         collection: String,
         ids: [PointID],
@@ -375,11 +269,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Performs multiple search requests in a batch.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - searches: The search queries to perform.
-    /// - Returns: Array of search results for each query.
     public func searchBatch(
         collection: String,
         searches: [SearchBatchQuery]
@@ -392,11 +281,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Performs multiple query requests in a batch.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - queries: The queries to perform.
-    /// - Returns: Array of query results for each query.
     public func queryBatch(
         collection: String,
         queries: [QueryBatchQuery]
@@ -409,11 +293,6 @@ public final class RestPointsService: Sendable {
         return response.result?.map { $0.points } ?? []
     }
 
-    /// Performs multiple recommend requests in a batch.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - recommends: The recommend queries to perform.
-    /// - Returns: Array of recommend results for each query.
     public func recommendBatch(
         collection: String,
         recommends: [RecommendBatchQuery]
@@ -426,12 +305,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Applies a series of update operations in a batch.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - operations: The operations to perform.
-    ///   - wait: Whether to wait for the operation to complete.
-    /// - Returns: Array of operation results.
     public func updateBatch(
         collection: String,
         operations: [RestPointsUpdateOperation],
@@ -447,19 +320,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Searches for similar vectors, grouping results by a payload field.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - vector: The query vector.
-    ///   - groupBy: The payload field to group by.
-    ///   - groupSize: Maximum number of results per group.
-    ///   - limit: Maximum number of groups.
-    ///   - filter: Optional filter to apply.
-    ///   - scoreThreshold: Minimum score threshold.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    ///   - vectorName: Name of the vector field (for multi-vector collections).
-    /// - Returns: Grouped search results.
     public func searchGroups(
         collection: String,
         vector: [Float],
@@ -489,17 +349,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? RestSearchGroupsResult(groups: [])
     }
 
-    /// Queries points, grouping results by a payload field.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - query: The query to perform.
-    ///   - groupBy: The payload field to group by.
-    ///   - groupSize: Maximum number of results per group.
-    ///   - limit: Maximum number of groups.
-    ///   - filter: Optional filter to apply.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: Grouped query results.
     public func queryGroups(
         collection: String,
         query: RestQuery? = nil,
@@ -526,18 +375,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? RestSearchGroupsResult(groups: [])
     }
 
-    /// Recommends points, grouping results by a payload field.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - positive: Point IDs to use as positive examples.
-    ///   - negative: Point IDs to use as negative examples.
-    ///   - groupBy: The payload field to group by.
-    ///   - groupSize: Maximum number of results per group.
-    ///   - limit: Maximum number of groups.
-    ///   - filter: Optional filter to apply.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: Grouped recommend results.
     public func recommendGroups(
         collection: String,
         positive: [PointID],
@@ -566,16 +403,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? RestSearchGroupsResult(groups: [])
     }
 
-    /// Discovers points using context pairs to guide the search.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - target: The target to find similar points to.
-    ///   - context: Context pairs to guide discovery.
-    ///   - limit: Maximum number of results.
-    ///   - filter: Optional filter to apply.
-    ///   - withPayload: Whether to include payload.
-    ///   - withVectors: Whether to include vectors.
-    /// - Returns: An array of scored points.
     public func discover(
         collection: String,
         target: RestDiscoverTarget? = nil,
@@ -600,11 +427,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Performs multiple discover requests in a batch.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - discovers: The discover queries to perform.
-    /// - Returns: Array of discover results for each query.
     public func discoverBatch(
         collection: String,
         discovers: [DiscoverBatchQuery]
@@ -617,13 +439,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? []
     }
 
-    /// Computes similarity matrix between pairs of points.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - sample: Number of points to sample.
-    ///   - limit: Maximum number of pairs to return.
-    ///   - filter: Optional filter to apply.
-    /// - Returns: Similarity pairs result.
     public func searchMatrixPairs(
         collection: String,
         sample: Int = 10,
@@ -638,13 +453,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? RestSearchMatrixPairsResult(pairs: [])
     }
 
-    /// Computes similarity matrix as offsets.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - sample: Number of points to sample.
-    ///   - limit: Maximum number of pairs to return.
-    ///   - filter: Optional filter to apply.
-    /// - Returns: Similarity offsets result.
     public func searchMatrixOffsets(
         collection: String,
         sample: Int = 10,
@@ -660,14 +468,6 @@ public final class RestPointsService: Sendable {
             ?? RestSearchMatrixOffsetsResult(ids: [], offsetsRow: [], offsetsCol: [], scores: [])
     }
 
-    /// Gets facet counts for a payload field.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - key: The payload field to facet on.
-    ///   - limit: Maximum number of facet values to return.
-    ///   - filter: Optional filter to apply.
-    ///   - exact: Whether to perform exact count.
-    /// - Returns: Facet results.
     public func facet(
         collection: String,
         key: String,
@@ -683,12 +483,6 @@ public final class RestPointsService: Sendable {
         return response.result ?? RestFacetResult(hits: [])
     }
 
-    /// Creates an index on a payload field.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - fieldName: The field name to index.
-    ///   - fieldType: The field type for the index.
-    ///   - wait: Whether to wait for the operation to complete.
     public func createFieldIndex(
         collection: String,
         fieldName: String,
@@ -704,11 +498,6 @@ public final class RestPointsService: Sendable {
         )
     }
 
-    /// Deletes an index on a payload field.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - fieldName: The field name to remove index from.
-    ///   - wait: Whether to wait for the operation to complete.
     public func deleteFieldIndex(
         collection: String,
         fieldName: String,
@@ -971,8 +760,6 @@ struct FacetResponse: Codable {
     let result: RestFacetResult?
 }
 
-/// Response for points mutation operations (upsert, delete, payload ops, etc.)
-/// Returns an UpdateResult with operation_id and status, not a simple boolean.
 struct PointsOperationResponse: Codable {
     let result: PointsOperationResult?
     let status: String?

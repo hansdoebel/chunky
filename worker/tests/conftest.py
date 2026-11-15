@@ -15,7 +15,6 @@ from chunky_worker.jobs import JobStore
 from chunky_worker.models import JobMode, JobSettings
 from chunky_worker.settings import Settings
 
-
 class FakePipeline:
     def __init__(self, delay: float = 0.0, fail: bool = False, fail_message: str = "boom") -> None:
         self.delay = delay
@@ -81,7 +80,6 @@ class FakePipeline:
             ],
         }
 
-
 class FakeEmbeddings:
     def __init__(self, reachable: bool = True, models: list[str] | None = None) -> None:
         self.reachable = reachable
@@ -102,13 +100,10 @@ class FakeEmbeddings:
         self.embed_calls.append((list(texts), model))
         return [[float(i), 0.1, 0.2] for i, _ in enumerate(texts)]
 
-
 TEST_TOKEN = "test-token"
-
 
 def auth_headers(token: str = TEST_TOKEN) -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
-
 
 @pytest.fixture
 def tmp_settings(tmp_path: Path) -> Settings:
@@ -124,16 +119,13 @@ def tmp_settings(tmp_path: Path) -> Settings:
         token=TEST_TOKEN,
     )
 
-
 @pytest.fixture
 def pipeline() -> FakePipeline:
     return FakePipeline()
 
-
 @pytest.fixture
 def embeddings() -> FakeEmbeddings:
     return FakeEmbeddings()
-
 
 @pytest.fixture
 def client(tmp_settings, pipeline, embeddings):
@@ -148,7 +140,6 @@ def client(tmp_settings, pipeline, embeddings):
     )
     with TestClient(app, headers=auth_headers(tmp_settings.token or "")) as test_client:
         yield test_client
-
 
 def wait_for_status(client: TestClient, job_id: str, *statuses: str, timeout: float = 5.0) -> dict:
     deadline = time.monotonic() + timeout

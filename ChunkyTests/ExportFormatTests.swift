@@ -3,12 +3,8 @@ import Foundation
 
 @testable import Chunky
 
-/// Tests for export format functionality using sample.pdf from assets
 struct ExportFormatTests {
 
-    // MARK: - Test Setup
-
-    /// Repo root: walk up from this file until `Chunky.xcodeproj` is found.
     static let projectRoot: URL = {
         var url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
         let fm = FileManager.default
@@ -21,17 +17,14 @@ struct ExportFormatTests {
         return URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
     }()
 
-    /// Path to sample.pdf in assets directory
     static let samplePDFPath: String = {
         projectRoot.appendingPathComponent("assets/sample.pdf").path
     }()
 
-    /// Path to sample_chunks.json in assets directory
     static let sampleChunksPath: String = {
         projectRoot.appendingPathComponent("assets/sample_chunks.json").path
     }()
 
-    /// Test chunk data structure (mirrors ChunkingService.DocumentChunk)
     struct TestChunk {
         let id: String
         let text: String
@@ -41,7 +34,6 @@ struct ExportFormatTests {
         let tokenCount: Int
     }
 
-    /// Create test chunks for export testing
     static func createTestChunks() -> [TestChunk] {
         return [
             TestChunk(
@@ -71,7 +63,6 @@ struct ExportFormatTests {
         ]
     }
 
-    /// Test settings structure
     struct TestSettings {
         var metadataIncludeFilename: Bool = true
         var metadataIncludePageNumber: Bool = true
@@ -79,7 +70,6 @@ struct ExportFormatTests {
         var metadataIncludeTimestamp: Bool = true
     }
 
-    /// Create test settings with all metadata enabled
     static func createTestSettings(
         includeFilename: Bool = true,
         includePageNumber: Bool = true,
@@ -94,7 +84,6 @@ struct ExportFormatTests {
         )
     }
 
-    /// Mock ChunkExport for testing without AppSettings dependency
     struct MockChunkExport: Codable {
         let id: String
         let text: String
@@ -114,8 +103,6 @@ struct ExportFormatTests {
             self.timestamp = settings.metadataIncludeTimestamp ? ISO8601DateFormatter().string(from: Date()) : nil
         }
     }
-
-    // MARK: - Sample PDF Tests
 
     @Test func samplePDFExists() {
         let fileExists = FileManager.default.fileExists(atPath: Self.samplePDFPath)
@@ -138,8 +125,6 @@ struct ExportFormatTests {
         let chunks = json?["chunks"] as? [[String: Any]]
         #expect(chunks?.count == 4)
     }
-
-    // MARK: - ChunkExport Tests
 
     @Test func chunkExportIncludesAllMetadataWhenEnabled() {
         let settings = Self.createTestSettings()
@@ -243,8 +228,6 @@ struct ExportFormatTests {
         #expect(export.headings == nil)
     }
 
-    // MARK: - JSON Export Tests
-
     @Test func jsonExportProducesValidJSON() throws {
         let chunks = Self.createTestChunks()
         let settings = Self.createTestSettings()
@@ -257,7 +240,6 @@ struct ExportFormatTests {
 
         #expect(!data.isEmpty)
 
-        // Verify it can be decoded back
         let decoded = try JSONDecoder().decode([MockChunkExport].self, from: data)
         #expect(decoded.count == 3)
     }
@@ -301,25 +283,21 @@ struct ExportFormatTests {
 
         let export = MockChunkExport(chunk: chunk, settings: settings)
 
-        // Verify fields are nil in the struct
         #expect(export.source == nil)
         #expect(export.page == nil)
         #expect(export.headings == nil)
         #expect(export.timestamp == nil)
 
-        // Verify JSON encoding works - Swift's Codable omits nil fields by default
         let encoder = JSONEncoder()
         encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
         let data = try encoder.encode([export])
         let jsonString = String(data: data, encoding: .utf8)!
 
-        // These optional fields should be omitted entirely from JSON when nil
         #expect(!jsonString.contains("\"source\""), "source field should be omitted when nil")
         #expect(!jsonString.contains("\"page\""), "page field should be omitted when nil")
         #expect(!jsonString.contains("\"headings\""), "headings field should be omitted when nil")
         #expect(!jsonString.contains("\"timestamp\""), "timestamp field should be omitted when nil")
 
-        // Required fields should still be present
         #expect(jsonString.contains("\"id\""))
         #expect(jsonString.contains("\"text\""))
         #expect(jsonString.contains("\"tokenCount\""))
@@ -336,7 +314,6 @@ struct ExportFormatTests {
         let data = try encoder.encode(exports)
         let jsonString = String(data: data, encoding: .utf8)!
 
-        // With sortedKeys, "headings" should appear before "id" and "id" before "page"
         let headingsIndex = jsonString.range(of: "\"headings\"")?.lowerBound
         let idIndex = jsonString.range(of: "\"id\"")?.lowerBound
         let pageIndex = jsonString.range(of: "\"page\"")?.lowerBound
@@ -346,8 +323,6 @@ struct ExportFormatTests {
             #expect(i < p, "id should come before page with sorted keys")
         }
     }
-
-    // MARK: - Text Export Tests
 
     @Test func textExportProducesValidText() {
         let chunks = Self.createTestChunks()
@@ -442,8 +417,6 @@ struct ExportFormatTests {
         #expect(text.contains("first test chunk"))
     }
 
-    // MARK: - Export Format Selection Tests
-
     @Test func exportFormatFromRawValue() {
         #expect(ExportFormat(rawValue: "docling") == .docling)
         #expect(ExportFormat(rawValue: "html") == .html)
@@ -455,7 +428,7 @@ struct ExportFormatTests {
 
     @Test func exportFormatDefaultsToJSON() {
         let settings = IsolatedSettings.make()
-        // Default should be docling (markdown), but let's test fallback
+
         let format = ExportFormat(rawValue: settings.exportFormat) ?? .json
         #expect(format != nil)
     }
@@ -472,10 +445,8 @@ struct ExportFormatTests {
         }
     }
 
-    // MARK: - File Extension Tests
-
     @Test func exportFormatFileExtensions() {
-        // Test that each format maps to expected file extension
+
         let formatExtensions: [(ExportFormat, String)] = [
             (.docling, "md"),
             (.html, "html"),
@@ -487,7 +458,7 @@ struct ExportFormatTests {
             let fileExtension: String
             switch format {
             case .none:
-                continue // none doesn't produce a file
+                continue
             case .docling:
                 fileExtension = "md"
             case .json:
@@ -502,8 +473,6 @@ struct ExportFormatTests {
             #expect(fileExtension == expectedExtension, "\(format) should use .\(expectedExtension) extension")
         }
     }
-
-    // MARK: - ChunkExport Codable Tests
 
     @Test func chunkExportEncodesAndDecodes() throws {
         let settings = Self.createTestSettings()
@@ -530,7 +499,7 @@ struct ExportFormatTests {
         #expect(decoded.page == export.page)
         #expect(decoded.headings == export.headings)
         #expect(decoded.tokenCount == export.tokenCount)
-        // Timestamp may differ due to encoding/decoding, so just check it's present
+
         #expect(decoded.timestamp != nil)
     }
 
@@ -552,8 +521,6 @@ struct ExportFormatTests {
             #expect(original.text == decoded.text)
         }
     }
-
-    // MARK: - Edge Cases
 
     @Test func chunkExportHandlesEmptyText() throws {
         let settings = Self.createTestSettings()

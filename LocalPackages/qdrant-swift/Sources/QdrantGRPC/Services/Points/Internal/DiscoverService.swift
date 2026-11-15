@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for discover operations.
 internal final class DiscoverService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class DiscoverService: Sendable {
         self.base = base
     }
 
-    /// Discovers points using context pairs (positive/negative examples).
     func discover(
         collection: String,
         target: DiscoverTarget,
@@ -97,7 +95,6 @@ internal final class DiscoverService: Sendable {
         }
     }
 
-    /// Performs multiple discover requests in a single batch.
     func discoverBatch(
         collection: String,
         requests: [DiscoverRequest]

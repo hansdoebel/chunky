@@ -14,7 +14,6 @@ from chunky_worker.auth import generate_token, write_token_file
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.settings import BindWithoutTokenError, Settings, require_token_when_exposed
 
-
 def main() -> None:
     parser = argparse.ArgumentParser(description="Chunky document-processing worker")
     parser.add_argument("--host", default=os.environ.get("CHUNKY_WORKER_HOST", "127.0.0.1"))
@@ -38,7 +37,7 @@ def main() -> None:
             print(f"Wrote token to {args.token_file} (mode 0600)", file=sys.stderr)
         else:
             token = generate_token()
-        # stdout is the copy-once channel for the operator. The logging module is not used.
+
         print(token)
         return
 
@@ -52,7 +51,6 @@ def main() -> None:
         raise SystemExit(2) from exc
     configure_logging(settings.log_dir)
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
-
 
 if __name__ == "__main__":
     main()

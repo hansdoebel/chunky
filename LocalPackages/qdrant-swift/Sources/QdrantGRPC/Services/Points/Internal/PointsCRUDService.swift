@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for CRUD operations on points.
 internal final class PointsCRUDService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class PointsCRUDService: Sendable {
         self.base = base
     }
 
-    /// Inserts or updates points in a collection.
     func upsert(
         collection: String,
         points: [Point],
@@ -41,7 +39,6 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
-    /// Retrieves points by their IDs.
     func get(
         collection: String,
         ids: [PointID],
@@ -72,7 +69,6 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
-    /// Deletes points by their IDs.
     func delete(
         collection: String,
         ids: [PointID],
@@ -106,7 +102,6 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
-    /// Deletes points matching a filter.
     func delete(
         collection: String,
         filter: Filter,
@@ -138,7 +133,6 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
-    /// Scrolls through points in a collection.
     func scroll(
         collection: String,
         filter: Filter?,
@@ -182,7 +176,6 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
-    /// Counts the number of points in a collection.
     func count(
         collection: String,
         filter: Filter?,

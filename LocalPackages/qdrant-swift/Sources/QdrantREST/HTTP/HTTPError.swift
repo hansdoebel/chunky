@@ -13,7 +13,7 @@ public enum HTTPError: Error, Sendable {
     case permissionDenied
     case badRequest(String)
     case serverError(String)
-    /// TLS is required for connections to remote (non-localhost) hosts
+
     case tlsRequiredForRemoteHost(String)
 }
 

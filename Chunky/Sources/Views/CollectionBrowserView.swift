@@ -11,7 +11,7 @@ struct CollectionBrowserView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            // Toolbar
+
             HStack(spacing: 8) {
                 Picker(selection: $appState.settings.defaultCollection) {
                     ForEach(appState.availableCollections, id: \.self) { collection in
@@ -86,7 +86,6 @@ struct CollectionBrowserView: View {
             Divider()
                 .opacity(0.5)
 
-            // Points list
             if appState.isLoadingPoints && appState.browserPoints.isEmpty {
                 VStack(spacing: 12) {
                     Spacer()

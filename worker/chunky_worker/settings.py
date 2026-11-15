@@ -9,13 +9,11 @@ from urllib.parse import urlparse
 
 from chunky_worker.vlm import normalize_vlm_engine
 
-
 def default_state_dir() -> Path:
     xdg = os.environ.get("XDG_STATE_HOME")
     if xdg:
         return Path(xdg)
     return Path.home() / ".local" / "state"
-
 
 def default_log_dir() -> Path:
     override = os.environ.get("CHUNKY_LOG_DIR")
@@ -23,13 +21,11 @@ def default_log_dir() -> Path:
         return Path(override)
     return default_state_dir() / "chunky" / "logs"
 
-
 def default_work_dir() -> Path:
     override = os.environ.get("CHUNKY_WORK_DIR")
     if override:
         return Path(override)
     return default_state_dir() / "chunky" / "work"
-
 
 def default_config_dir() -> Path:
     xdg = os.environ.get("XDG_CONFIG_HOME")
@@ -37,13 +33,11 @@ def default_config_dir() -> Path:
         return Path(xdg)
     return Path.home() / ".config"
 
-
 def default_token_file() -> Path:
     override = os.environ.get("CHUNKY_WORKER_TOKEN_FILE")
     if override:
         return Path(override)
     return default_config_dir() / "chunky" / "worker.token"
-
 
 def load_token() -> str | None:
     """Load the bearer token. Env wins over a file. Never logs the value.
@@ -67,19 +61,15 @@ def load_token() -> str | None:
     value = path.read_text(encoding="utf-8").strip()
     return value or None
 
-
 def is_loopback_host(host: str) -> bool:
     value = host.lower().strip().strip("[]")
     return value in {"127.0.0.1", "localhost", "::1"}
 
-
 def is_loopback_url(url: str) -> bool:
     return is_loopback_host(urlparse(url).hostname or "")
 
-
 class BindWithoutTokenError(RuntimeError):
     pass
-
 
 def require_token_when_exposed(settings: "Settings") -> None:
     if is_loopback_host(settings.host):
@@ -92,15 +82,13 @@ def require_token_when_exposed(settings: "Settings") -> None:
         "Loopback (127.0.0.1, localhost, ::1) may start without one."
     )
 
-
 def default_scripts_dir() -> Path:
     override = os.environ.get("CHUNKY_SCRIPTS_DIR")
     if override:
         return Path(override)
-    # worker/chunky_worker/settings.py -> repo root / Chunky/Resources/Scripts
+
     repo_root = Path(__file__).resolve().parents[2]
     return repo_root / "Chunky" / "Resources" / "Scripts"
-
 
 @dataclass
 class Settings:
@@ -111,17 +99,16 @@ class Settings:
     scripts_dir: Path = field(default_factory=default_scripts_dir)
     ollama_url: str = "http://127.0.0.1:11434"
     vllm_url: str = "http://127.0.0.1:8000"
-    # Empty keeps chart extraction on Transformers. The document vLLM server
-    # only serves granite-docling.
+
     chart_vllm_url: str = ""
-    # vllm calls the granite_docling preset. transformers is the in-process fallback.
+
     vlm_engine: str = "vllm"
     embedding_model: str = "qwen3-embedding"
     embedding_backend: str = "ollama"
     embedding_url: str = ""
     qdrant_url: str = ""
     qdrant_api_key: str = field(default="", repr=False)
-    # None means protected routes reject every request (fail closed).
+
     token: str | None = None
 
     @classmethod

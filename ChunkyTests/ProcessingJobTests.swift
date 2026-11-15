@@ -5,8 +5,6 @@ import Testing
 
 struct ProcessingJobTests {
 
-    // MARK: - Initialization Tests
-
     @Test func initializationWithPDFURL() {
         let url = URL(fileURLWithPath: "/path/to/document.pdf")
         let job = ProcessingJob(url: url)
@@ -48,31 +46,29 @@ struct ProcessingJobTests {
         let url = URL(fileURLWithPath: "/path/to/report.docx")
         let job = ProcessingJob(url: url)
 
-        #expect(job.jobType == .pdf)  // Docx is processed like PDF via Docling
+        #expect(job.jobType == .pdf)
     }
 
     @Test func initializationWithPptxURL() {
         let url = URL(fileURLWithPath: "/path/to/presentation.pptx")
         let job = ProcessingJob(url: url)
 
-        #expect(job.jobType == .pdf)  // Pptx is processed like PDF via Docling
+        #expect(job.jobType == .pdf)
     }
 
     @Test func initializationWithHTMLURL() {
         let url = URL(fileURLWithPath: "/path/to/page.html")
         let job = ProcessingJob(url: url)
 
-        #expect(job.jobType == .pdf)  // HTML is processed via Docling
+        #expect(job.jobType == .pdf)
     }
 
     @Test func initializationWithImageURL() {
         let url = URL(fileURLWithPath: "/path/to/image.png")
         let job = ProcessingJob(url: url)
 
-        #expect(job.jobType == .pdf)  // Images are processed via Docling OCR
+        #expect(job.jobType == .pdf)
     }
-
-    // MARK: - Unique ID Tests
 
     @Test func eachJobHasUniqueID() {
         let url = URL(fileURLWithPath: "/path/to/document.pdf")
@@ -81,8 +77,6 @@ struct ProcessingJobTests {
 
         #expect(job1.id != job2.id)
     }
-
-    // MARK: - Status Tests
 
     @Test func defaultStatusIsPending() {
         let job = ProcessingJob(url: URL(fileURLWithPath: "/test.pdf"))
@@ -108,8 +102,6 @@ struct ProcessingJobTests {
         #expect(job.status == .failed)
     }
 
-    // MARK: - Progress Tests
-
     @Test func progressCanBeUpdated() {
         let job = ProcessingJob(url: URL(fileURLWithPath: "/test.pdf"))
 
@@ -119,8 +111,6 @@ struct ProcessingJobTests {
         job.progress = 1.0
         #expect(job.progress == 1.0)
     }
-
-    // MARK: - Chunk Count Tests
 
     @Test func chunkCountsCanBeUpdated() {
         let job = ProcessingJob(url: URL(fileURLWithPath: "/test.pdf"))
@@ -132,16 +122,12 @@ struct ProcessingJobTests {
         #expect(job.embeddedCount == 50)
     }
 
-    // MARK: - Error Tests
-
     @Test func errorCanBeSet() {
         let job = ProcessingJob(url: URL(fileURLWithPath: "/test.pdf"))
 
         job.error = "Something went wrong"
         #expect(job.error == "Something went wrong")
     }
-
-    // MARK: - Case Insensitive Extension Tests
 
     @Test func extensionDetectionIsCaseInsensitive() {
         let pdfUpper = ProcessingJob(url: URL(fileURLWithPath: "/test.PDF"))
