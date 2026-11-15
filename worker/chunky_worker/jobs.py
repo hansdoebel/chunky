@@ -56,6 +56,65 @@ def _apply_printed_labels(chunks: list[dict[str, Any]], pdf_path: Path, settings
 
     return apply_printed_labels(chunks, pdf_path, settings.page_offset)
 
+
+def _enrich_bibliography(chunks: list[dict[str, Any]], pdf_path: Path, settings: JobSettings) -> list[dict[str, Any]]:
+    import sys
+
+    scripts = str(Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from bibliographic import enrich_chunks
+    from chunky_worker.verification import extract_pdf_pages
+
+    pages = extract_pdf_pages(pdf_path) if pdf_path.suffix.lower() == ".pdf" else []
+    llm = (lambda prompt: _llm_complete(settings, prompt)) if settings.metadata_chat_url else None
+    crossref = _crossref_lookup if settings.metadata_crossref else None
+    enrich_chunks(
+        chunks,
+        pages,
+        llm=llm,
+        crossref=crossref,
+        imported_source=settings.metadata_source or None,
+    )
+    return chunks
+
+
+def _llm_complete(settings: JobSettings, prompt: str) -> str:
+    import httpx
+
+    response = httpx.post(
+        settings.metadata_chat_url,
+        json={
+            "model": settings.metadata_model or "chunky",
+            "temperature": 0,
+            "messages": [{"role": "user", "content": prompt}],
+        },
+        timeout=30,
+    )
+    if response.status_code != 200:
+        return ""
+    body = response.json()
+    choices = body.get("choices") or []
+    if not choices:
+        return ""
+    message = choices[0].get("message") or {}
+    return str(message.get("content") or "")
+
+
+def _crossref_lookup(doi: str) -> dict[str, Any] | None:
+    import httpx
+
+    from bibliographic import crossref_fields
+
+    response = httpx.get(
+        f"https://api.crossref.org/works/{doi}",
+        headers={"User-Agent": "chunky-worker (mailto:chunky@localhost)"},
+        timeout=10,
+    )
+    if response.status_code != 200:
+        return None
+    return crossref_fields(response.json())
+
 TERMINAL = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
 
 class JobStore:
@@ -354,6 +413,8 @@ class JobRunner:
             chunks = list(raw.get("chunks") or [])
             ensure_chunk_ids(chunks, hash_file(input_path))
             chunks = _apply_printed_labels(chunks, input_path, job.settings)
+            if job.settings.metadata_enrich:
+                chunks = _enrich_bibliography(chunks, input_path, job.settings)
             raw["chunks"] = chunks
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset
