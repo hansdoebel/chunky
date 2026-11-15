@@ -45,8 +45,8 @@ struct CollectionSnapshotTests {
             collection: "documents",
             server: "http://127.0.0.1:6334",
             snapshots: [SnapshotRecord(name: "documents-2026.snapshot", creationTime: "2026-11-15T00:00:00Z", size: 12)],
-            scrolls: false,
             status: "Ready",
+            scrolls: false,
             onCreate: {},
             onDownload: { _ in },
             onRestore: {}
