@@ -49,9 +49,10 @@ The Python venv is created at `~/.chunky-venv`. Script packages are pinned in `r
 ```
 make run           # build and launch the app
 make build         # build only
-make test          # run Swift tests
-make test-python   # run Python tests (no docling needed)
-make test-all      # run all tests
+make test          # Swift scheme, including UI tests
+make test-python   # Python helper tests (no Docling needed)
+make test-worker   # worker unit tests
+make test-all      # scheme, helper tests, worker tests, and Docling integration
 make clean         # clean build artifacts
 make open-xcode    # open in Xcode
 ```

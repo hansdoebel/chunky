@@ -26,13 +26,26 @@ Retrieval searches the active collection. Dense is the default. Hybrid fuses the
 make first-launch
 make setup-venv
 make build
-make test
 make test-python
 make test-worker
-make test-all
 ```
 
-`make test` is the macOS unit suite (`ChunkyTests` only). `make test-python` is `test_docling_convert` and does not need Docling. `make test-worker` is `pytest` in `worker/`. `make test-integration` needs the Docling venv and is not part of CI.
+`make test` runs the whole Xcode scheme, so it includes `ChunkyUITests` as well as `ChunkyTests`. `make test-all` runs that scheme, the Python helper tests, the worker tests, and `make test-integration`. The integration target needs the Docling venv and is not part of CI.
+
+The unit-only macOS command CI uses is:
+
+```bash
+xcodebuild test \
+  -project Chunky.xcodeproj \
+  -scheme Chunky \
+  -destination 'platform=macOS,arch=arm64' \
+  -only-testing:ChunkyTests \
+  CODE_SIGN_IDENTITY="-" \
+  CODE_SIGNING_REQUIRED=NO \
+  CODE_SIGNING_ALLOWED=NO
+```
+
+`make test-python` is `test_docling_convert` and does not need Docling. `make test-worker` is `pytest` in `worker/`.
 
 From a Linux checkout, `python3 -m pytest -q worker` is the suite that can run here. Swift tests need the macOS runner.
 
