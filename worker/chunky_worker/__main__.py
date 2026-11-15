@@ -12,7 +12,7 @@ import uvicorn
 from chunky_worker.app import create_app
 from chunky_worker.auth import generate_token, write_token_file
 from chunky_worker.logging_config import configure_logging
-from chunky_worker.settings import Settings
+from chunky_worker.settings import BindWithoutTokenError, Settings, require_token_when_exposed
 
 
 def main() -> None:
@@ -45,6 +45,11 @@ def main() -> None:
     settings = Settings.from_env()
     settings.host = args.host
     settings.port = args.port
+    try:
+        require_token_when_exposed(settings)
+    except BindWithoutTokenError as exc:
+        print(str(exc), file=sys.stderr)
+        raise SystemExit(2) from exc
     configure_logging(settings.log_dir)
     uvicorn.run(create_app(settings), host=settings.host, port=settings.port)
 

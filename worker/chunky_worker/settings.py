@@ -68,9 +68,29 @@ def load_token() -> str | None:
     return value or None
 
 
+def is_loopback_host(host: str) -> bool:
+    value = host.lower().strip().strip("[]")
+    return value in {"127.0.0.1", "localhost", "::1"}
+
+
 def is_loopback_url(url: str) -> bool:
-    host = (urlparse(url).hostname or "").lower().strip("[]")
-    return host in {"127.0.0.1", "localhost", "::1"}
+    return is_loopback_host(urlparse(url).hostname or "")
+
+
+class BindWithoutTokenError(RuntimeError):
+    pass
+
+
+def require_token_when_exposed(settings: "Settings") -> None:
+    if is_loopback_host(settings.host):
+        return
+    if settings.token:
+        return
+    raise BindWithoutTokenError(
+        f"Refusing to bind {settings.host}:{settings.port} without a bearer token. "
+        "Set CHUNKY_WORKER_TOKEN or CHUNKY_WORKER_TOKEN_FILE. "
+        "Loopback (127.0.0.1, localhost, ::1) may start without one."
+    )
 
 
 def default_scripts_dir() -> Path:
