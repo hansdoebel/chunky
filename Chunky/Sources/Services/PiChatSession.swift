@@ -26,6 +26,8 @@ nonisolated final class PiChatSession: @unchecked Sendable {
     private var accepting = true
     private var currentOverride = ""
     private var selectedModel = ""
+    private var launchedExecutable: String?
+    private var launchedOverride: String?
 
     init(
         toolMode: PiToolMode = .none,
@@ -141,20 +143,34 @@ nonisolated final class PiChatSession: @unchecked Sendable {
             lock.unlock()
             throw PiSessionError.terminated
         }
-        if let client, let transport, transport.isRunning {
+        let override = currentOverride
+        if let client, let transport, transport.isRunning, launchedOverride == override {
+            lock.unlock()
+            return client
+        }
+        lock.unlock()
+
+        let report = report()
+        guard report.readiness == .ready, let path = report.executablePath else {
+            throw PiSessionError.piUnavailable(report.installHint ?? "pi is not available")
+        }
+
+        lock.lock()
+        if !accepting {
+            lock.unlock()
+            throw PiSessionError.terminated
+        }
+        if let client, let transport, transport.isRunning, launchedExecutable == path {
+            launchedOverride = override
             lock.unlock()
             return client
         }
         let previous = transport
         transport = nil
         client = nil
+        launchedExecutable = nil
         lock.unlock()
         previous?.terminate()
-
-        let report = report()
-        guard report.readiness == .ready, let path = report.executablePath else {
-            throw PiSessionError.piUnavailable(report.installHint ?? "pi is not available")
-        }
         let launched = transportFactory()
         let env = PiLaunch.environment(executable: path, nodePath: report.nodePath, base: environment())
         try launched.launch(executable: path, arguments: PiLaunch.arguments(toolMode: toolMode), environment: env)
@@ -168,6 +184,8 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         }
         transport = launched
         client = created
+        launchedExecutable = path
+        launchedOverride = override
         lock.unlock()
         return created
     }
@@ -177,6 +195,8 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         let previous = transport
         transport = nil
         client = nil
+        launchedExecutable = nil
+        launchedOverride = nil
         lock.unlock()
         previous?.terminate()
     }

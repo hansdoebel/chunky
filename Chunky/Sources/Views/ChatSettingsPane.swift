@@ -4,6 +4,7 @@ struct ChatSettingsPane: View {
     @Binding var backend: String
     @Binding var piPath: String
     @Binding var chatAPIURL: String
+    @Binding var piModel: String
     @Binding var chatModel: String
     @Binding var apiKey: String
     var report: PiInstallReport
@@ -62,8 +63,8 @@ struct ChatSettingsPane: View {
                 statusRow
 
                 if route.kind == .pi, !models.isEmpty {
-                    Picker("Model", selection: $chatModel) {
-                        if chatModel.isEmpty {
+                    Picker("Model", selection: $piModel) {
+                        if piModel.isEmpty {
                             Text("Select a model").tag("")
                         }
                         ForEach(models) { model in
@@ -71,7 +72,7 @@ struct ChatSettingsPane: View {
                         }
                     }
                 } else if route.kind == .pi {
-                    TextField("Model", text: $chatModel, prompt: Text("provider/model"))
+                    TextField("Model", text: $piModel, prompt: Text("provider/model"))
                         .textFieldStyle(.roundedBorder)
                 }
 
@@ -96,10 +97,8 @@ struct ChatSettingsPane: View {
             Section {
                 TextField("Endpoint", text: $chatAPIURL, prompt: Text("http://127.0.0.1:11434/v1"))
                     .textFieldStyle(.roundedBorder)
-                if route.kind != .pi {
-                    TextField("Model", text: $chatModel, prompt: Text("qwen3"))
-                        .textFieldStyle(.roundedBorder)
-                }
+                TextField("Model", text: $chatModel, prompt: Text("qwen3"))
+                    .textFieldStyle(.roundedBorder)
                 SecureField("API key", text: $apiKey, prompt: Text("Optional, stored in the Keychain"))
                     .textFieldStyle(.roundedBorder)
             } header: {

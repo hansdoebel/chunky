@@ -135,6 +135,19 @@ struct PiBackendTests {
         #expect(PiInstallReport.unknown.installHint == nil)
     }
 
+    @Test func versionCheckUsesTheLaunchPathWhenHomebrewIsOffPath() {
+        let fs = VirtualFS()
+        fs.executable("/opt/homebrew/bin/pi", "/opt/homebrew/bin/node")
+        fs.version("/opt/homebrew/bin/pi", "0.78.1")
+        fs.version("/opt/homebrew/bin/node", "v22.21.0")
+        fs.piVersionRequiresPath = "/opt/homebrew/bin"
+        let report = PiLocator.assess(fs.context(home: "/Users/ada", path: "/usr/bin"))
+        #expect(report.readiness == .ready)
+        #expect(report.executablePath == "/opt/homebrew/bin/pi")
+        #expect(report.nodePath == "/opt/homebrew/bin/node")
+        #expect(fs.pathUsedForVersion("/opt/homebrew/bin/pi")?.contains("/opt/homebrew/bin") == true)
+    }
+
     @Test func launchDisablesCodingTools() {
         #expect(PiLaunch.arguments() == ["--mode", "rpc", "--no-session", "--no-tools"])
         #expect(PiLaunch.codingToolsDisabled(in: PiLaunch.arguments()))
@@ -164,17 +177,21 @@ struct PiBackendTests {
         #expect(settings.chatBackend == ChatBackendPreference.automatic.rawValue)
         #expect(settings.piExecutablePath.isEmpty)
         #expect(settings.chatAPIURL == "http://127.0.0.1:11434/v1")
+        #expect(settings.chatModel.isEmpty)
+        #expect(settings.piModel.isEmpty)
         #expect(settings.chatAPIKey.isEmpty)
         settings.chatBackend = ChatBackendPreference.pi.rawValue
         settings.piExecutablePath = "/custom/pi"
         settings.chatAPIURL = "http://127.0.0.1:8080/v1"
-        settings.chatModel = "ollama/qwen3"
+        settings.piModel = "ollama/qwen3"
+        settings.chatModel = "qwen3"
         settings.chatAPIKey = "chunky-secret"
         let again = AppSettings(defaults: defaults, secrets: secrets)
         #expect(again.chatBackend == "pi")
         #expect(again.piExecutablePath == "/custom/pi")
         #expect(again.chatAPIURL == "http://127.0.0.1:8080/v1")
-        #expect(again.chatModel == "ollama/qwen3")
+        #expect(again.piModel == "ollama/qwen3")
+        #expect(again.chatModel == "qwen3")
         #expect(again.chatAPIKey == "chunky-secret")
         again.chatAPIKey = ""
         #expect(secrets.value(for: KeychainService.chatAPIKeyKey) == nil)
@@ -227,7 +244,8 @@ struct PiBackendTests {
         let backend = ChatBackendFactory.make(
             preference: .pi,
             report: .readyFixture,
-            model: "ollama/qwen3",
+            piModel: "ollama/qwen3",
+            chatModel: "qwen3",
             apiURL: "http://127.0.0.1:11434/v1",
             apiKey: "chunky-secret",
             overridePath: "/opt/homebrew/bin/pi",
@@ -262,6 +280,29 @@ struct PiBackendTests {
         }
     }
 
+    @Test func changingThePiPathStartsThatExecutable() async throws {
+        let box = ReportBox(report: .readyFixture)
+        let factory = TransportFactory()
+        let session = PiChatSession(
+            locate: { box.report },
+            transportFactory: { factory.make() },
+            environment: { ["HOME": "/Users/ada", "PATH": "/usr/bin"] }
+        )
+        _ = try await session.availableModels()
+        let replacement = PiInstallReport(
+            readiness: .ready,
+            executablePath: "/Users/ada/.local/bin/pi",
+            piVersion: SemanticVersion(major: 0, minor: 78, patch: 1),
+            nodePath: "/Users/ada/.local/bin/node",
+            nodeVersion: SemanticVersion(major: 22, minor: 21, patch: 0)
+        )
+        box.report = replacement
+        session.setOverridePath("/Users/ada/.local/bin/pi")
+        _ = try await session.availableModels()
+        #expect(factory.launchCount == 2)
+        #expect(factory.launches.last?.executable == "/Users/ada/.local/bin/pi")
+    }
+
     @Test func abortStopsTheFakePiStream() async throws {
         let factory = TransportFactory()
         factory.settlePrompts = false
@@ -289,7 +330,8 @@ struct PiBackendTests {
         let backend = ChatBackendFactory.make(
             preference: .automatic,
             report: .notInstalled,
-            model: "qwen3",
+            piModel: "ollama/qwen3",
+            chatModel: "qwen3",
             apiURL: "http://127.0.0.1:11434/v1/",
             apiKey: "super-secret-token",
             overridePath: "",
@@ -306,6 +348,8 @@ struct PiBackendTests {
         #expect(request.url?.absoluteString == "http://127.0.0.1:11434/v1/chat/completions")
         #expect(request.value(forHTTPHeaderField: "Authorization") == "Bearer super-secret-token")
         #expect(request.url?.absoluteString.contains("super-secret-token") == false)
+        let sent = try JSONSerialization.jsonObject(with: request.httpBody ?? Data())
+        #expect(PiJSONL.dictionary(sent)?["model"] as? String == "qwen3")
 
         let client = OpenAICompatibleChatClient(
             baseURL: "http://127.0.0.1:11434/v1",
@@ -339,7 +383,8 @@ struct PiBackendTests {
         let backend = ChatBackendFactory.make(
             preference: .openAICompatible,
             report: .readyFixture,
-            model: "qwen3",
+            piModel: "ollama/qwen3",
+            chatModel: "qwen3",
             apiURL: "http://127.0.0.1:11434/v1",
             apiKey: "",
             overridePath: "/opt/homebrew/bin/pi",
@@ -356,12 +401,25 @@ struct PiBackendTests {
     }
 }
 
+private final class ReportBox: @unchecked Sendable {
+    var report: PiInstallReport
+    init(report: PiInstallReport) { self.report = report }
+}
+
 private final class VirtualFS: @unchecked Sendable {
     var executables: Set<String> = []
     var shebangs: [String: String] = [:]
     var outputs: [String: String] = [:]
+    var piVersionRequiresPath: String?
     private(set) var commands: [(String, [String])] = []
+    private var versionPATH: [String: String] = [:]
     private let lock = NSLock()
+
+    func pathUsedForVersion(_ executable: String) -> String? {
+        lock.lock()
+        defer { lock.unlock() }
+        return versionPATH[executable]
+    }
 
     func executable(_ paths: String...) {
         executables.formUnion(paths)
@@ -376,6 +434,7 @@ private final class VirtualFS: @unchecked Sendable {
             home: home,
             pathEnvironment: path,
             overridePath: override,
+            baseEnvironment: ["PATH": path, "HOME": home],
             fileExists: { self.executables.contains($0) },
             isExecutable: { self.executables.contains($0) },
             shebang: { path in
@@ -384,11 +443,18 @@ private final class VirtualFS: @unchecked Sendable {
                 }
                 return path.hasSuffix("/pi") ? "#!/usr/bin/env node" : nil
             },
-            commandOutput: { executable, arguments in
+            commandOutput: { executable, arguments, environment in
                 self.lock.lock()
                 self.commands.append((executable, arguments))
+                if arguments == ["--version"] {
+                    self.versionPATH[executable] = environment["PATH"] ?? ""
+                }
+                let required = self.piVersionRequiresPath
                 self.lock.unlock()
                 if arguments == ["--version"] {
+                    if executable.hasSuffix("/pi"), let required, !(environment["PATH"] ?? "").contains(required) {
+                        return nil
+                    }
                     return self.outputs[executable]
                 }
                 if arguments == ["npm", "prefix", "-g"] {

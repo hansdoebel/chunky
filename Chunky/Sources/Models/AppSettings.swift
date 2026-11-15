@@ -275,6 +275,9 @@ class AppSettings: ObservableObject {
     @Published var chatModel: String {
         didSet { defaults.set(chatModel, forKey: prefix + "chatModel") }
     }
+    @Published var piModel: String {
+        didSet { defaults.set(piModel, forKey: prefix + "piModel") }
+    }
 
     var chatAPIKey: String {
         get { secret(KeychainService.chatAPIKeyKey) }
@@ -393,6 +396,7 @@ class AppSettings: ObservableObject {
         self.piExecutablePath = defaults.string(forKey: prefix + "piExecutablePath") ?? ""
         self.chatAPIURL = defaults.string(forKey: prefix + "chatAPIURL") ?? "http://127.0.0.1:11434/v1"
         self.chatModel = defaults.string(forKey: prefix + "chatModel") ?? ""
+        self.piModel = defaults.string(forKey: prefix + "piModel") ?? ""
     }
 
     func save() {

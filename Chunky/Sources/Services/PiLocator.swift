@@ -43,10 +43,11 @@ nonisolated struct PiProbeContext: Sendable {
     var home: String
     var pathEnvironment: String
     var overridePath: String
+    var baseEnvironment: [String: String]
     var fileExists: @Sendable (String) -> Bool
     var isExecutable: @Sendable (String) -> Bool
     var shebang: @Sendable (String) -> String?
-    var commandOutput: @Sendable (String, [String]) -> String?
+    var commandOutput: @Sendable (String, [String], [String: String]) -> String?
 }
 
 nonisolated struct PiInstallReport: Equatable, Sendable {
@@ -216,6 +217,7 @@ nonisolated enum PiLocator {
             home: home,
             pathEnvironment: ProcessInfo.processInfo.environment["PATH"] ?? "",
             overridePath: overridePath,
+            baseEnvironment: ProcessInfo.processInfo.environment,
             fileExists: { path in
                 FileManager.default.fileExists(atPath: path)
             },
@@ -236,8 +238,8 @@ nonisolated enum PiLocator {
                 guard let text = String(data: data, encoding: .utf8) else { return nil }
                 return text.split(whereSeparator: \.isNewline).first.map(String.init)
             },
-            commandOutput: { executable, arguments in
-                PiCommandRunner.output(executable: executable, arguments: arguments)
+            commandOutput: { executable, arguments, environment in
+                PiCommandRunner.output(executable: executable, arguments: arguments, environment: environment)
             }
         )
         return assess(context)
@@ -264,10 +266,9 @@ nonisolated enum PiLocator {
             return .notInstalled
         }
 
-        guard let piText = context.commandOutput(executable, ["--version"]),
-              let piVersion = SemanticVersion.parse(piText) else {
+        guard let node = resolveNode(executable: executable, context: context) else {
             return PiInstallReport(
-                readiness: .piVersionUnreadable,
+                readiness: .nodeMissing,
                 executablePath: executable,
                 piVersion: nil,
                 nodePath: nil,
@@ -275,17 +276,23 @@ nonisolated enum PiLocator {
             )
         }
 
-        guard let node = resolveNode(executable: executable, context: context) else {
+        let launchEnvironment = PiLaunch.environment(
+            executable: executable,
+            nodePath: node,
+            base: baseEnvironment(context)
+        )
+        guard let piText = context.commandOutput(executable, ["--version"], launchEnvironment),
+              let piVersion = SemanticVersion.parse(piText) else {
             return PiInstallReport(
-                readiness: .nodeMissing,
+                readiness: .piVersionUnreadable,
                 executablePath: executable,
-                piVersion: piVersion,
-                nodePath: nil,
+                piVersion: nil,
+                nodePath: node,
                 nodeVersion: nil
             )
         }
 
-        guard let nodeText = context.commandOutput(node, ["--version"]),
+        guard let nodeText = context.commandOutput(node, ["--version"], launchEnvironment),
               let nodeVersion = SemanticVersion.parse(nodeText) else {
             return PiInstallReport(
                 readiness: .nodeVersionUnreadable,
@@ -337,7 +344,7 @@ nonisolated enum PiLocator {
                 return candidate
             }
         }
-        if let prefix = context.commandOutput("/usr/bin/env", ["npm", "prefix", "-g"])?
+        if let prefix = context.commandOutput("/usr/bin/env", ["npm", "prefix", "-g"], baseEnvironment(context))?
             .trimmingCharacters(in: .whitespacesAndNewlines),
            !prefix.isEmpty {
             let candidate = prefix + "/bin/pi"
@@ -375,6 +382,17 @@ nonisolated enum PiLocator {
         return nil
     }
 
+    static func baseEnvironment(_ context: PiProbeContext) -> [String: String] {
+        var base = context.baseEnvironment
+        if (base["PATH"] ?? "").isEmpty {
+            base["PATH"] = context.pathEnvironment
+        }
+        if (base["HOME"] ?? "").isEmpty {
+            base["HOME"] = context.home
+        }
+        return base
+    }
+
     static func expand(_ path: String, home: String) -> String {
         if path == "~" {
             return home
@@ -387,10 +405,17 @@ nonisolated enum PiLocator {
 }
 
 nonisolated enum PiCommandRunner {
-    static func output(executable: String, arguments: [String]) -> String? {
+    static func output(executable: String, arguments: [String], environment: [String: String]) -> String? {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        if !environment.isEmpty {
+            var inherited = ProcessInfo.processInfo.environment
+            for (key, value) in environment {
+                inherited[key] = value
+            }
+            process.environment = inherited
+        }
         let stdout = Pipe()
         let stderr = Pipe()
         process.standardOutput = stdout

@@ -75,7 +75,8 @@ class AppState: ObservableObject {
         ChatBackendFactory.make(
             preference: ChatBackendPreference(rawValue: settings.chatBackend) ?? .automatic,
             report: report,
-            model: settings.chatModel,
+            piModel: settings.piModel,
+            chatModel: settings.chatModel,
             apiURL: settings.chatAPIURL,
             apiKey: settings.chatAPIKey,
             overridePath: settings.piExecutablePath,

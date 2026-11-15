@@ -312,7 +312,8 @@ nonisolated enum ChatBackendFactory {
     static func make(
         preference: ChatBackendPreference,
         report: PiInstallReport,
-        model: String,
+        piModel: String,
+        chatModel: String,
         apiURL: String,
         apiKey: String,
         overridePath: String,
@@ -323,9 +324,9 @@ nonisolated enum ChatBackendFactory {
         let route = ChatRouter.route(preference: preference, report: report)
         switch route.kind {
         case .pi:
-            return PiStreamingChat(session: session, model: model)
+            return PiStreamingChat(session: session, model: piModel)
         case .openAICompatible:
-            return OpenAICompatibleChatClient(baseURL: apiURL, model: model, apiKey: apiKey, http: http)
+            return OpenAICompatibleChatClient(baseURL: apiURL, model: chatModel, apiKey: apiKey, http: http)
         }
     }
 }

@@ -102,6 +102,7 @@ struct PreferencesView: View {
             backend: $appState.settings.chatBackend,
             piPath: $appState.settings.piExecutablePath,
             chatAPIURL: $appState.settings.chatAPIURL,
+            piModel: $appState.settings.piModel,
             chatModel: $appState.settings.chatModel,
             apiKey: $chatAPIKeyInput,
             report: piReport,
@@ -133,8 +134,8 @@ struct PreferencesView: View {
         appState.piSession.setOverridePath(appState.settings.piExecutablePath)
         do {
             piModels = try await appState.piSession.availableModels()
-            if appState.settings.chatModel.isEmpty, let first = piModels.first {
-                appState.settings.chatModel = first.modelIdentifier
+            if appState.settings.piModel.isEmpty, let first = piModels.first {
+                appState.settings.piModel = first.modelIdentifier
             }
         } catch {
             piModels = []

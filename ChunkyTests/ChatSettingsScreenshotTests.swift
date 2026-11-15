@@ -86,6 +86,7 @@ private struct ChatSettingsSnapshot: View {
     @State private var backendValue: String
     @State private var piPath: String
     @State private var chatAPIURL: String
+    @State private var piModel: String
     @State private var chatModel: String
     @State private var apiKey: String
 
@@ -96,7 +97,8 @@ private struct ChatSettingsSnapshot: View {
         _backendValue = State(initialValue: backend)
         _piPath = State(initialValue: "")
         _chatAPIURL = State(initialValue: "http://127.0.0.1:11434/v1")
-        _chatModel = State(initialValue: models.first?.modelIdentifier ?? "")
+        _piModel = State(initialValue: models.first?.modelIdentifier ?? "")
+        _chatModel = State(initialValue: "qwen3")
         _apiKey = State(initialValue: "")
     }
 
@@ -105,6 +107,7 @@ private struct ChatSettingsSnapshot: View {
             backend: $backendValue,
             piPath: $piPath,
             chatAPIURL: $chatAPIURL,
+            piModel: $piModel,
             chatModel: $chatModel,
             apiKey: $apiKey,
             report: report,
