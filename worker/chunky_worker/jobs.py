@@ -1,0 +1,240 @@
+"""In-memory job store, runner, and cancellation."""
+
+from __future__ import annotations
+
+import logging
+import threading
+import uuid
+from pathlib import Path
+from typing import Any
+
+from chunky_worker.embeddings import EmbeddingBackend
+from chunky_worker.exceptions import JobCanceled
+from chunky_worker.models import (
+    Job,
+    JobMode,
+    JobResult,
+    JobSettings,
+    JobStatus,
+    ProgressEvent,
+)
+from chunky_worker.pipeline import DocumentPipeline
+from chunky_worker.settings import Settings
+
+log = logging.getLogger(__name__)
+
+TERMINAL = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
+
+
+class JobStore:
+    def __init__(self) -> None:
+        self._lock = threading.Lock()
+        self._jobs: dict[str, Job] = {}
+        self._events: dict[str, list[dict[str, Any]]] = {}
+        self._cancels: dict[str, threading.Event] = {}
+        self._changed: dict[str, threading.Event] = {}
+
+    def create(self, filename: str, settings: JobSettings) -> Job:
+        job_id = str(uuid.uuid4())
+        job = Job(id=job_id, filename=filename, settings=settings)
+        with self._lock:
+            self._jobs[job_id] = job
+            self._events[job_id] = []
+            self._cancels[job_id] = threading.Event()
+            self._changed[job_id] = threading.Event()
+        return job
+
+    def get(self, job_id: str) -> Job | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            return job.model_copy(deep=True) if job else None
+
+    def cancel_event(self, job_id: str) -> threading.Event | None:
+        with self._lock:
+            return self._cancels.get(job_id)
+
+    def request_cancel(self, job_id: str) -> Job | None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is None:
+                return None
+            if job.status in TERMINAL:
+                return job.model_copy(deep=True)
+            self._cancels[job_id].set()
+            if job.status == JobStatus.QUEUED:
+                job.status = JobStatus.CANCELED
+                job.error = "canceled"
+                event = {"type": "canceled", "message": "Job canceled", "status": "canceled"}
+                self._events[job_id].append(event)
+                job.progress = ProgressEvent(**event)
+                self._changed[job_id].set()
+            return job.model_copy(deep=True)
+
+    def append_event(self, job_id: str, event: dict[str, Any]) -> None:
+        with self._lock:
+            self._events[job_id].append(event)
+            job = self._jobs[job_id]
+            job.progress = ProgressEvent(
+                type=event.get("type", "progress"),
+                message=event.get("message"),
+                percent=event.get("percent"),
+                status=event.get("status"),
+            )
+            self._changed[job_id].set()
+
+    def set_status(self, job_id: str, status: JobStatus, **updates: Any) -> Job:
+        with self._lock:
+            job = self._jobs[job_id]
+            job.status = status
+            for key, value in updates.items():
+                setattr(job, key, value)
+            self._changed[job_id].set()
+            return job.model_copy(deep=True)
+
+    def events_since(self, job_id: str, index: int) -> tuple[list[dict[str, Any]], bool]:
+        with self._lock:
+            events = self._events[job_id][index:]
+            job = self._jobs[job_id]
+            done = job.status in TERMINAL
+            return events, done
+
+    def wait_for_events(self, job_id: str, timeout: float = 0.25) -> None:
+        with self._lock:
+            changed = self._changed.get(job_id)
+        if changed is None:
+            return
+        changed.wait(timeout=timeout)
+        changed.clear()
+
+
+class JobRunner:
+    def __init__(
+        self,
+        store: JobStore,
+        settings: Settings,
+        pipeline: DocumentPipeline,
+        embeddings: EmbeddingBackend,
+    ) -> None:
+        self.store = store
+        self.settings = settings
+        self.pipeline = pipeline
+        self.embeddings = embeddings
+
+    def start(self, job_id: str, input_path: Path) -> None:
+        thread = threading.Thread(
+            target=self._run,
+            args=(job_id, input_path),
+            name=f"chunky-job-{job_id[:8]}",
+            daemon=True,
+        )
+        thread.start()
+
+    def _emit(self, job_id: str, message: str, percent: float | None = None, type: str = "progress") -> None:
+        event: dict[str, Any] = {"type": type, "message": message}
+        if percent is not None:
+            event["percent"] = percent
+        self.store.append_event(job_id, event)
+
+    def _run(self, job_id: str, input_path: Path) -> None:
+        job = self.store.get(job_id)
+        if job is None:
+            return
+        cancel_event = self.store.cancel_event(job_id)
+        assert cancel_event is not None
+        output_dir = self.settings.work_dir / job_id / "out"
+        output_dir.mkdir(parents=True, exist_ok=True)
+
+        try:
+            if cancel_event.is_set():
+                raise JobCanceled()
+            self.store.set_status(job_id, JobStatus.RUNNING)
+            self._emit(job_id, "Job started", 0)
+
+            def on_progress(message: str, percent: float | None = None) -> None:
+                self._emit(job_id, message, percent)
+
+            raw = self.pipeline.convert_and_chunk(
+                input_path=input_path,
+                output_dir=output_dir,
+                settings=job.settings,
+                on_progress=on_progress,
+                cancel_event=cancel_event,
+            )
+            if cancel_event.is_set():
+                raise JobCanceled()
+
+            if not raw.get("success", False):
+                self.store.set_status(
+                    job_id,
+                    JobStatus.FAILED,
+                    error=raw.get("error") or "conversion failed",
+                    error_type=raw.get("error_type"),
+                )
+                self.store.append_event(
+                    job_id,
+                    {
+                        "type": "error",
+                        "message": raw.get("error") or "conversion failed",
+                        "status": "failed",
+                    },
+                )
+                return
+
+            chunks = list(raw.get("chunks") or [])
+            result = JobResult(
+                mode=job.settings.mode,
+                success=True,
+                input_filename=job.filename,
+                output_file=raw.get("output_file"),
+                output_format=raw.get("output_format"),
+                page_count=raw.get("page_count"),
+                text_items_count=raw.get("text_items_count"),
+                table_count=raw.get("table_count"),
+                doc_title=raw.get("doc_title"),
+                authors=raw.get("authors"),
+                language=raw.get("language"),
+                year=raw.get("year"),
+                chunks=chunks,
+            )
+
+            if job.settings.mode == JobMode.CHUNK_AND_EMBED:
+                if cancel_event.is_set():
+                    raise JobCanceled()
+                model = job.settings.embedding_model or self.settings.embedding_model
+                self._emit(job_id, f"Embedding {len(chunks)} chunks with {model}", 94)
+                texts = [
+                    chunk.get("embedding_text") or chunk.get("text") or ""
+                    for chunk in chunks
+                ]
+                vectors = self.embeddings.embed(texts, model)
+                result.embeddings = vectors
+                result.embedding_model = model
+                result.embedding_dim = len(vectors[0]) if vectors else 0
+
+            if cancel_event.is_set():
+                raise JobCanceled()
+
+            self.store.set_status(job_id, JobStatus.SUCCEEDED, result=result, error=None)
+            self.store.append_event(
+                job_id,
+                {"type": "complete", "message": "Job complete", "percent": 100, "status": "succeeded"},
+            )
+        except JobCanceled:
+            log.info("Job %s canceled", job_id)
+            self.store.set_status(job_id, JobStatus.CANCELED, error="canceled")
+            self.store.append_event(
+                job_id,
+                {"type": "canceled", "message": "Job canceled", "status": "canceled"},
+            )
+        except Exception as exc:  # noqa: BLE001 — surface any pipeline failure on the job
+            log.exception("Job %s failed", job_id)
+            self.store.set_status(
+                job_id,
+                JobStatus.FAILED,
+                error=str(exc),
+                error_type="exception",
+            )
+            self.store.append_event(
+                job_id,
+                {"type": "error", "message": str(exc), "status": "failed"},
+            )
