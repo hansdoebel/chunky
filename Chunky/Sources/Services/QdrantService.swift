@@ -165,6 +165,34 @@ class QdrantService: ObservableObject {
             }
         }
         try await createPayloadIndexes(collection: name)
+        if hybrid {
+            try await ensureBM25TextIndex(collection: name)
+        }
+    }
+
+    func ensureBM25TextIndex(collection: String) async throws {
+        guard let base = pendingUrl, let endpoint = HybridQuery.indexURL(qdrantURL: base, collection: collection) else {
+            throw QdrantServiceError.notConfigured
+        }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "PUT"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let apiKey = pendingApiKey, !apiKey.isEmpty {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: HybridQuery.indexBody())
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw QdrantServiceError.operationFailed("No HTTP response while creating the BM25 text index")
+        }
+        if (200..<300).contains(http.statusCode) || http.statusCode == 409 {
+            return
+        }
+        let detail = String(data: data, encoding: .utf8) ?? ""
+        if detail.lowercased().contains("already exists") {
+            return
+        }
+        throw QdrantServiceError.operationFailed("BM25 text index failed with HTTP \(http.statusCode). \(detail)")
     }
 
     func createPayloadIndexes(collection: String) async throws {

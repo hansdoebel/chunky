@@ -179,7 +179,7 @@ def hybrid_query_arguments(
     from qdrant_client.models import Prefetch, Rrf, RrfQuery, TextQuery
 
     query_filter = build_query_filter(filters)
-    prefetch_limit = max(limit, 1)
+    prefetch_limit = max(limit + max(offset, 0), 1)
     dense = Prefetch(query=vector, using=using, filter=query_filter, limit=prefetch_limit)
     lexical = Prefetch(query=TextQuery(text=text), using=BM25_TEXT_FIELD, filter=query_filter, limit=prefetch_limit)
     rrf = Rrf(weights=weights) if weights else Rrf()

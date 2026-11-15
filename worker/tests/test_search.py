@@ -145,7 +145,7 @@ def test_hybrid_rrf_request_uses_text_query_and_optional_weights():
     dense, lexical = arguments["prefetch"]
     assert dense.query == [0.1, 0.2, 0.3]
     assert dense.using == "dense"
-    assert dense.limit == 8
+    assert dense.limit == 10
     assert isinstance(lexical.query, TextQuery)
     assert lexical.query.text == "revenue by year"
     assert lexical.using == "text"

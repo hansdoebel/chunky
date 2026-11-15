@@ -13,6 +13,7 @@ typealias RetrievalQueryFilter = Filter
 
 enum RetrievalMode: String, CaseIterable, Identifiable, Sendable {
     case dense
+    case hybrid
 
     var id: String { rawValue }
 
@@ -348,29 +349,77 @@ enum HybridQuery {
         denseUsing: String?,
         limit: Int,
         offset: Int,
-        weights: [Double]?
+        weights: [Double]?,
+        filters: [RetrievalFilter] = []
     ) -> [String: Any] {
-        let prefetchLimit = max(limit, 1)
+        let prefetchLimit = max(limit + max(offset, 0), 1)
         var dense: [String: Any] = ["query": vector, "limit": prefetchLimit]
+        let filter = restFilter(filters)
+        if let filter {
+            dense["filter"] = filter
+        }
         if let denseUsing {
             dense["using"] = denseUsing
         }
-        let lexical: [String: Any] = [
+        var lexical: [String: Any] = [
             "query": ["text": text],
             "using": textField,
             "limit": prefetchLimit,
         ]
+        if let filter {
+            lexical["filter"] = filter
+        }
         var rrf: [String: Any] = [:]
         if let weights {
             rrf["weights"] = weights
         }
-        return [
+        var body: [String: Any] = [
             "prefetch": [dense, lexical],
             "query": ["rrf": rrf],
             "limit": limit,
             "offset": offset,
             "with_payload": true,
             "with_vector": false,
+        ]
+        if let filter {
+            body["filter"] = filter
+        }
+        return body
+    }
+
+    static func restFilter(_ filters: [RetrievalFilter]) -> [String: Any]? {
+        var must: [[String: Any]] = []
+        for item in filters {
+            let key = item.key.trimmingCharacters(in: .whitespacesAndNewlines)
+            guard !key.isEmpty else { continue }
+            if let match = item.match {
+                let value: Any
+                switch match {
+                case .text(let text):
+                    value = text
+                case .integer(let number):
+                    value = number
+                case .boolean(let flag):
+                    value = flag
+                }
+                must.append(["key": key, "match": ["value": value]])
+            }
+            if item.hasRange {
+                var range: [String: Any] = [:]
+                if let value = item.gt { range["gt"] = value }
+                if let value = item.gte { range["gte"] = value }
+                if let value = item.lt { range["lt"] = value }
+                if let value = item.lte { range["lte"] = value }
+                must.append(["key": key, "range": range])
+            }
+        }
+        return must.isEmpty ? nil : ["must": must]
+    }
+
+    static func indexBody() -> [String: Any] {
+        [
+            "field_name": textField,
+            "field_schema": ["type": "text", "scoring": ["type": "bm25"]],
         ]
     }
 
@@ -384,6 +433,18 @@ enum HybridQuery {
         url.appendPathComponent(collection)
         url.appendPathComponent("points")
         url.appendPathComponent("query")
+        return url
+    }
+
+    static func indexURL(qdrantURL: String, collection: String) -> URL? {
+        guard var components = URLComponents(string: qdrantURL), components.host != nil else { return nil }
+        if components.port == 6334 {
+            components.port = 6333
+        }
+        guard var url = components.url else { return nil }
+        url.appendPathComponent("collections")
+        url.appendPathComponent(collection)
+        url.appendPathComponent("index")
         return url
     }
 
@@ -600,7 +661,8 @@ struct RetrievalService {
                 denseUsing: vectorName,
                 limit: request.limit,
                 offset: request.offset,
-                weights: request.rrfWeights
+                weights: request.rrfWeights,
+                filters: request.filters
             )
             hits = try await index.hybridRRF(
                 collection: request.collection,

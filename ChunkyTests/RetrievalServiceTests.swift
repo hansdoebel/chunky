@@ -215,9 +215,23 @@ struct RetrievalServiceTests {
         let lexical = try #require(prefetch[1]["query"] as? [String: String])
         #expect(lexical["text"] == "revenue by year")
         #expect(prefetch[1]["using"] as? String == "text")
+        #expect(prefetch[0]["limit"] as? Int == 10)
+        #expect(prefetch[1]["limit"] as? Int == 10)
         let query = try #require(weighted["query"] as? [String: Any])
         let rrf = try #require(query["rrf"] as? [String: Any])
         #expect(rrf["weights"] as? [Double] == [0.7, 0.3])
+        let filtered = HybridQuery.body(
+            vector: [0.1],
+            text: "revenue",
+            denseUsing: "dense",
+            limit: 4,
+            offset: 0,
+            weights: nil,
+            filters: RetrievalFilter.playground(source: "paper.pdf", page: "2", contentType: "text")
+        )
+        let filteredPrefetch = try #require(filtered["prefetch"] as? [[String: Any]])
+        let must = try #require((filteredPrefetch[0]["filter"] as? [String: Any])?["must"] as? [[String: Any]])
+        #expect(must.count == 3)
         let plain = HybridQuery.body(vector: [0.1], text: "revenue", denseUsing: nil, limit: 4, offset: 0, weights: nil)
         let plainQuery = try #require(plain["query"] as? [String: Any])
         let plainRRF = try #require(plainQuery["rrf"] as? [String: Any])
