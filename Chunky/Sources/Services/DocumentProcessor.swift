@@ -1427,13 +1427,14 @@ class DocumentProcessor: ObservableObject {
         let documentChunks: [ChunkingService.DocumentChunk] = parsed.chunks.enumerated().map { index, raw in
             ChunkingService.DocumentChunk(
                 id: raw["id"] as? String ?? UUID().uuidString,
-                documentId: job.watchedDocID,
                 text: raw["text"] as? String ?? "",
                 source: job.fileName,
                 page: (raw["page"] as? NSNumber)?.intValue,
                 headings: (raw["headings"] as? [Any])?.compactMap { $0 as? String } ?? [],
                 chunkIndex: (raw["chunk_index"] as? NSNumber)?.intValue ?? index,
                 contentType: raw["content_type"] as? String ?? "text",
+                doi: raw["doi"] as? String,
+                documentId: job.watchedDocID,
                 embeddingText: raw["embedding_text"] as? String,
                 pictureDescription: raw["picture_description"] as? String,
                 pictureClass: raw["picture_class"] as? String,
