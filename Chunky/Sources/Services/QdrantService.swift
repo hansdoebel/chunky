@@ -154,12 +154,18 @@ class QdrantService: ObservableObject {
             throw QdrantServiceError.notConnected
         }
 
-        let keywordFields = ["source", "doc_title", "authors", "content_type", "language", "doi"]
+        let keywordFields = ["source", "doc_title", "authors", "content_type", "language", "doi", "picture_class"]
+        let textFields = ["picture_description", "table_markdown", "embedding_text"]
         let integerFields = ["page", "year"]
 
         for field in keywordFields {
             try? await client.points.createFieldIndex(
                 collection: collection, fieldName: field, fieldType: .keyword, wait: false
+            )
+        }
+        for field in textFields {
+            try? await client.points.createFieldIndex(
+                collection: collection, fieldName: field, fieldType: .text, wait: false
             )
         }
         for field in integerFields {
