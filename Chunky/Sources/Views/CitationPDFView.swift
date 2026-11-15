@@ -2,6 +2,7 @@ import AppKit
 import SwiftUI
 
 struct CitationPDFScreen: View {
+    @Environment(\.dismiss) private var dismiss
     var highlight: CitationHighlight
     var pageImage: (Int) -> (image: NSImage, size: VerificationReport.PageSize)?
     var fallbackImage: (Int) -> (image: NSImage, size: VerificationReport.PageSize)?
@@ -21,9 +22,13 @@ struct CitationPDFScreen: View {
         let size = rendered?.size ?? VerificationReport.PageSize(width: 612, height: 792)
         let note = note(rendered: rendered != nil)
         VStack(alignment: .leading, spacing: 12) {
-            Text(highlight.title.isEmpty ? "Source PDF" : highlight.title)
-                .font(.title2)
-                .lineLimit(2)
+            HStack(alignment: .firstTextBaseline) {
+                Text(highlight.title.isEmpty ? "Source PDF" : highlight.title)
+                    .font(.title2)
+                    .lineLimit(2)
+                Spacer()
+                Button("Close") { dismiss() }
+            }
             Text(highlight.chrome)
                 .font(.headline)
             if let note {

@@ -7,6 +7,18 @@ import Testing
 @testable import Chunky
 
 struct CitationPDFTests {
+    @Test func cachedPointsSaveAMissingPathWithoutTouchingStoredVectors() {
+        let points = [
+            (id: "keep", sourcePath: Optional("/Users/me/paper.pdf")),
+            (id: "blank", sourcePath: Optional("")),
+            (id: "moved", sourcePath: Optional("/old/paper.pdf")),
+            (id: "none", sourcePath: Optional<String>.none),
+        ]
+        #expect(CitationPDF.pointIDs(missing: "/Users/me/paper.pdf", in: points) == ["blank", "moved", "none"])
+        #expect(CitationPDF.pointIDs(missing: "  ", in: points).isEmpty)
+        #expect(!CitationPDF.shouldStore(path: "/Users/me/paper.pdf", existing: "/Users/me/paper.pdf"))
+    }
+
     @Test func resolvesTheOriginalPDFAndReportsAMissingFile() {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
         let pdf = folder.appendingPathComponent("paper.pdf")

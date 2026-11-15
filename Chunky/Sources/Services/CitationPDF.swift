@@ -15,6 +15,19 @@ enum CitationPDF {
     static let missingFile = "The source PDF is not on this Mac."
     static let unreadableFile = "The source PDF could not be opened."
 
+    static func shouldStore(path: String, existing: String?) -> Bool {
+        let trimmed = path.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return false }
+        let current = existing?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return current != trimmed
+    }
+
+    static func pointIDs(missing path: String, in points: [(id: String, sourcePath: String?)]) -> [String] {
+        points.compactMap { point in
+            shouldStore(path: path, existing: point.sourcePath) ? point.id : nil
+        }
+    }
+
     static func resolve(
         path: String?,
         source: String,

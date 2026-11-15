@@ -869,12 +869,14 @@ class DocumentProcessor: ObservableObject {
                 if !hashToPoint.isEmpty {
                     var needsEmbedding: [ChunkingService.DocumentChunk] = []
                     var skippedHashes = Set<String>()
+                    var pathIDs: [String] = []
 
                     for chunk in chunks {
                         let hash = contentHash(text: chunk.embeddingText ?? chunk.text, model: settings.embeddingModel)
                         if let existingPoint = hashToPoint[hash] {
                             var metadata = existingPoint.metadata
-                            if metadata["source_path"]?.isEmpty != false {
+                            if CitationPDF.shouldStore(path: job.sourceURL.path, existing: metadata["source_path"]) {
+                                pathIDs.append(existingPoint.id)
                                 metadata["source_path"] = job.sourceURL.path
                             }
                             cachedPoints.append(ChunkPoint(
@@ -890,6 +892,14 @@ class DocumentProcessor: ObservableObject {
                         } else {
                             needsEmbedding.append(chunk)
                         }
+                    }
+
+                    if !pathIDs.isEmpty {
+                        try await qdrant.setPayload(
+                            collectionName: collectionName,
+                            ids: pathIDs,
+                            fields: ["source_path": job.sourceURL.path]
+                        )
                     }
 
                     if !skippedHashes.isEmpty {
