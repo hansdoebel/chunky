@@ -30,14 +30,11 @@ enum CollectionSnapshots {
     }
 
     static func endpoint(settings: AppSettings) -> (url: String, apiKey: String) {
-        if settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud {
-            return (settings.qdrantCloudURL, settings.qdrantAPIKey)
-        }
-        return (settings.qdrantURL, settings.qdrantAPIKey)
+        (settings.qdrantURL, settings.qdrantAPIKey)
     }
 
-    static func confirmOverwrite(collection: String) -> String {
-        "Replace \(collection) with this snapshot? Existing points in that collection are overwritten."
+    static func confirmOverwrite(collection: String, server: String) -> String {
+        "Replace \(collection) on \(server) with this snapshot? Existing points in that collection are overwritten."
     }
 }
 
@@ -175,27 +172,34 @@ struct LiveSnapshotTransport: SnapshotTransport {
         }
         let boundary = "chunky-snapshot"
         request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
-        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: streamingUpload(file: file, boundary: boundary))
+        let temporary = try streamingUpload(file: file, boundary: boundary)
+        defer { try? FileManager.default.removeItem(at: temporary) }
+        let (data, response) = try await URLSession.shared.upload(for: request, fromFile: temporary)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
         return (status, data)
     }
 
     private func streamingUpload(file: URL, boundary: String) throws -> URL {
         let temporary = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-        let header = Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"snapshot\"; filename=\"\(file.lastPathComponent)\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8)
-        let footer = Data("\r\n--\(boundary)--\r\n".utf8)
-        FileManager.default.createFile(atPath: temporary.path, contents: nil)
-        let output = try FileHandle(forWritingTo: temporary)
-        try output.write(contentsOf: header)
-        let input = try FileHandle(forReadingFrom: file)
-        while true {
-            let chunk = try input.read(upToCount: 1024 * 1024) ?? Data()
-            if chunk.isEmpty { break }
-            try output.write(contentsOf: chunk)
+        do {
+            let header = Data("--\(boundary)\r\nContent-Disposition: form-data; name=\"snapshot\"; filename=\"\(file.lastPathComponent)\"\r\nContent-Type: application/octet-stream\r\n\r\n".utf8)
+            let footer = Data("\r\n--\(boundary)--\r\n".utf8)
+            FileManager.default.createFile(atPath: temporary.path, contents: nil)
+            let output = try FileHandle(forWritingTo: temporary)
+            try output.write(contentsOf: header)
+            let input = try FileHandle(forReadingFrom: file)
+            while true {
+                let chunk = try input.read(upToCount: 1024 * 1024) ?? Data()
+                if chunk.isEmpty { break }
+                try output.write(contentsOf: chunk)
+            }
+            try output.write(contentsOf: footer)
+            try input.close()
+            try output.close()
+            return temporary
+        } catch {
+            try? FileManager.default.removeItem(at: temporary)
+            throw error
         }
-        try output.write(contentsOf: footer)
-        try input.close()
-        try output.close()
-        return temporary
     }
 }

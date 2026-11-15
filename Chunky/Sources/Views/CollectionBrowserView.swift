@@ -143,7 +143,7 @@ struct CollectionBrowserView: View {
             }
         }
         .sheet(isPresented: $showSnapshots) {
-            CollectionSnapshotsScreen()
+            CollectionSnapshotsScreen(onRestored: { selectedIds.removeAll() })
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showNewCollection) {

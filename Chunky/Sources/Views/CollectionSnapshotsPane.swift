@@ -3,8 +3,10 @@ import SwiftUI
 
 struct CollectionSnapshotsPane: View {
     var collection: String
+    var server: String
     var snapshots: [SnapshotRecord]
     var status: String
+    var scrolls: Bool = true
     var onCreate: () -> Void
     var onDownload: (String) -> Void
     var onRestore: () -> Void
@@ -16,6 +18,38 @@ struct CollectionSnapshotsPane: View {
             Text(collection.isEmpty ? "Choose a collection" : collection)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Text(server.isEmpty ? "Server URL is not set" : server)
+                .font(.caption.weight(.semibold))
+            snapshotRows
+            HStack {
+                Button("Create snapshot", action: onCreate)
+                    .buttonStyle(.borderedProminent)
+                    .disabled(collection.isEmpty)
+                Button("Restore snapshot", action: onRestore)
+                    .disabled(collection.isEmpty)
+            }
+            Text(status)
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            Text("Qdrant Cloud may refuse a snapshot download. Local Docker supports create, download, and restore. Restore asks before it overwrites the collection.")
+                .font(.caption)
+                .foregroundStyle(.secondary)
+        }
+        .padding(16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var snapshotRows: some View {
+        if scrolls {
+            ScrollView { rowStack }
+        } else {
+            rowStack
+        }
+    }
+
+    private var rowStack: some View {
+        VStack(alignment: .leading, spacing: 8) {
             if snapshots.isEmpty {
                 Text("No snapshots yet.")
                     .foregroundStyle(.secondary)
@@ -34,27 +68,13 @@ struct CollectionSnapshotsPane: View {
                     }
                 }
             }
-            HStack {
-                Button("Create snapshot", action: onCreate)
-                    .buttonStyle(.borderedProminent)
-                    .disabled(collection.isEmpty)
-                Button("Restore snapshot", action: onRestore)
-                    .disabled(collection.isEmpty)
-            }
-            Text(status)
-                .font(.caption)
-                .foregroundStyle(.secondary)
-            Text("Qdrant Cloud may refuse a snapshot download. Local Docker supports create, download, and restore. Restore asks before it overwrites the collection.")
-                .font(.caption)
-                .foregroundStyle(.secondary)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
 struct CollectionSnapshotsScreen: View {
     @EnvironmentObject private var appState: AppState
+    var onRestored: () -> Void = {}
     @State private var snapshots: [SnapshotRecord] = []
     @State private var status = "Create a snapshot, download it, or restore one into this collection."
     @State private var restoreFile: URL?
@@ -64,6 +84,7 @@ struct CollectionSnapshotsScreen: View {
     var body: some View {
         CollectionSnapshotsPane(
             collection: appState.settings.defaultCollection,
+            server: CollectionSnapshots.endpoint(settings: appState.settings).url,
             snapshots: snapshots,
             status: status,
             onCreate: { Task { await create() } },
@@ -76,7 +97,7 @@ struct CollectionSnapshotsScreen: View {
             Button("Cancel", role: .cancel) { restoreFile = nil }
             Button("Replace collection", role: .destructive) { Task { await restore() } }
         } message: {
-            Text(CollectionSnapshots.confirmOverwrite(collection: appState.settings.defaultCollection))
+            Text(CollectionSnapshots.confirmOverwrite(collection: appState.settings.defaultCollection, server: CollectionSnapshots.endpoint(settings: appState.settings).url))
         }
     }
 
@@ -135,7 +156,10 @@ struct CollectionSnapshotsScreen: View {
         let collection = appState.settings.defaultCollection
         do {
             try await client.restore(baseURL: endpoint.url, apiKey: endpoint.apiKey, collection: collection, file: file)
-            status = "Restored \(file.lastPathComponent) into \(collection)"
+            status = "Restored \(file.lastPathComponent) into \(collection) on \(endpoint.url)"
+            onRestored()
+            await appState.fetchCollections()
+            await appState.loadBrowserPoints()
         } catch {
             status = error.localizedDescription
         }

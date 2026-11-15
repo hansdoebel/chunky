@@ -30,19 +30,22 @@ struct CollectionSnapshotTests {
         #expect(transport.calls[3].path.hasSuffix("/collections/documents/snapshots/upload"))
         #expect(transport.calls[3].query == "priority=snapshot")
         #expect(transport.apiKeys == ["secret", "secret", "secret", "secret"])
-        #expect(CollectionSnapshots.confirmOverwrite(collection: "documents").contains("documents"))
+        #expect(CollectionSnapshots.confirmOverwrite(collection: "documents", server: "http://127.0.0.1:6334").contains("127.0.0.1"))
         let cloud = IsolatedSettings.make()
         cloud.processingHost = .devbox
         cloud.devboxIngestTarget = .qdrantCloud
+        cloud.qdrantURL = "http://127.0.0.1:6334"
         cloud.qdrantCloudURL = "https://example.cloud.qdrant.io:6333"
         cloud.qdrantAPIKey = "secret"
-        #expect(CollectionSnapshots.endpoint(settings: cloud).url == "https://example.cloud.qdrant.io:6333")
+        #expect(CollectionSnapshots.endpoint(settings: cloud).url == "http://127.0.0.1:6334")
     }
 
     @Test @MainActor func snapshotPaneRenders() throws {
         let view = CollectionSnapshotsPane(
             collection: "documents",
+            server: "http://127.0.0.1:6334",
             snapshots: [SnapshotRecord(name: "documents-2026.snapshot", creationTime: "2026-11-15T00:00:00Z", size: 12)],
+            scrolls: false,
             status: "Ready",
             onCreate: {},
             onDownload: { _ in },
