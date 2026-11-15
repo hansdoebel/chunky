@@ -6,17 +6,20 @@ struct NewCollectionSheet: View {
 
     @State private var preset: CollectionPreset = .recommended
     @State private var plan: CollectionPlan
+    @State private var packing = CollectionPacking.localDefault
     @State private var vectorVerified = false
     @State private var probeMessage = "Vector size is unverified until a probe succeeds."
 
     init(vectorSize: Int, embeddingBackend: String, embeddingModel: String) {
-        _plan = State(initialValue: CollectionPlan.preset(
+        var initial = CollectionPlan.preset(
             .recommended,
             name: "",
             vectorSize: vectorSize,
             embeddingBackend: embeddingBackend,
             embeddingModel: embeddingModel
-        ))
+        )
+        initial.onDisk = CollectionPacking.localDefault.payload == .cold || CollectionPacking.localDefault.vectors == .cold
+        _plan = State(initialValue: initial)
     }
 
     var body: some View {
@@ -37,6 +40,9 @@ struct NewCollectionSheet: View {
                     embeddingBackend: plan.embeddingBackend,
                     embeddingModel: plan.embeddingModel
                 )
+                packing = newValue == .largeCloud ? .freeTier : .localDefault
+                packing.quantization = plan.quantization
+                syncStorageEstimate()
             }
             TextField("Name", text: $plan.name)
             Picker("Target", selection: $plan.target) {
@@ -77,10 +83,37 @@ struct NewCollectionSheet: View {
                     .font(.caption)
                     .foregroundStyle(.orange)
             }
-            Toggle("On-disk vectors and payload", isOn: $plan.onDisk)
-            Text(plan.storageHint)
+            Picker("Vectors", selection: $packing.vectors) {
+                ForEach(MemoryTier.allCases) { tier in
+                    Text(tier.displayName).tag(tier)
+                }
+            }
+            Picker("HNSW", selection: $packing.hnsw) {
+                ForEach(MemoryTier.allCases) { tier in
+                    Text(tier.displayName).tag(tier)
+                }
+            }
+            Picker("Quantized vectors", selection: $packing.quantizationTier) {
+                ForEach(MemoryTier.allCases) { tier in
+                    Text(tier.displayName).tag(tier)
+                }
+            }
+            Picker("Payload", selection: $packing.payload) {
+                ForEach(MemoryTier.allCases) { tier in
+                    Text(tier.displayName).tag(tier)
+                }
+            }
+            Text(packing.hint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .onChange(of: packing.vectors) { _, _ in syncStorageEstimate() }
+                .onChange(of: packing.payload) { _, _ in syncStorageEstimate() }
+                .onChange(of: plan.quantization) { _, newValue in packing.quantization = newValue }
+            if let tierError = packing.tierError {
+                Text(tierError)
+                    .font(.caption)
+                    .foregroundStyle(.red)
+            }
             Stepper("Expected chunks: \(plan.expectedChunks)", value: $plan.expectedChunks, in: 0...10_000_000, step: 1000)
             let estimate = plan.estimate()
             Text("Estimate: \(format(estimate.ramBytes)) RAM, \(format(estimate.diskBytes)) disk. This is an estimate.")
@@ -98,7 +131,7 @@ struct NewCollectionSheet: View {
                 Button("Cancel") { dismiss() }
                 Spacer()
                 Button("Save") { save() }
-                    .disabled(!canSave)
+                    .disabled(!canSave || packing.tierError != nil)
             }
         }
         .padding(20)
@@ -142,7 +175,10 @@ struct NewCollectionSheet: View {
 
     private func save() {
         guard canSave else { return }
+        plan.onDisk = packing.vectors == .cold || packing.payload == .cold
+        packing.quantization = plan.quantization
         CollectionPlanStore.save(plan)
+        CollectionPackingStore.save(packing, name: plan.name, defaults: appState.settings.defaults)
         appState.settings.devboxIngestTarget = plan.target == .qdrantCloud ? .qdrantCloud : .localDocker
         appState.settings.hybridSearch = plan.hybrid
         appState.settings.qdrantDistanceMetric = plan.distance.settingsValue
@@ -153,6 +189,10 @@ struct NewCollectionSheet: View {
         }
         appState.settings.defaultCollection = plan.name
         dismiss()
+    }
+
+    private func syncStorageEstimate() {
+        plan.onDisk = packing.vectors == .cold || packing.payload == .cold
     }
 
     private func format(_ bytes: Double) -> String {

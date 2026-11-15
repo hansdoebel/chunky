@@ -10,6 +10,7 @@ struct CollectionBrowserView: View {
     @State private var showNewCollection = false
     @State private var showSnapshots = false
     @State private var showHealth = false
+    @State private var showPacking = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -67,6 +68,8 @@ struct CollectionBrowserView: View {
                 Button("Snapshots") { showSnapshots = true }
                     .buttonStyle(.bordered)
                 Button("Health") { showHealth = true }
+                    .buttonStyle(.bordered)
+                Button("Packing") { showPacking = true }
                     .buttonStyle(.bordered)
                 Button(action: { Task { await appState.loadBrowserPoints() } }) {
                     Image(systemName: "arrow.clockwise")
@@ -172,6 +175,10 @@ struct CollectionBrowserView: View {
         }
         .sheet(isPresented: $showHealth) {
             QdrantHealthRoot()
+                .environmentObject(appState)
+        }
+        .sheet(isPresented: $showPacking) {
+            CollectionPackingRoot()
                 .environmentObject(appState)
         }
         .sheet(isPresented: $showNewCollection) {

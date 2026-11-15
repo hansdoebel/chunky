@@ -156,6 +156,14 @@ enum DevboxJobPayload {
             "qdrant_on_disk": options.storesOnDisk,
             "qdrant_batch_size": settings.qdrantBatchSize,
         ]
+        if let packing = CollectionPackingStore.load(name: collectionName, defaults: settings.defaults) {
+            body["qdrant_vector_memory"] = packing.vectors.rawValue
+            body["qdrant_hnsw_memory"] = packing.hnsw.rawValue
+            body["qdrant_quantization_memory"] = packing.quantizationTier.rawValue
+            body["qdrant_payload_memory"] = packing.payload.rawValue
+            body["qdrant_quantization"] = packing.quantization.wireValue
+            body["qdrant_on_disk"] = packing.vectors == .cold || packing.payload == .cold
+        }
         if model != "standard" {
             body["vlm_model"] = model
         }

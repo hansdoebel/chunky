@@ -1099,6 +1099,7 @@ class DocumentProcessor: ObservableObject {
             onDiskPayload: createOptions.onDiskPayload,
             quantizationConfig: quantizationValue(createOptions)
         )
+        await applySavedPacking(collection: targetCollection(job: job, settings: settings), settings: settings)
 
         try await qdrant.deleteBySource(
             collectionName: targetCollection(job: job, settings: settings),
@@ -1557,6 +1558,7 @@ class DocumentProcessor: ObservableObject {
             onDiskPayload: createOptions.onDiskPayload,
             quantizationConfig: quantizationValue(createOptions)
         )
+        await applySavedPacking(collection: collectionName, settings: appState.settings)
 
         if let source = dedupSource {
             try await service.deleteBySource(
@@ -1572,6 +1574,21 @@ class DocumentProcessor: ObservableObject {
             onProgress: onProgress
         )
         appState.settings.noteQdrantSuccess()
+    }
+
+    private func applySavedPacking(collection: String, settings: AppSettings) async {
+        guard let packing = CollectionPackingStore.load(name: collection, defaults: settings.defaults) else { return }
+        let client = CollectionPackingClient(transport: LiveCollectionPackingTransport())
+        do {
+            try await client.update(
+                baseURL: settings.qdrantURL,
+                apiKey: settings.qdrantAPIKey,
+                collection: collection,
+                packing: packing
+            )
+        } catch {
+            return
+        }
     }
 }
 

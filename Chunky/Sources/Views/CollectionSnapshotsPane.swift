@@ -6,6 +6,7 @@ struct CollectionSnapshotsPane: View {
     var server: String
     var snapshots: [SnapshotRecord]
     var status: String
+    var reminder: String = ""
     var scrolls: Bool = true
     var onCreate: () -> Void
     var onDownload: (String) -> Void
@@ -31,6 +32,11 @@ struct CollectionSnapshotsPane: View {
             Text(status)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            if !reminder.isEmpty {
+                Text(reminder)
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.statusOrange)
+            }
             Text("Qdrant Cloud may refuse a snapshot download. Local Docker supports create, download, and restore. Restore asks before it overwrites the collection.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -87,6 +93,7 @@ struct CollectionSnapshotsScreen: View {
             server: CollectionSnapshots.endpoint(settings: appState.settings).url,
             snapshots: snapshots,
             status: status,
+            reminder: SnapshotReminder.message(records: snapshots, now: Date()),
             onCreate: { Task { await create() } },
             onDownload: { name in download(name) },
             onRestore: { chooseRestore() }

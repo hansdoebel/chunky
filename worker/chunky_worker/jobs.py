@@ -471,6 +471,10 @@ class JobRunner:
             hybrid=job.settings.qdrant_hybrid,
             quantization=job.settings.qdrant_quantization,
             on_disk=job.settings.qdrant_on_disk,
+            vector_memory=job.settings.qdrant_vector_memory,
+            hnsw_memory=job.settings.qdrant_hnsw_memory,
+            quantization_memory=job.settings.qdrant_quantization_memory,
+            payload_memory=job.settings.qdrant_payload_memory,
             on_progress=on_batch,
         )
 

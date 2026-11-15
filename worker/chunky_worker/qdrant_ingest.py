@@ -49,6 +49,10 @@ class QdrantIngestor(Protocol):
         hybrid: bool = False,
         quantization: str = "none",
         on_disk: bool = False,
+        vector_memory: str = "",
+        hnsw_memory: str = "",
+        quantization_memory: str = "",
+        payload_memory: str = "",
         on_progress: Callable[[int, int], None] | None = None,
     ) -> int:
         """Create the collection when missing and upsert. Returns the point count."""
@@ -100,7 +104,7 @@ def sparse_vectors(texts: list[str]) -> list[tuple[list[int], list[float]]]:
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"[0-9A-Za-z_]{2,}", text.lower())
 
-def _quantization_config(name: str, *, on_disk: bool):
+def _quantization_config(name: str, *, on_disk: bool, memory: str = ""):
     key = (name or "none").strip().lower()
     if key in {"", "none"}:
         return None
@@ -114,13 +118,66 @@ def _quantization_config(name: str, *, on_disk: bool):
     except ImportError as exc:
         raise IngestError("qdrant-client is not installed") from exc
     always_ram = not on_disk
+    tier = memory or None
     if key == "scalar":
         return ScalarQuantization(
-            scalar=ScalarQuantizationConfig(type="int8", always_ram=always_ram)
+            scalar=ScalarQuantizationConfig(type="int8", always_ram=always_ram, memory=tier)
         )
     if key == "binary":
-        return BinaryQuantization(binary=BinaryQuantizationConfig(always_ram=always_ram))
+        return BinaryQuantization(
+            binary=BinaryQuantizationConfig(always_ram=always_ram, memory=tier)
+        )
     raise IngestError(f"Unsupported Qdrant quantization: {name}")
+
+
+def _hnsw_config(memory: str):
+    if not memory:
+        return None
+    from qdrant_client.models import HnswConfigDiff
+
+    return HnswConfigDiff(memory=memory)
+
+
+def _payload_config(memory: str):
+    if not memory:
+        return None
+    from qdrant_client.models import PayloadStorageParams
+
+    return PayloadStorageParams(memory=memory)
+
+
+def _apply_memory_tiers(
+    client,
+    collection: str,
+    *,
+    hybrid: bool,
+    vector_memory: str,
+    hnsw_memory: str,
+    quantization: str,
+    quantization_memory: str,
+    payload_memory: str,
+    on_disk: bool,
+) -> None:
+    if not any((vector_memory, hnsw_memory, quantization_memory, payload_memory)):
+        return
+    from qdrant_client.models import CollectionParamsDiff, VectorParamsDiff
+
+    name = "dense" if hybrid else ""
+    vectors = None
+    if vector_memory:
+        vectors = {name: VectorParamsDiff(memory=vector_memory)}
+    compression = _quantization_config(quantization, on_disk=on_disk, memory=quantization_memory)
+    params = None
+    if payload_memory:
+        params = CollectionParamsDiff(payload=_payload_config(payload_memory))
+    client.update_collection(
+        collection_name=collection,
+        vectors_config=vectors,
+        hnsw_config=_hnsw_config(hnsw_memory),
+        quantization_config=compression,
+        collection_params=params,
+    )
+
 
 def content_hash(text: str, model: str) -> str:
     """Same SHA-256 as ``DocumentProcessor.contentHash`` (text + '|' + model)."""
@@ -455,6 +512,10 @@ class QdrantCloudIngestor:
         hybrid: bool = False,
         quantization: str = "none",
         on_disk: bool = False,
+        vector_memory: str = "",
+        hnsw_memory: str = "",
+        quantization_memory: str = "",
+        payload_memory: str = "",
         on_progress: Callable[[int, int], None] | None = None,
     ) -> int:
         if not url:
@@ -490,26 +551,46 @@ class QdrantCloudIngestor:
                         "Refusing to upsert."
                     )
             else:
-                compression = _quantization_config(quantization, on_disk=on_disk)
+                compression = _quantization_config(
+                    quantization, on_disk=on_disk, memory=quantization_memory
+                )
                 dense = VectorParams(
                     size=vector_size,
                     distance=distance_enum,
                     on_disk=True if on_disk else None,
+                    memory=vector_memory or None,
                 )
+                hnsw = _hnsw_config(hnsw_memory)
+                payload = _payload_config(payload_memory)
                 if hybrid:
                     client.create_collection(
                         collection_name=collection,
                         vectors_config={"dense": dense},
                         on_disk_payload=on_disk,
+                        hnsw_config=hnsw,
                         quantization_config=compression,
+                        payload=payload,
                     )
                 else:
                     client.create_collection(
                         collection_name=collection,
                         vectors_config=dense,
                         on_disk_payload=True if on_disk else None,
+                        hnsw_config=hnsw,
                         quantization_config=compression,
+                        payload=payload,
                     )
+            _apply_memory_tiers(
+                client,
+                collection,
+                hybrid=hybrid,
+                vector_memory=vector_memory,
+                hnsw_memory=hnsw_memory,
+                quantization=quantization,
+                quantization_memory=quantization_memory,
+                payload_memory=payload_memory,
+                on_disk=on_disk,
+            )
             ensure_payload_indexes(client, collection)
             if hybrid:
                 ensure_bm25_text_index(client, collection)

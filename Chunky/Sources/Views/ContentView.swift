@@ -46,6 +46,16 @@ struct ContentView: View {
                 runWatchedJobs()
             }
         }
+        .task(id: appState.settings.qdrantKeepAlive) {
+            guard appState.settings.qdrantKeepAlive else { return }
+            while !Task.isCancelled {
+                let now = Date()
+                await QdrantKeepAliveLoop.tick(settings: appState.settings, now: now) {
+                    await Self.pingDatabase(settings: appState.settings)
+                }
+                try? await Task.sleep(for: .seconds(60 * 60))
+            }
+        }
     }
 
     private func runWatchedJobs() {
@@ -90,16 +100,6 @@ struct ContentView: View {
             }
             appState.isProcessing = false
             appState.resetCancellation()
-        }
-        .task(id: appState.settings.qdrantKeepAlive) {
-            guard appState.settings.qdrantKeepAlive else { return }
-            while !Task.isCancelled {
-                let now = Date()
-                await QdrantKeepAliveLoop.tick(settings: appState.settings, now: now) {
-                    await Self.pingDatabase(settings: appState.settings)
-                }
-                try? await Task.sleep(for: .seconds(60 * 60))
-            }
         }
     }
 }
