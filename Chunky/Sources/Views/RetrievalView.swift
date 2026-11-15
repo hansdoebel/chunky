@@ -16,6 +16,7 @@ struct RetrievalPlayground: View {
     @Binding var rerankEnabled: Bool
     @Binding var rerankURL: String
     @Binding var rerankModel: String
+    @Binding var rerankAPIKey: String
     var collections: [String]
     var routeLabel: String
     var statusLine: String
@@ -94,6 +95,8 @@ struct RetrievalPlayground: View {
                 TextField("Rerank URL", text: $rerankURL, prompt: Text("http://127.0.0.1:8081/v1/rerank"))
                     .textFieldStyle(.roundedBorder)
                 TextField("Rerank model", text: $rerankModel, prompt: Text("jina-reranker"))
+                    .textFieldStyle(.roundedBorder)
+                SecureField("Rerank API key", text: $rerankAPIKey, prompt: Text("Bearer token, if required"))
                     .textFieldStyle(.roundedBorder)
             }
             TextField("Source", text: $source, prompt: Text("Source"))
@@ -222,6 +225,7 @@ struct RetrievalScreen: View {
     @State private var rerankEnabled = false
     @State private var rerankURL = ""
     @State private var rerankModel = ""
+    @State private var rerankAPIKey = ""
     @State private var hits: [RetrievalHit] = []
     @State private var error: String?
     @State private var statusLine = RetrievalScreen.idleStatus
@@ -250,6 +254,7 @@ struct RetrievalScreen: View {
             rerankEnabled: $rerankEnabled,
             rerankURL: $rerankURL,
             rerankModel: $rerankModel,
+            rerankAPIKey: $rerankAPIKey,
             collections: appState.availableCollections,
             routeLabel: route.displayName,
             statusLine: statusLine,
@@ -288,7 +293,7 @@ struct RetrievalScreen: View {
             filters: RetrievalFilter.playground(source: source, page: page, contentType: contentType),
             rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
             rerank: rerankEnabled
-                ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: "")
+                ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey)
                 : nil,
             settings: appState.settings
         )

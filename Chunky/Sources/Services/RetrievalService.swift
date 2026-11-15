@@ -313,14 +313,25 @@ enum RerankRequest {
         guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
             throw RetrievalError.unreadableResponse
         }
-        let rows = object["results"] as? [[String: Any]] ?? []
-        return rows.compactMap { row in
-            guard let index = (row["index"] as? NSNumber)?.intValue else { return nil }
-            let score = (row["relevance_score"] as? NSNumber)?.doubleValue
-                ?? (row["score"] as? NSNumber)?.doubleValue
-                ?? 0
-            return RerankScore(index: index, score: score)
+        guard let rows = object["results"] as? [[String: Any]] else {
+            throw RetrievalError.rerankFailed("Rerank response did not include a results array.")
         }
+        guard !rows.isEmpty else {
+            throw RetrievalError.rerankFailed("Rerank response included no results.")
+        }
+        var scores: [RerankScore] = []
+        for row in rows {
+            guard let index = (row["index"] as? NSNumber)?.intValue else {
+                throw RetrievalError.rerankFailed("Rerank response included a result without an index.")
+            }
+            guard let score = (row["relevance_score"] as? NSNumber)?.doubleValue
+                ?? (row["score"] as? NSNumber)?.doubleValue
+            else {
+                throw RetrievalError.rerankFailed("Rerank response included a result without a score.")
+            }
+            scores.append(RerankScore(index: index, score: score))
+        }
+        return scores
     }
 }
 
@@ -733,10 +744,12 @@ struct RetrievalService {
             hit.score = score.score
             ordered.append(hit)
         }
+        guard !ordered.isEmpty else {
+            throw RetrievalError.rerankFailed("Rerank response did not match any retrieved hits.")
+        }
         var updated = page
         updated.hits = ordered
         updated.reranked = true
-        updated.nextOffset = nil
         return updated
     }
 
