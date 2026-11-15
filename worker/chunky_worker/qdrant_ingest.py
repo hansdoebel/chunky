@@ -312,6 +312,12 @@ def _payload(
     put_string(True, "venue", chunk.get("venue"))
     put_string(True, "abstract", chunk.get("abstract"))
     put_string(True, "metadata_source", chunk.get("metadata_source"))
+    cited = chunk.get("cited_references")
+    if isinstance(cited, list) and cited:
+        payload["cited_references"] = cited
+    references = chunk.get("references")
+    if isinstance(references, list) and references:
+        payload["references"] = references
     put_string(settings.metadata_include_document_id, "document_id", chunk.get("document_id"))
     put_string(settings.metadata_include_url, "url", chunk.get("url"))
     put_string(
