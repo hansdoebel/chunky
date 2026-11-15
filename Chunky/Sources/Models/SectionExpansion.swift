@@ -7,6 +7,7 @@ nonisolated struct SectionSibling: Equatable, Sendable {
     var page: Int?
     var pageEnd: Int?
     var text: String
+    var chunkIndex: Int? = nil
 }
 
 nonisolated enum SectionExpansion {
@@ -15,32 +16,39 @@ nonisolated enum SectionExpansion {
     static func merge(hits: [RetrievalHit], siblings: [SectionSibling], threshold: Double) -> [RetrievalHit] {
         let ratio = threshold.isFinite ? min(max(threshold, 0), 1) : defaultThreshold
         var grouped: [String: [RetrievalHit]] = [:]
-        var order: [String] = []
         for hit in hits where hit.payload["record_type"] != DocumentSummary.documentRecord {
-            let key = groupKey(source: hit.source, headings: hit.headings)
-            if grouped[key] == nil {
-                order.append(key)
-            }
-            grouped[key, default: []].append(hit)
+            grouped[groupKey(source: hit.source, headings: hit.headings), default: []].append(hit)
         }
         let byGroup = Dictionary(grouping: siblings, by: { groupKey(source: $0.source, headings: $0.headings) })
-        var merged: [RetrievalHit] = []
-        for key in order {
-            let group = grouped[key] ?? []
-            guard let first = group.first, !first.headings.isEmpty else {
-                merged.append(contentsOf: group)
-                continue
-            }
+        var merging: Set<String> = []
+        for (key, group) in grouped {
+            guard let first = group.first, !first.headings.isEmpty else { continue }
             let section = byGroup[key] ?? []
             let population = max(section.count, group.count)
             let share = Double(group.count) / Double(population)
             if population > 1, share + 0.000_000_1 >= ratio {
-                merged.append(combined(hits: group, section: section.isEmpty ? group.map(sibling) : section))
-            } else {
-                merged.append(contentsOf: group)
+                merging.insert(key)
             }
         }
-        return merged
+        var emitted: Set<String> = []
+        var result: [RetrievalHit] = []
+        for hit in hits {
+            if hit.payload["record_type"] == DocumentSummary.documentRecord {
+                result.append(hit)
+                continue
+            }
+            let key = groupKey(source: hit.source, headings: hit.headings)
+            guard merging.contains(key) else {
+                result.append(hit)
+                continue
+            }
+            if emitted.contains(key) { continue }
+            emitted.insert(key)
+            let group = grouped[key] ?? [hit]
+            let section = byGroup[key] ?? []
+            result.append(combined(hits: group, section: section.isEmpty ? group.map(sibling) : section))
+        }
+        return result
     }
 
     static func groupKey(source: String, headings: [String]) -> String {
@@ -54,16 +62,20 @@ nonisolated enum SectionExpansion {
             headings: hit.headings,
             page: hit.page,
             pageEnd: hit.pageEnd,
-            text: hit.text
+            text: hit.text,
+            chunkIndex: Int(hit.payload["chunk_index"] ?? "")
         )
     }
 
     private static func combined(hits: [RetrievalHit], section: [SectionSibling]) -> RetrievalHit {
         let ordered = section.sorted { lhs, rhs in
-            let left = lhs.page ?? Int.max
-            let right = rhs.page ?? Int.max
-            if left == right { return lhs.id < rhs.id }
-            return left < right
+            let leftPage = lhs.page ?? Int.max
+            let rightPage = rhs.page ?? Int.max
+            if leftPage != rightPage { return leftPage < rightPage }
+            let leftIndex = lhs.chunkIndex ?? Int.max
+            let rightIndex = rhs.chunkIndex ?? Int.max
+            if leftIndex != rightIndex { return leftIndex < rightIndex }
+            return lhs.id < rhs.id
         }
         let pages = (hits.compactMap(\.page) + hits.compactMap(\.pageEnd) + ordered.compactMap(\.page) + ordered.compactMap(\.pageEnd))
         let page = pages.min()

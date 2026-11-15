@@ -36,6 +36,41 @@ struct SectionExpansionTests {
         #expect(merged[0].text == "First.")
     }
 
+    @Test func unmergedHitsKeepTheirRank() {
+        let hits = [
+            hit("a1", source: "paper.pdf", headings: ["A"], page: 1, text: "A1"),
+            hit("b1", source: "paper.pdf", headings: ["B"], page: 1, text: "B1"),
+            hit("a2", source: "paper.pdf", headings: ["A"], page: 2, text: "A2"),
+        ]
+        let siblings = hits.map { sibling($0.id, source: $0.source, headings: $0.headings, page: $0.page ?? 1, text: $0.text) }
+            + [sibling("a3", source: "paper.pdf", headings: ["A"], page: 3, text: "A3")]
+        let merged = SectionExpansion.merge(hits: hits, siblings: siblings, threshold: 0.9)
+        #expect(merged.map(\.id) == ["a1", "b1", "a2"])
+    }
+
+    @Test func documentHitsStayInPlace() {
+        var paper = hit("doc", source: "paper.pdf", headings: [], page: nil, text: "Abstract")
+        paper.payload["record_type"] = "document"
+        let passage = hit("a", source: "paper.pdf", headings: ["Methods"], page: 2, text: "Body")
+        let merged = SectionExpansion.merge(hits: [paper, passage], siblings: [], threshold: 0.5)
+        #expect(merged.map(\.id) == ["doc", "a"])
+        #expect(merged[0].text == "Abstract")
+    }
+
+    @Test func samePageUsesChunkIndexOrder() {
+        let hits = [
+            hit("late", source: "paper.pdf", headings: ["Methods"], page: 2, text: "Late"),
+            hit("early", source: "paper.pdf", headings: ["Methods"], page: 2, text: "Early"),
+        ]
+        let siblings = [
+            SectionSibling(id: "late", source: "paper.pdf", headings: ["Methods"], page: 2, pageEnd: 2, text: "Late", chunkIndex: 2),
+            SectionSibling(id: "early", source: "paper.pdf", headings: ["Methods"], page: 2, pageEnd: 2, text: "Early", chunkIndex: 1),
+        ]
+        let merged = SectionExpansion.merge(hits: hits, siblings: siblings, threshold: 0.5)
+        #expect(merged.count == 1)
+        #expect(merged[0].text == "Early\n\nLate")
+    }
+
     @Test func differentDocumentsDoNotMerge() {
         let hits = [
             hit("a", source: "one.pdf", headings: ["Methods"], page: 1, text: "One."),

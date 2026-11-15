@@ -138,7 +138,7 @@ struct RetrievalServiceTests {
             hits: [SearchResult(id: "a", score: 0.8, text: "First.", source: "paper.pdf", page: 2, headings: ["Methods"], metadata: [:])]
         )
         var service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]), worker: FakeWorker())
-        service.sectionSiblings = { _ in
+        service.sectionSiblings = { _, _, _ in
             [
                 SectionSibling(id: "a", source: "paper.pdf", headings: ["Methods"], page: 2, pageEnd: 2, text: "First."),
                 SectionSibling(id: "b", source: "paper.pdf", headings: ["Methods"], page: 3, pageEnd: 3, text: "Second."),
