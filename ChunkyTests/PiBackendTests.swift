@@ -539,7 +539,8 @@ private final class FakePiTransport: PiByteStream, @unchecked Sendable {
         continuation = captured
     }
 
-    func launch(executable: String, arguments: [String], environment: [String: String]) throws {
+    func launch(executable: String, arguments: [String], environment: [String: String], currentDirectory: String?) throws {
+        _ = currentDirectory
         lock.lock()
         launches.append((executable, arguments, environment))
         running = true

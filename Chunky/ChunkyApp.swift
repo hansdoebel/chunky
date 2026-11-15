@@ -2,6 +2,16 @@ import AppKit
 import SwiftUI
 
 @main
+enum ChunkyMain {
+    static func main() {
+        if CommandLine.arguments.contains("--mcp") {
+            ChunkyMCPMain.run()
+            return
+        }
+        ChunkyApp.main()
+    }
+}
+
 struct ChunkyApp: App {
     @StateObject private var appState = AppState()
 

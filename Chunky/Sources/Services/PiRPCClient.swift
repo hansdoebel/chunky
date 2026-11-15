@@ -3,7 +3,7 @@ import Foundation
 nonisolated protocol PiByteStream: AnyObject, Sendable {
     var stdout: AsyncStream<Data> { get }
     var isRunning: Bool { get }
-    func launch(executable: String, arguments: [String], environment: [String: String]) throws
+    func launch(executable: String, arguments: [String], environment: [String: String], currentDirectory: String?) throws
     func write(_ data: Data) throws
     func terminate()
 }
@@ -39,11 +39,14 @@ nonisolated final class FoundationPiTransport: PiByteStream, @unchecked Sendable
         continuation = captured
     }
 
-    func launch(executable: String, arguments: [String], environment: [String: String]) throws {
+    func launch(executable: String, arguments: [String], environment: [String: String], currentDirectory: String?) throws {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
         process.environment = environment
+        if let currentDirectory {
+            process.currentDirectoryURL = URL(fileURLWithPath: currentDirectory, isDirectory: true)
+        }
         let stdin = Pipe()
         let stdout = Pipe()
         let stderr = Pipe()

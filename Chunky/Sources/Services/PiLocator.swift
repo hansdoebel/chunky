@@ -108,6 +108,7 @@ nonisolated enum PiToolMode: Equatable, Sendable {
 
 nonisolated enum PiLaunch {
     static let codingTools = ["bash", "edit", "write", "read"]
+    static let chunkyMCPTools = ["mcp__chunky__search", "mcp__chunky__list_collections"]
 
     static func arguments(toolMode: PiToolMode = .none) -> [String] {
         var args = ["--mode", "rpc", "--no-session"]
@@ -121,6 +122,12 @@ nonisolated enum PiLaunch {
             args.append("--exclude-tools")
             args.append(excluded.joined(separator: ","))
         }
+        return args
+    }
+
+    static func chunkySearchArguments() -> [String] {
+        var args = arguments(toolMode: .allow(chunkyMCPTools))
+        args.append("--approve")
         return args
     }
 
