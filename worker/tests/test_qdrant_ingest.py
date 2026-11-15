@@ -407,6 +407,58 @@ def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
     bm25 = next(item for item in created["indexes"] if item["field_name"] == "embedding_text" and getattr(item["field_schema"], "scoring", None))
     assert bm25["field_schema"].scoring.type.value == "bm25"
 
+
+def test_memory_tiers_are_set_on_create_and_update(monkeypatch):
+    created: dict = {}
+
+    class FakeClient:
+        def __init__(self, **kwargs):
+            pass
+
+        def collection_exists(self, collection_name):
+            return False
+
+        def create_collection(self, **kwargs):
+            created["create"] = kwargs
+
+        def update_collection(self, **kwargs):
+            created["update"] = kwargs
+
+        def upsert(self, **kwargs):
+            pass
+
+        def create_payload_index(self, **kwargs):
+            pass
+
+        def close(self):
+            pass
+
+    monkeypatch.setattr("qdrant_client.QdrantClient", FakeClient)
+    QdrantCloudIngestor().upsert_cloud(
+        url="https://example.cloud.qdrant.io",
+        api_key=API_KEY,
+        collection="docs",
+        points=[PreparedPoint(id="00000000-0000-0000-0000-000000000001", vector=[0.1, 0.2], payload={"text": "alpha"})],
+        vector_size=2,
+        distance="cosine",
+        batch_size=10,
+        hybrid=True,
+        quantization="scalar",
+        on_disk=True,
+        vector_memory="cold",
+        hnsw_memory="cold",
+        quantization_memory="pinned",
+        payload_memory="cold",
+    )
+    dense = created["create"]["vectors_config"]["dense"]
+    assert dense.memory == "cold"
+    assert created["create"]["hnsw_config"].memory == "cold"
+    assert created["create"]["payload"].memory == "cold"
+    assert created["create"]["quantization_config"].scalar.memory == "pinned"
+    updated = created["update"]["vectors_config"]["dense"]
+    assert updated.memory == "cold"
+    assert created["update"]["collection_params"].payload.memory == "cold"
+
 def test_cloud_client_creates_collection_and_batches(monkeypatch):
     created: dict = {}
 

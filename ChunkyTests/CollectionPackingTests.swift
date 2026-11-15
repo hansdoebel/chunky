@@ -12,6 +12,9 @@ struct CollectionPackingTests {
         let vectors = update["vectors"] as? [String: Any]
         let unnamed = vectors?[""] as? [String: Any]
         #expect(unnamed?["memory"] as? String == "cold")
+        let named = packing.updateBody(vectorName: "dense")["vectors"] as? [String: Any]
+        let dense = named?["dense"] as? [String: Any]
+        #expect(dense?["memory"] as? String == "cold")
         #expect((update["hnsw_config"] as? [String: Any])?["memory"] as? String == "cold")
         #expect((update["payload"] as? [String: Any])?["memory"] as? String == "cold")
         let scalar = ((update["quantization_config"] as? [String: Any])?["scalar"] as? [String: Any])
@@ -26,9 +29,12 @@ struct CollectionPackingTests {
             try await client.update(baseURL: "http://127.0.0.1:6334", apiKey: "db-secret", collection: "documents", packing: pinned)
         }
         try await client.update(baseURL: "http://127.0.0.1:6334", apiKey: "db-secret", collection: "documents", packing: packing)
-        #expect(transport.methods == ["PATCH"])
+        #expect(transport.methods == ["GET", "PATCH"])
         #expect(transport.paths.first?.hasSuffix("/collections/documents") == true)
-        #expect(transport.keys == ["db-secret"])
+        #expect(transport.keys == ["db-secret", "db-secret"])
+        let patched = try JSONSerialization.jsonObject(with: transport.bodies.last ?? Data()) as? [String: Any]
+        let patchedVectors = patched?["vectors"] as? [String: Any]
+        #expect((patchedVectors?["dense"] as? [String: Any])?["memory"] as? String == "cold")
         let created = packing.createBody(vectorSize: 1024, distance: "Cosine")
         #expect((created["vectors"] as? [String: Any])?["size"] as? Int == 1024)
         #expect((created["vectors"] as? [String: Any])?["memory"] as? String == "cold")
@@ -61,11 +67,17 @@ private final class ScriptedPackingTransport: CollectionPackingTransport, @unche
     var methods: [String] = []
     var paths: [String] = []
     var keys: [String] = []
+    var bodies: [Data] = []
 
     func send(method: String, url: URL, apiKey: String, body: Data) async throws -> (status: Int, body: Data) {
         methods.append(method)
         paths.append(url.path)
         keys.append(apiKey)
+        bodies.append(body)
+        if method == "GET" {
+            let info = #"{"result":{"config":{"params":{"vectors":{"dense":{"size":8,"distance":"Cosine"}}}}}}"#
+            return (200, Data(info.utf8))
+        }
         return (200, Data("{\"result\":true}".utf8))
     }
 }

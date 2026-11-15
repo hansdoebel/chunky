@@ -94,7 +94,7 @@ struct CollectionPackingRoot: View {
         let client = CollectionPackingClient(transport: LiveCollectionPackingTransport())
         do {
             try await client.update(
-                baseURL: QdrantKeepAlive.databaseURL(settings: appState.settings),
+                baseURL: appState.settings.qdrantURL,
                 apiKey: appState.settings.qdrantAPIKey,
                 collection: name,
                 packing: packing

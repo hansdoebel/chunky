@@ -66,14 +66,26 @@ struct CollectionPacking: Equatable, Codable {
         return body
     }
 
-    func updateBody() -> [String: Any] {
+    func updateBody(vectorName: String = "") -> [String: Any] {
         var body: [String: Any] = [
-            "vectors": ["": ["memory": vectors.rawValue]],
+            "vectors": [vectorName: ["memory": vectors.rawValue]],
             "hnsw_config": ["memory": hnsw.rawValue],
             "payload": ["memory": payload.rawValue],
             "quantization_config": quantizationBody() ?? NSNull(),
         ]
         return body
+    }
+
+    static func vectorName(in data: Data) -> String {
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let result = (object["result"] as? [String: Any]) ?? object,
+              let config = result["config"] as? [String: Any],
+              let params = config["params"] as? [String: Any],
+              let vectors = params["vectors"] as? [String: Any]
+        else { return "" }
+        if vectors["size"] != nil { return "" }
+        if vectors["dense"] != nil { return "dense" }
+        return vectors.keys.sorted().first ?? ""
     }
 
     private func quantizationBody() -> [String: Any]? {
@@ -122,7 +134,17 @@ struct CollectionPackingClient: Sendable {
 
     func update(baseURL: String, apiKey: String, collection: String, packing: CollectionPacking) async throws {
         if let error = packing.tierError { throw CollectionPackingError.invalid(error) }
-        try await send(method: "PATCH", baseURL: baseURL, apiKey: apiKey, collection: collection, body: packing.updateBody())
+        guard var infoURL = CollectionSnapshots.restBase(qdrantURL: baseURL) else {
+            throw QdrantHealthError.invalidURL(baseURL)
+        }
+        infoURL.appendPathComponent("collections")
+        infoURL.appendPathComponent(collection)
+        let info = try await transport.send(method: "GET", url: infoURL, apiKey: apiKey, body: Data())
+        guard (200..<300).contains(info.status) else {
+            throw QdrantHealthError.http(info.status)
+        }
+        let name = CollectionPacking.vectorName(in: info.body)
+        try await send(method: "PATCH", baseURL: baseURL, apiKey: apiKey, collection: collection, body: packing.updateBody(vectorName: name))
     }
 
     func create(baseURL: String, apiKey: String, collection: String, packing: CollectionPacking, vectorSize: Int, distance: String) async throws {

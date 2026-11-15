@@ -88,6 +88,10 @@ class JobSettings(BaseModel):
     qdrant_hybrid: bool = False
     qdrant_quantization: str = "none"
     qdrant_on_disk: bool = False
+    qdrant_vector_memory: str = ""
+    qdrant_hnsw_memory: str = ""
+    qdrant_quantization_memory: str = ""
+    qdrant_payload_memory: str = ""
     qdrant_batch_size: int = 250
 
     metadata_include_page: bool = True

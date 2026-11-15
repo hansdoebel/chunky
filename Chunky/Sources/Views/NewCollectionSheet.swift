@@ -11,13 +11,15 @@ struct NewCollectionSheet: View {
     @State private var probeMessage = "Vector size is unverified until a probe succeeds."
 
     init(vectorSize: Int, embeddingBackend: String, embeddingModel: String) {
-        _plan = State(initialValue: CollectionPlan.preset(
+        var initial = CollectionPlan.preset(
             .recommended,
             name: "",
             vectorSize: vectorSize,
             embeddingBackend: embeddingBackend,
             embeddingModel: embeddingModel
-        ))
+        )
+        initial.onDisk = CollectionPacking.localDefault.payload == .cold || CollectionPacking.localDefault.vectors == .cold
+        _plan = State(initialValue: initial)
     }
 
     var body: some View {
@@ -39,7 +41,8 @@ struct NewCollectionSheet: View {
                     embeddingModel: plan.embeddingModel
                 )
                 packing = newValue == .largeCloud ? .freeTier : .localDefault
-                plan.onDisk = packing.vectors == .cold || packing.payload == .cold
+                packing.quantization = plan.quantization
+                syncStorageEstimate()
             }
             TextField("Name", text: $plan.name)
             Picker("Target", selection: $plan.target) {
@@ -103,6 +106,9 @@ struct NewCollectionSheet: View {
             Text(packing.hint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
+                .onChange(of: packing.vectors) { _, _ in syncStorageEstimate() }
+                .onChange(of: packing.payload) { _, _ in syncStorageEstimate() }
+                .onChange(of: plan.quantization) { _, newValue in packing.quantization = newValue }
             if let tierError = packing.tierError {
                 Text(tierError)
                     .font(.caption)
@@ -169,9 +175,10 @@ struct NewCollectionSheet: View {
 
     private func save() {
         guard canSave else { return }
+        plan.onDisk = packing.vectors == .cold || packing.payload == .cold
+        packing.quantization = plan.quantization
         CollectionPlanStore.save(plan)
         CollectionPackingStore.save(packing, name: plan.name, defaults: appState.settings.defaults)
-        plan.onDisk = packing.vectors == .cold || packing.payload == .cold
         appState.settings.devboxIngestTarget = plan.target == .qdrantCloud ? .qdrantCloud : .localDocker
         appState.settings.hybridSearch = plan.hybrid
         appState.settings.qdrantDistanceMetric = plan.distance.settingsValue
@@ -182,6 +189,10 @@ struct NewCollectionSheet: View {
         }
         appState.settings.defaultCollection = plan.name
         dismiss()
+    }
+
+    private func syncStorageEstimate() {
+        plan.onDisk = packing.vectors == .cold || packing.payload == .cold
     }
 
     private func format(_ bytes: Double) -> String {
