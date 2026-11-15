@@ -1,0 +1,10 @@
+{
+  "source": "sample.pdf",
+  "total_chunks": 4,
+  "chunks": [
+    {"text": "First chunk"},
+    {"text": "Second chunk"},
+    {"text": "Third chunk"},
+    {"text": "Fourth chunk"}
+  ]
+}
