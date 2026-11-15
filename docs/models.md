@@ -132,7 +132,7 @@ Citation-trained models such as SPECTER2 and SciNCL embed a title and abstract s
 
 For chunks of a PDF, stay with `qwen3-embedding:0.6b`. Move to `qwen3-embedding:4b` when German or a denser technical vocabulary matters and you can rebuild the collection at 2560 dimensions. Qdrant's own guidance, fetched 15 Nov 2026, is the same shape we already use: dense vectors plus BM25 on a full-text payload index, fused with RRF. SPLADE and miniCOIL are FastEmbed sparse models to measure later. They are not the default, because BM25 needs no extra model at query time. ColBERT and other late-interaction multivectors are a rerank of the top 100 to 500 hits, not the first-stage index. Jina ColBERT is CC BY-NC. FastEmbed 0.9.1's built-in dense list does not include Qwen3-Embedding. We keep Qwen3 because the German and MTEB numbers above beat the small ONNX models FastEmbed ships.
 
-Conversion for a two-column paper: use the standard Docling pipeline (Heron layout, TableFormer accurate, OCR only when the page is a scan) when the page has a numeric table, footnotes, or a reference list. Use the granite-docling VLM path when the page is a scan or the formula and code must come out as DocTags. A whole-page VLM is worse at a dense table than TableFormer. Docling does not detect the printed journal page number as its own label. `page` is the PDF page index from `doc_items[].prov[].page_no`, starting at 1. A printed label is stored only when that provenance object already has `page_label`.
+Conversion for a two-column paper: use the standard Docling pipeline (Heron layout, TableFormer accurate, OCR only when the page is a scan) when the page has a numeric table, footnotes, or a reference list. Use the granite-docling VLM path when the page is a scan or the formula and code must come out as DocTags. A whole-page VLM is worse at a dense table than TableFormer. `page` stays the PDF page index from `doc_items[].prov[].page_no`, starting at 1. `page_labels` comes from the PDF `/PageLabels` tree when that tree exists, or from the job `page_offset` (PDF page 1 equals that printed page) when the user sets one. Citations use `printed_page` (`p. 1847` or `pp. 1847–1849`) and keep the PDF index for verification.
 
 ## Citation payload
 
@@ -145,7 +145,7 @@ Each chunk stored in Qdrant can carry:
 | `doc_title`, `authors`, `year`, `doi` | string or int | Copied from the Docling document description when that metadata is present. `authors` is joined with `"; "`. |
 | `headings` | string array | Section path from the chunker, root first. |
 | `page`, `page_end`, `pages` | int, int, int array | PDF page index. `page` is the first page of the chunk and `page_end` is the last. A one-page chunk sets them equal. |
-| `page_labels` | string array | Printed labels, only when Docling supplied them. |
+| `page_labels` | string array | Printed labels from `/PageLabels` or `page_offset`. |
 | `bboxes` | array of `{page,l,t,r,b}` | Provenance boxes in Docling's coordinate space. Not indexed. |
 | `content_hash` | string | SHA-256 of the embedded text and the model name. This is not a hash of the PDF bytes. |
 

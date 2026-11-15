@@ -593,6 +593,7 @@ def convert_document(
     ocr_batch_size: int = 0,
     layout_batch_size: int = 0,
     table_batch_size: int = 0,
+    page_offset: int | None = None,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -783,7 +784,9 @@ def convert_document(
             )
             chunk_ms = (time.perf_counter() - chunk_started) * 1000
             if chunk_result is not None:
-                result_data["chunks"] = chunk_result
+                from page_labels import apply_printed_labels
+
+                result_data["chunks"] = apply_printed_labels(chunk_result, input_path, page_offset)
         result_data["stage_ms"] = _conversion_stage_ms(
             convert_ms,
             chunk_ms,
@@ -1001,6 +1004,7 @@ def main():
     parser.add_argument("--ocr-batch-size", type=int, default=0, help="Override the OCR batch. 0 keeps the host default.")
     parser.add_argument("--layout-batch-size", type=int, default=0, help="Override the layout batch. 0 keeps the host default.")
     parser.add_argument("--table-batch-size", type=int, default=0, help="Override the table batch. 0 keeps the host default.")
+    parser.add_argument("--page-offset", type=int, default=None, help="Printed page number of PDF page 1.")
 
     args = parser.parse_args()
 
@@ -1037,6 +1041,7 @@ def main():
         chunk_max_tokens=args.chunk_max_tokens,
         chunk_merge_peers=args.chunk_merge_peers,
         chunk_tokenizer=args.chunk_tokenizer,
+        page_offset=args.page_offset,
     )
 
     print(json.dumps(result, indent=2))

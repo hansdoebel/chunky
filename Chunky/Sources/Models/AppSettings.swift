@@ -189,6 +189,15 @@ class AppSettings: ObservableObject {
     @Published var chunkTokenizer: String {
         didSet { defaults.set(chunkTokenizer, forKey: prefix + "chunkTokenizer") }
     }
+    @Published var journalPageOffset: Int? {
+        didSet {
+            if let journalPageOffset {
+                defaults.set(journalPageOffset, forKey: prefix + "journalPageOffset")
+            } else {
+                defaults.removeObject(forKey: prefix + "journalPageOffset")
+            }
+        }
+    }
     @Published var recordedDoclingVersion: String {
         didSet { defaults.set(recordedDoclingVersion, forKey: prefix + "recordedDoclingVersion") }
     }
@@ -216,6 +225,7 @@ class AppSettings: ObservableObject {
             "layout=\(layoutModel)",
             "images=\(imageExportMode)",
             "cleanup=\(doTextCleanup ? 1 : 0)",
+            "pageOffset=\(journalPageOffset.map(String.init) ?? "")",
         ].joined(separator: ";")
     }
     @Published var doTableExtraction: Bool {
@@ -408,6 +418,7 @@ class AppSettings: ObservableObject {
         self.chunkOverlap = defaults.object(forKey: prefix + "chunkOverlap") as? Int ?? 64
         self.chunkMergePeers = defaults.object(forKey: prefix + "chunkMergePeers") as? Bool ?? true
         self.chunkTokenizer = defaults.string(forKey: prefix + "chunkTokenizer") ?? ""
+        self.journalPageOffset = defaults.object(forKey: prefix + "journalPageOffset") as? Int
         self.recordedDoclingVersion = defaults.string(forKey: prefix + "recordedDoclingVersion") ?? ""
         self.chunkCacheLimitMB = defaults.object(forKey: prefix + "chunkCacheLimitMB") as? Int ?? 2048
         self.doTableExtraction = defaults.object(forKey: prefix + "doTableExtraction") as? Bool ?? true

@@ -162,6 +162,9 @@ enum DevboxJobPayload {
             body["qdrant_url"] = settings.qdrantCloudURL
             body["qdrant_api_key"] = settings.qdrantAPIKey
         }
+        if let offset = settings.journalPageOffset {
+            body["page_offset"] = offset
+        }
         return body
     }
 

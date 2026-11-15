@@ -274,6 +274,9 @@ def _payload(
         labels = chunk.get("page_labels")
         if isinstance(labels, list) and labels:
             payload["page_labels"] = [str(item) for item in labels]
+        printed = chunk.get("printed_page")
+        if isinstance(printed, str) and printed:
+            payload["printed_page"] = printed
 
     resolved_year = chunk.get("year") if chunk.get("year") is not None else year
     if settings.metadata_include_year and resolved_year is not None:

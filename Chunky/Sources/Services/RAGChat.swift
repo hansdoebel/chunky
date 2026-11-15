@@ -7,6 +7,7 @@ struct RAGCitation: Equatable, Identifiable, Sendable {
     var docTitle: String
     var page: Int?
     var pageEnd: Int?
+    var printedPage: String?
     var score: Double
 
     var paperLabel: String {
@@ -17,6 +18,9 @@ struct RAGCitation: Equatable, Identifiable, Sendable {
     }
 
     var pageLabel: String? {
+        if let printedPage, !printedPage.isEmpty {
+            return printedPage
+        }
         guard let page else { return nil }
         if let pageEnd, pageEnd != page {
             return "pp. \(page)–\(pageEnd)"
@@ -56,6 +60,7 @@ enum RAGPrompt {
                 docTitle: hit.docTitle,
                 page: hit.page,
                 pageEnd: hit.pageEnd,
+                printedPage: hit.payload["printed_page"],
                 score: hit.score
             )
             citations.append(citation)

@@ -98,6 +98,7 @@ class DocumentProcessor: ObservableObject {
             doclingOptions.chunkMergePeers = settings.chunkMergePeers
             doclingOptions.chunkTokenizer = settings.chunkTokenizer
             doclingOptions.useDaemon = settings.useDaemonMode
+            doclingOptions.pageOffset = settings.journalPageOffset
 
             await refreshDoclingVersion(settings: settings)
             let digest = RunHistory.contentHash(ofFile: job.sourceURL)
@@ -205,7 +206,10 @@ class DocumentProcessor: ObservableObject {
                         pictureClass: pc.pictureClass,
                         tableMarkdown: pc.tableMarkdown,
                         pageEnd: pc.pageEnd,
-                        bboxesJSON: Self.bboxesJSON(pc.bboxes)
+                        bboxesJSON: Self.bboxesJSON(pc.bboxes),
+                        pageLabels: pc.pageLabels ?? [],
+                        printedPage: pc.printedPage,
+                        pageOffset: pc.pageOffset
                     )
                 }
             } else {
@@ -559,7 +563,11 @@ class DocumentProcessor: ObservableObject {
                 year: chunk.year,
                 language: chunk.language,
                 embeddingText: chunk.embeddingText,
-                pageEnd: chunk.pageEnd
+                pageEnd: chunk.pageEnd,
+                pageLabels: chunk.pageLabels,
+                printedPage: chunk.pageLabels.count > 1
+                    ? "pp. \(chunk.pageLabels[0])–\(chunk.pageLabels[chunk.pageLabels.count - 1])"
+                    : chunk.pageLabels.first.map { "p. \($0)" }
             )
         }
         if mode == .chunkOnly {
@@ -780,6 +788,15 @@ class DocumentProcessor: ObservableObject {
             }
             if let bboxesJSON = chunk.bboxesJSON, !bboxesJSON.isEmpty {
                 metadata["bboxes"] = bboxesJSON
+            }
+            if !chunk.pageLabels.isEmpty {
+                metadata["page_labels"] = chunk.pageLabels.joined(separator: "\n")
+            }
+            if let printed = chunk.printedPage, !printed.isEmpty {
+                metadata["printed_page"] = printed
+            }
+            if let offset = chunk.pageOffset {
+                metadata["page_offset"] = String(offset)
             }
             let storedText = (chunk.embeddingText?.isEmpty == false) ? chunk.embeddingText! : chunk.text
             return ChunkPoint(
@@ -1335,7 +1352,10 @@ class DocumentProcessor: ObservableObject {
                 pictureClass: raw["picture_class"] as? String,
                 tableMarkdown: raw["table_markdown"] as? String,
                 pageEnd: (raw["page_end"] as? NSNumber)?.intValue,
-                bboxesJSON: Self.bboxesJSON(raw["bboxes"])
+                bboxesJSON: Self.bboxesJSON(raw["bboxes"]),
+                pageLabels: (raw["page_labels"] as? [Any])?.compactMap { $0 as? String } ?? [],
+                printedPage: raw["printed_page"] as? String,
+                pageOffset: (raw["page_offset"] as? NSNumber)?.intValue
             )
         }
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
