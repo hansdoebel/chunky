@@ -13,7 +13,7 @@ struct ChunkPayloadTests {
         pictureClass: String? = nil,
         tableMarkdown: String? = nil
     ) -> ChunkPoint {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
         let previous = settings.enableEmbeddingCache
         settings.enableEmbeddingCache = false
         defer { settings.enableEmbeddingCache = previous }

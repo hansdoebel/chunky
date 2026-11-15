@@ -16,16 +16,7 @@ struct DevboxWorkerServiceTests {
     }
 
     @Test func settingsMapMLXAndChooseIngestTarget() {
-        let settings = AppSettings()
-        let previousCollection = settings.defaultCollection
-        settings.defaultCollection = "documents"
-        UserDefaults.standard.removeObject(forKey: "chunky.collectionPlan.documents")
-        defer {
-            settings.qdrantAPIKey = ""
-            settings.qdrantCloudURL = ""
-            settings.defaultCollection = previousCollection
-            UserDefaults.standard.removeObject(forKey: "chunky.collectionPlan.documents")
-        }
+        let settings = IsolatedSettings.make()
         settings.doclingModel = "granite-docling-mlx"
         settings.doclingAccelerator = "mps"
         settings.devboxIngestTarget = .localDocker
@@ -48,29 +39,18 @@ struct DevboxWorkerServiceTests {
     }
 
     @Test func savedCollectionPlanChoosesCloudIngest() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
         let name = "plan-\(UUID().uuidString)"
-        let previousCollection = settings.defaultCollection
-        let previousTarget = settings.devboxIngestTarget
         settings.defaultCollection = name
         settings.devboxIngestTarget = .localDocker
-        defer {
-            UserDefaults.standard.removeObject(forKey: "chunky.collectionPlan.\(name)")
-            settings.defaultCollection = previousCollection
-            settings.devboxIngestTarget = previousTarget
-        }
         var plan = CollectionPlan.preset(
             .largeCloud, name: name, vectorSize: 1024,
             embeddingBackend: "openai", embeddingModel: "Qwen/Qwen3-Embedding-0.6B"
         )
         plan.distance = .dot
-        CollectionPlanStore.save(plan)
+        CollectionPlanStore.save(plan, defaults: settings.defaults)
         settings.qdrantCloudURL = "https://example.cloud.qdrant.io"
         settings.qdrantAPIKey = "cloud-key"
-        defer {
-            settings.qdrantAPIKey = ""
-            settings.qdrantCloudURL = ""
-        }
         let cloud = DevboxJobPayload.settings(from: settings, mode: .full)
         #expect(cloud["ingest_target"] as? String == "qdrant_cloud")
         #expect(cloud["qdrant_distance"] as? String == "dot")

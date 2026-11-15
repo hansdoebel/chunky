@@ -66,7 +66,7 @@ struct CollectionPlanTests {
             embeddingBackend: "ollama", embeddingModel: "qwen3-embedding"
         )
         CollectionPlanStore.save(plan, defaults: defaults)
-        let options = CollectionPlanStore.options(collection: "docs", settings: AppSettings(), defaults: defaults)
+        let options = CollectionPlanStore.options(collection: "docs", settings: IsolatedSettings.make(), defaults: defaults)
         #expect(options.hybrid)
         #expect(options.quantization == .scalarInt8)
         #expect(options.onDiskVectors == false)

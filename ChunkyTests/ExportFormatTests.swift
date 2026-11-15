@@ -454,7 +454,7 @@ struct ExportFormatTests {
     }
 
     @Test func exportFormatDefaultsToJSON() {
-        let settings = AppSettings()
+        let settings = IsolatedSettings.make()
         // Default should be docling (markdown), but let's test fallback
         let format = ExportFormat(rawValue: settings.exportFormat) ?? .json
         #expect(format != nil)

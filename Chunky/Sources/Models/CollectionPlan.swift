@@ -314,7 +314,8 @@ enum CollectionPlanStore {
         return merged
     }
 
-    static func options(collection: String, settings: AppSettings, defaults: UserDefaults = .standard) -> CollectionCreateOptions {
+    static func options(collection: String, settings: AppSettings, defaults store: UserDefaults? = nil) -> CollectionCreateOptions {
+        let defaults = store ?? settings.defaults
         if let plan = load(name: collection, defaults: defaults) {
             return CollectionCreateOptions(
                 hybrid: plan.hybrid,
