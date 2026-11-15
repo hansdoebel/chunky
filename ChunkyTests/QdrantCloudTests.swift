@@ -39,6 +39,10 @@ struct QdrantCloudTests {
         #expect(overview.events == 2)
         #expect(overview.logs == 1)
         #expect(overview.inferenceTokens == 42)
+        #expect(overview.summary.contains("ram") == true)
+        #expect(overview.accountID == "acct")
+        #expect(overview.clusterID == "clus")
+        #expect(overview.missing.isEmpty)
         #expect(overview.keyWarning?.contains("7 days") == true)
         #expect(transport.authorizations.allSatisfy { $0 == "apikey mgmt-secret" })
         #expect(transport.methods.contains("GET"))
@@ -65,11 +69,45 @@ struct QdrantCloudTests {
         settings.qdrantCloudManagementKey = "mgmt-secret"
         #expect(settings.qdrantCloudManagementKey == "mgmt-secret")
         #expect(settings.qdrantAPIKey.isEmpty)
+        settings.processingHost = .devbox
+        settings.devboxIngestTarget = .qdrantCloud
+        settings.qdrantURL = "http://127.0.0.1:6334"
+        settings.qdrantCloudURL = "https://example.cloud.qdrant.io:6333"
+        #expect(QdrantKeepAlive.databaseURL(settings: settings) == "https://example.cloud.qdrant.io:6333")
+        settings.devboxIngestTarget = .localDocker
+        #expect(QdrantKeepAlive.databaseURL(settings: settings) == "http://127.0.0.1:6334")
+    }
+
+    @Test func aFailedLogRequestKeepsTheSuspendedCluster() async throws {
+        let transport = ScriptedCloudTransport()
+        transport.failures = ["/api/monitoring/v1/accounts/acct/cluster/clus/logs"]
+        transport.body = { url in
+            if url.path.hasSuffix("/logs") { return Data() }
+            if url.path.hasSuffix("/database-api-keys") { return Data("{\"items\":[]}".utf8) }
+            if url.path.hasSuffix("/alerts") { return Data("{\"items\":[]}".utf8) }
+            if url.path.hasSuffix("/summary-metrics") { return Data("{\"summary\":{\"cpu\":0.5}}".utf8) }
+            if url.path.hasSuffix("/usage-metrics") { return Data("{\"items\":[]}".utf8) }
+            if url.path.hasSuffix("/events") { return Data("{\"items\":[]}".utf8) }
+            if url.path.hasSuffix("/metrics/inference") { return Data("{\"tokens\":0}".utf8) }
+            return Data(Self.clusterJSON.utf8)
+        }
+        let overview = try await CloudManagementClient(transport: transport).load(
+            accountID: "acct",
+            clusterID: "clus",
+            managementKey: "mgmt-secret",
+            now: Date(timeIntervalSince1970: 1_700_000_000)
+        )
+        #expect(overview.phase == "SUSPENDED")
+        #expect(overview.canUnsuspend)
+        #expect(overview.missing == ["logs"])
+        #expect(overview.summary == "cpu 0.5")
     }
 
     @MainActor
     @Test func rendersTheCloudSection() throws {
         let cloud = CloudOverview(
+            accountID: "account",
+            clusterID: "cluster",
             name: "papers",
             phase: "SUSPENDED",
             version: "v1.16.3",
@@ -77,12 +115,14 @@ struct QdrantCloudTests {
             ram: "1.0",
             disk: "4.0",
             cpu: "0.5",
+            summary: "cpu 0.5",
             alerts: ["Disk is high"],
             events: 2,
             logs: 1,
             usagePoints: 2,
             inferenceTokens: 42,
-            keyWarning: "A database API key expires within 7 days. The default lifetime is 90 days."
+            keyWarning: "A database API key expires within 7 days. The default lifetime is 90 days.",
+            missing: []
         )
         let data = try QdrantCloudRenderer.png(cloud: cloud)
         #expect(data.count > 1000)
@@ -106,10 +146,15 @@ private final class ScriptedCloudTransport: CloudManagementTransport, @unchecked
     var paths: [String] = []
     var authorizations: [String] = []
 
+    var failures: Set<String> = []
+
     func send(method: String, url: URL, managementKey: String) async throws -> (status: Int, body: Data) {
         methods.append(method)
         paths.append(url.path)
         authorizations.append(CloudManagementClient.authorization(managementKey))
+        if failures.contains(url.path) {
+            throw URLError(.timedOut)
+        }
         return (200, body(url))
     }
 }

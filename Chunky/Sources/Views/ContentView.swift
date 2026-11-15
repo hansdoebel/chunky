@@ -7,7 +7,7 @@ struct ContentView: View {
     @StateObject private var processor = DocumentProcessor()
 
     private static func pingDatabase(settings: AppSettings) async -> Bool {
-        guard let url = try? QdrantKeepAlive.collectionsURL(baseURL: settings.qdrantURL) else { return false }
+        guard let url = try? QdrantKeepAlive.collectionsURL(baseURL: QdrantKeepAlive.databaseURL(settings: settings)) else { return false }
         var request = URLRequest(url: url)
         if !settings.qdrantAPIKey.isEmpty {
             request.setValue(settings.qdrantAPIKey, forHTTPHeaderField: "api-key")

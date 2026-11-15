@@ -130,6 +130,11 @@ struct QdrantHealthScreen: View {
                     Text("Allocated RAM \(cloud.ram) · disk \(cloud.disk) · CPU \(cloud.cpu)")
                         .font(.caption)
                 }
+                if !cloud.summary.isEmpty {
+                    Text("Summary \(cloud.summary)")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Text("Alerts \(cloud.alerts.count) · events \(cloud.events) · logs \(cloud.logs) · usage points \(cloud.usagePoints)")
                     .font(.caption)
                     .foregroundStyle(.secondary)
@@ -145,6 +150,11 @@ struct QdrantHealthScreen: View {
                 if let warning = cloud.keyWarning {
                     Text(warning)
                         .font(.callout)
+                        .foregroundStyle(AppTheme.statusOrange)
+                }
+                if !cloud.missing.isEmpty {
+                    Text("Could not load \(cloud.missing.joined(separator: ", ")).")
+                        .font(.caption)
                         .foregroundStyle(AppTheme.statusOrange)
                 }
                 if cloud.canUnsuspend {
@@ -213,6 +223,7 @@ struct QdrantHealthRoot: View {
     @State private var cloudStatus = ""
     @State private var accountID = ""
     @State private var clusterID = ""
+    @State private var cloudGeneration = 0
     @State private var managementKey = ""
 
     var body: some View {
@@ -225,8 +236,16 @@ struct QdrantHealthRoot: View {
             clusterID: clusterID,
             managementKey: managementKey,
             keepAlive: appState.settings.qdrantKeepAlive,
-            onAccount: { accountID = $0; appState.settings.qdrantCloudAccountID = $0 },
-            onCluster: { clusterID = $0; appState.settings.qdrantCloudClusterID = $0 },
+            onAccount: { value in
+                accountID = value
+                appState.settings.qdrantCloudAccountID = value
+                invalidateCloud()
+            },
+            onCluster: { value in
+                clusterID = value
+                appState.settings.qdrantCloudClusterID = value
+                invalidateCloud()
+            },
             onManagementKey: { managementKey = $0; appState.settings.qdrantCloudManagementKey = $0 },
             onKeepAlive: { appState.settings.qdrantKeepAlive = $0 },
             onUnsuspend: { Task { await unsuspend() } },
@@ -247,7 +266,7 @@ struct QdrantHealthRoot: View {
         let collection = settings.defaultCollection
         let client = QdrantHealthClient(transport: LiveQdrantHealthTransport())
         let loaded = await client.load(
-            baseURL: settings.qdrantURL,
+            baseURL: QdrantKeepAlive.databaseURL(settings: settings),
             apiKey: settings.qdrantAPIKey,
             collection: collection,
             lastSuccess: settings.qdrantLastSuccessAt,
@@ -267,28 +286,41 @@ struct QdrantHealthRoot: View {
         await loadCloud()
     }
 
+    private func invalidateCloud() {
+        cloudGeneration += 1
+        cloud = nil
+        cloudStatus = "Refresh to load this cluster."
+    }
+
     private func loadCloud() async {
-        let settings = appState.settings
-        guard !accountID.isEmpty, !clusterID.isEmpty, !managementKey.isEmpty else {
+        let requestedAccount = accountID
+        let requestedCluster = clusterID
+        guard !requestedAccount.isEmpty, !requestedCluster.isEmpty, !managementKey.isEmpty else {
             cloud = nil
             cloudStatus = "Add an account ID, cluster ID, and management key to read cluster phase."
             return
         }
+        cloudGeneration += 1
+        let generation = cloudGeneration
         let client = CloudManagementClient(transport: LiveCloudManagementTransport())
         do {
-            cloud = try await client.load(accountID: accountID, clusterID: clusterID, managementKey: managementKey, now: Date())
-            cloudStatus = "Cloud management key accepted."
+            let loaded = try await client.load(accountID: requestedAccount, clusterID: requestedCluster, managementKey: managementKey, now: Date())
+            guard generation == cloudGeneration, requestedAccount == accountID, requestedCluster == clusterID else { return }
+            cloud = loaded
+            cloudStatus = loaded.missing.isEmpty ? "Cloud management key accepted." : "Cloud phase loaded. Some readings are missing."
         } catch {
+            guard generation == cloudGeneration else { return }
             cloud = nil
             cloudStatus = error.localizedDescription
         }
     }
 
     private func unsuspend() async {
+        guard let shown = cloud else { return }
         let client = CloudManagementClient(transport: LiveCloudManagementTransport())
         do {
-            try await client.unsuspend(accountID: accountID, clusterID: clusterID, managementKey: managementKey)
-            cloudStatus = "Unsuspend requested."
+            try await client.unsuspend(accountID: shown.accountID, clusterID: shown.clusterID, managementKey: managementKey)
+            cloudStatus = "Unsuspend requested for \(shown.name.isEmpty ? shown.clusterID : shown.name)."
             await loadCloud()
         } catch {
             cloudStatus = error.localizedDescription

@@ -1,6 +1,8 @@
 import Foundation
 
 struct CloudOverview: Equatable, Sendable {
+    var accountID: String
+    var clusterID: String
     var name: String
     var phase: String
     var version: String
@@ -8,12 +10,14 @@ struct CloudOverview: Equatable, Sendable {
     var ram: String
     var disk: String
     var cpu: String
+    var summary: String
     var alerts: [String]
     var events: Int
     var logs: Int
     var usagePoints: Int
     var inferenceTokens: Double?
     var keyWarning: String?
+    var missing: [String]
 
     var canUnsuspend: Bool {
         phase == "SUSPENDED" || phase == "FAILED_TO_RESUME"
@@ -103,6 +107,8 @@ enum CloudClusterParser {
         let phase = phase(QdrantCloudJSON.text(QdrantCloudJSON.value(state, "phase")) ?? "UNKNOWN")
         let keyWarning = keyWarning(from: dataKeys, now: now)
         return CloudOverview(
+            accountID: "",
+            clusterID: "",
             name: QdrantCloudJSON.text(QdrantCloudJSON.value(cluster, "name")) ?? "",
             phase: phase,
             version: QdrantCloudJSON.text(QdrantCloudJSON.value(state, "version")) ?? "",
@@ -110,12 +116,14 @@ enum CloudClusterParser {
             ram: resource(resources, "ram"),
             disk: resource(resources, "disk"),
             cpu: resource(resources, "cpu"),
+            summary: summaryLine(summaryData),
             alerts: firingAlerts(alertData),
             events: count(eventData, keys: ["events", "items"]),
             logs: count(logData, keys: ["logs", "items"]),
             usagePoints: count(usageData, keys: ["values", "items", "points"]),
             inferenceTokens: inferenceTokens(inferenceData),
-            keyWarning: keyWarning
+            keyWarning: keyWarning,
+            missing: []
         )
     }
 
@@ -156,6 +164,24 @@ enum CloudClusterParser {
         return QdrantCloudJSON.rows(root, keys: keys).count
     }
 
+    private static func summaryLine(_ data: Data) -> String {
+        guard let root = json(data) else { return "" }
+        let source = QdrantCloudJSON.object(QdrantCloudJSON.value(root, "summary")) ?? root
+        var parts: [String] = []
+        func walk(_ value: Any, name: String) {
+            if let number = QdrantCloudJSON.number(value), !name.isEmpty {
+                parts.append("\(name) \(String(format: "%.1f", number))")
+                return
+            }
+            guard let object = value as? [String: Any] else { return }
+            for (key, child) in object.sorted(by: { $0.key < $1.key }) {
+                walk(child, name: key)
+            }
+        }
+        walk(source, name: "")
+        return parts.prefix(4).joined(separator: " · ")
+    }
+
     private static func inferenceTokens(_ data: Data) -> Double? {
         guard let root = json(data) else { return nil }
         if let tokens = QdrantCloudJSON.number(QdrantCloudJSON.value(root, "tokens")) { return tokens }
@@ -178,6 +204,13 @@ enum QdrantKeepAlive {
         return now.timeIntervalSince(last) >= interval
     }
 
+    static func databaseURL(settings: AppSettings) -> String {
+        if settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud {
+            return settings.qdrantCloudURL
+        }
+        return settings.qdrantURL
+    }
+
     static func collectionsURL(baseURL: String) throws -> URL {
         guard var url = CollectionSnapshots.restBase(qdrantURL: baseURL) else {
             throw QdrantHealthError.invalidURL(baseURL)
@@ -197,14 +230,23 @@ struct CloudManagementClient: Sendable {
 
     func load(accountID: String, clusterID: String, managementKey: String, now: Date) async throws -> CloudOverview {
         let cluster = try await get(path: "api/cluster/v1/accounts/\(accountID)/clusters/\(clusterID)", key: managementKey)
-        let keys = try await get(path: "api/cluster/auth/v2/accounts/\(accountID)/database-api-keys", key: managementKey, query: "cluster_id=\(clusterID)")
-        let alerts = try await get(path: "api/cluster/v1/accounts/\(accountID)/clusters/\(clusterID)/alerts", key: managementKey)
-        let summary = try await get(path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/summary-metrics", key: managementKey)
-        let usage = try await get(path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/usage-metrics", key: managementKey)
-        let logs = try await get(path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/logs", key: managementKey)
-        let events = try await get(path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/events", key: managementKey)
-        let inference = try await get(path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/metrics/inference", key: managementKey)
-        guard let overview = CloudClusterParser.overview(
+        var missing: [String] = []
+        func optional(_ name: String, path: String, query: String = "") async -> Data {
+            do {
+                return try await get(path: path, key: managementKey, query: query)
+            } catch {
+                missing.append(name)
+                return Data()
+            }
+        }
+        let keys = await optional("database keys", path: "api/cluster/auth/v2/accounts/\(accountID)/database-api-keys", query: "cluster_id=\(clusterID)")
+        let alerts = await optional("alerts", path: "api/cluster/v1/accounts/\(accountID)/clusters/\(clusterID)/alerts")
+        let summary = await optional("summary", path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/summary-metrics")
+        let usage = await optional("usage", path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/usage-metrics")
+        let logs = await optional("logs", path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/logs")
+        let events = await optional("events", path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/events")
+        let inference = await optional("inference", path: "api/monitoring/v1/accounts/\(accountID)/cluster/\(clusterID)/metrics/inference")
+        guard var overview = CloudClusterParser.overview(
             cluster: cluster,
             keys: keys,
             alerts: alerts,
@@ -217,6 +259,9 @@ struct CloudManagementClient: Sendable {
         ) else {
             throw QdrantHealthError.http(200)
         }
+        overview.accountID = accountID
+        overview.clusterID = clusterID
+        overview.missing = missing
         return overview
     }
 
