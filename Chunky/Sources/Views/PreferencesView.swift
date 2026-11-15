@@ -169,8 +169,21 @@ struct PreferencesView: View {
     private var documentTab: some View {
         Form {
             Section {
+                Picker("Processing host", selection: $appState.settings.processingHost) {
+                    ForEach(ProcessingHost.allCases) { host in
+                        Text(host.rawValue).tag(host)
+                    }
+                }
+                .onChange(of: appState.settings.processingHost) { _, host in
+                    let current = DoclingModel(rawValue: appState.settings.doclingModel) ?? .standard
+                    if host == .devbox && current.isMLX {
+                        appState.settings.doclingModel = current.devboxModel.rawValue
+                    }
+                    appState.settings.doclingAccelerator = host.defaultAccelerator.rawValue
+                }
+
                 Picker("VLM Model", selection: $appState.settings.doclingModel) {
-                    ForEach(DoclingModel.allCases, id: \.rawValue) { model in
+                    ForEach(DoclingModel.models(for: appState.settings.processingHost), id: \.rawValue) { model in
                         VStack(alignment: .leading) {
                             Text(model.displayName)
                         }

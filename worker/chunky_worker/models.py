@@ -41,7 +41,8 @@ class JobSettings(BaseModel):
     mode: JobMode = JobMode.CHUNK_ONLY
     format: str = "json"
     vlm_model: str | None = None
-    accelerator: str = "cpu"
+    # ROCm exposes the GPU as torch.cuda. MPS is Mac-only.
+    accelerator: str = "cuda"
     enable_ocr: bool = False
     ocr_language: str | None = None
     table_mode: str = "fast"

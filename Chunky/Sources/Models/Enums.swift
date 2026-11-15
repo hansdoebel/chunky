@@ -14,6 +14,22 @@ enum ProcessingMode: String, CaseIterable {
     case full = "Chunk & Ingest"
 }
 
+/// Where document conversion runs. The devbox has no MLX.
+enum ProcessingHost: String, CaseIterable, Identifiable {
+    case localMac = "Local Mac"
+    case devbox = "Devbox"
+
+    var id: String { rawValue }
+
+    /// Standard-pipeline accelerator. ROCm reports the GPU as CUDA.
+    var defaultAccelerator: Accelerator {
+        switch self {
+        case .localMac: return .mps
+        case .devbox: return .cuda
+        }
+    }
+}
+
 // MARK: - Export Format (for chunk export)
 
 enum ExportFormat: String, CaseIterable {
@@ -152,6 +168,35 @@ enum DoclingModel: String, CaseIterable {
 
     /// Whether this model runs locally (not via Ollama)
     var isLocal: Bool { self != .standard }
+
+    var isMLX: Bool { rawValue.hasSuffix("-mlx") }
+
+    /// Transformers id the worker can run. MLX models map to that equivalent.
+    var devboxModel: DoclingModel {
+        switch self {
+        case .graniteDoclingMLX: return .graniteDoclingTransformers
+        case .smoldoclingMLX: return .smoldoclingTransformers
+        default: return self
+        }
+    }
+
+    static func models(for host: ProcessingHost) -> [DoclingModel] {
+        switch host {
+        case .localMac: return allCases
+        case .devbox: return allCases.filter { !$0.isMLX }
+        }
+    }
+
+    /// Model id to send to the worker. MLX ids are rewritten.
+    static func workerModelID(_ raw: String) -> String {
+        guard let model = DoclingModel(rawValue: raw) else {
+            if raw.hasSuffix("-mlx") {
+                return String(raw.dropLast(4)) + "-transformers"
+            }
+            return raw
+        }
+        return model.devboxModel.rawValue
+    }
 }
 
 // MARK: - XML Document Format

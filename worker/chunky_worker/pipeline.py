@@ -8,6 +8,7 @@ from typing import Callable, Protocol
 
 from chunky_worker.exceptions import JobCanceled
 from chunky_worker.models import JobSettings
+from chunky_worker.vlm import accelerator_for_worker, model_for_worker
 
 ProgressFn = Callable[[str, float | None], None]
 
@@ -50,6 +51,8 @@ class DoclingPipeline:
             raise JobCanceled()
 
         convert_document = self._load_convert()
+        vlm_model = model_for_worker(settings.vlm_model)
+        accelerator = accelerator_for_worker(settings.accelerator)
 
         def hooked(message: str, percent: float | None = None) -> None:
             if cancel_event.is_set():
@@ -66,8 +69,8 @@ class DoclingPipeline:
             table_mode=settings.table_mode,
             no_tables=settings.no_tables,
             report_progress=False,
-            accelerator=settings.accelerator,
-            vlm_model=settings.vlm_model,
+            accelerator=accelerator,
+            vlm_model=vlm_model,
             ollama_url=settings.ollama_url or "http://127.0.0.1:11434",
             generate_images=settings.generate_images,
             image_export_mode=settings.image_export_mode,
