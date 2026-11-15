@@ -129,7 +129,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: analytics-screenshot
-          path: /tmp/chunky-analytics.png
+          path: /tmp/chunky-*.png
           if-no-files-found: ignore
 
       - name: Build qdrant-swift and run its unit tests

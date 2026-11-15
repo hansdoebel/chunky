@@ -43,6 +43,11 @@ struct SidebarView: View {
                 isSelected: appState.viewMode == .analytics
             )
             .onTapGesture { appState.viewMode = .analytics }
+            NavigationRow(
+                icon: "speedometer", title: "Benchmark",
+                isSelected: appState.viewMode == .benchmark
+            )
+            .onTapGesture { appState.viewMode = .benchmark }
 
             Section {
                 HStack(spacing: 8) {
@@ -175,8 +180,10 @@ struct MainContentView: View {
                 }
             } else if appState.viewMode == .collections {
                 CollectionBrowserView()
-            } else {
+            } else if appState.viewMode == .analytics {
                 AnalyticsView(runs: appState.finishedRuns, warning: appState.historyWarning)
+            } else {
+                BenchmarkScreen(processor: processor)
             }
 
             Divider()
