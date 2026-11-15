@@ -36,21 +36,21 @@ private enum ChatSettingsRenderer {
     static let pngMagic = Data([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A])
 
     static func png(report: PiInstallReport, models: [PiModel], backend: String) throws -> Data {
+        let size = NSSize(width: 520, height: 820)
         let view = ChatSettingsSnapshot(report: report, models: models, backend: backend)
-            .frame(width: 500, height: 860, alignment: .top)
+            .frame(width: size.width, height: size.height, alignment: .top)
             .background(Color(nsColor: .windowBackgroundColor))
-        let renderer = ImageRenderer(content: view)
-        renderer.scale = 2
-        renderer.proposedSize = ProposedViewSize(width: 500, height: 860)
-        if let image = renderer.nsImage, let data = pngData(from: image), data.count > 1000 {
-            return data
+            .environment(\.colorScheme, .light)
+        let candidates = [windowPNG(view, size: size), pdfPNG(view, size: size), imageRendererPNG(view, size: size)]
+        guard let data = candidates.compactMap({ $0 }).first(where: { !isMostlyBlank($0) }) else {
+            throw CocoaError(.fileReadCorruptFile)
         }
-        return try hostedPNG(view)
+        return data
     }
 
-    private static func hostedPNG<V: View>(_ view: V) throws -> Data {
+    private static func windowPNG<V: View>(_ view: V, size: NSSize) -> Data? {
         let host = NSHostingView(rootView: view)
-        host.frame = NSRect(x: 0, y: 0, width: 500, height: 860)
+        host.frame = NSRect(origin: .zero, size: size)
         host.appearance = NSAppearance(named: .aqua)
         let window = NSWindow(
             contentRect: host.frame,
@@ -58,17 +58,61 @@ private enum ChatSettingsRenderer {
             backing: .buffered,
             defer: false
         )
+        window.appearance = NSAppearance(named: .aqua)
         window.contentView = host
+        window.orderFrontRegardless()
         window.layoutIfNeeded()
         host.layoutSubtreeIfNeeded()
-        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else {
-            throw CocoaError(.fileReadUnknown)
-        }
+        window.displayIfNeeded()
+        RunLoop.current.run(until: Date().addingTimeInterval(0.2))
+        host.layoutSubtreeIfNeeded()
+        guard let rep = host.bitmapImageRepForCachingDisplay(in: host.bounds) else { return nil }
         host.cacheDisplay(in: host.bounds, to: rep)
-        guard let data = rep.representation(using: .png, properties: [:]), data.count > 1000 else {
-            throw CocoaError(.fileReadUnknown)
+        window.orderOut(nil)
+        return rep.representation(using: .png, properties: [:])
+    }
+
+    private static func pdfPNG<V: View>(_ view: V, size: NSSize) -> Data? {
+        let host = NSHostingView(rootView: view)
+        host.frame = NSRect(origin: .zero, size: size)
+        host.appearance = NSAppearance(named: .aqua)
+        host.layoutSubtreeIfNeeded()
+        let pdf = host.dataWithPDF(inside: host.bounds)
+        guard let image = NSImage(data: pdf) else { return nil }
+        return pngData(from: image)
+    }
+
+    private static func imageRendererPNG<V: View>(_ view: V, size: NSSize) -> Data? {
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 2
+        renderer.proposedSize = ProposedViewSize(width: size.width, height: size.height)
+        renderer.isOpaque = true
+        guard let image = renderer.nsImage else { return nil }
+        return pngData(from: image)
+    }
+
+    private static func isMostlyBlank(_ data: Data) -> Bool {
+        guard data.count > 1000, data.prefix(8) == pngMagic, let rep = NSBitmapImageRep(data: data) else {
+            return true
         }
-        return data
+        let width = rep.pixelsWide
+        let height = rep.pixelsHigh
+        guard width > 10, height > 10 else { return true }
+        var ink = 0
+        let stepX = max(width / 40, 1)
+        let stepY = max(height / 40, 1)
+        for y in stride(from: 0, to: height, by: stepY) {
+            for x in stride(from: 0, to: width, by: stepX) {
+                guard let color = rep.colorAt(x: x, y: y) else { continue }
+                let red = color.redComponent
+                let green = color.greenComponent
+                let blue = color.blueComponent
+                if abs(red - green) > 0.04 || abs(green - blue) > 0.04 || red < 0.9 {
+                    ink += 1
+                }
+            }
+        }
+        return ink < 12
     }
 
     private static func pngData(from image: NSImage) -> Data? {
