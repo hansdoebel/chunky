@@ -112,8 +112,9 @@ enum DevboxJobPayload {
         "Bearer \(token)"
     }
 
-    static func settings(from settings: AppSettings, mode: ProcessingMode) -> [String: Any] {
-        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+    static func settings(from settings: AppSettings, mode: ProcessingMode, collection: String? = nil) -> [String: Any] {
+        let collectionName = collection ?? settings.defaultCollection
+        let options = CollectionPlanStore.options(collection: collectionName, settings: settings)
         let ingest: String
         switch (mode, options.target) {
         case (.chunkOnly, _):
@@ -148,7 +149,7 @@ enum DevboxJobPayload {
             "do_picture_classification": settings.doPictureClassification,
             "picture_description_preset": settings.resolvedPictureDescriptionPreset,
             "vlm_server_url": settings.vlmServerURL,
-            "qdrant_collection": settings.defaultCollection,
+            "qdrant_collection": collectionName,
             "qdrant_distance": options.distance.rawValue,
             "qdrant_hybrid": options.hybrid,
             "qdrant_quantization": options.quantization.wireValue,
@@ -168,8 +169,8 @@ enum DevboxJobPayload {
         return body
     }
 
-    static func settings(from settings: AppSettings, mode: ProcessingMode, bibliography: BibliographicMetadata?) -> [String: Any] {
-        var body = self.settings(from: settings, mode: mode)
+    static func settings(from settings: AppSettings, mode: ProcessingMode, bibliography: BibliographicMetadata?, collection: String? = nil) -> [String: Any] {
+        var body = self.settings(from: settings, mode: mode, collection: collection)
         guard let bibliography else { return body }
         if !bibliography.title.isEmpty { body["bibliography_title"] = bibliography.title }
         if !bibliography.authors.isEmpty { body["bibliography_authors"] = bibliography.authors }

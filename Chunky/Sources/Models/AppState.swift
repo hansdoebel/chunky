@@ -14,6 +14,7 @@ class AppState: ObservableObject {
     @Published var isProcessing: Bool = false
     @Published var isCancellationRequested: Bool = false
     var benchmarkTask: Task<Void, Never>?
+    var processingTask: Task<Void, Never>?
     @Published var availableCollections: [String] = ["documents", "notes"]
     @Published var browserPoints: [QdrantPoint] = []
     @Published var browserSources: [String] = []
@@ -52,6 +53,156 @@ class AppState: ObservableObject {
             let job = ProcessingJob(url: pdf)
             job.bibliography = match.record
             jobs.append(job)
+        }
+    }
+
+    @Published var watchedIndex = WatchedFolderIndex(folders: [], records: [])
+    private let folderWatcher: FolderWatching = MacFolderWatcher()
+    @Published var watchedStatus = ""
+    @Published var watchedRunToken = 0
+    var watchedFollowUp = false
+
+    var watchedIndexLocationOverride: URL?
+
+    func watchedIndexURL() -> URL {
+        if let watchedIndexLocationOverride { return watchedIndexLocationOverride }
+        return ChunkCacheLocation.macDirectory()
+            .deletingLastPathComponent()
+            .appendingPathComponent("watched-folders.json")
+    }
+
+    func loadWatchedFolders() {
+        watchedIndex = WatchedFolderIndex.load(from: watchedIndexURL())
+    }
+
+    func saveWatchedFolders() {
+        try? watchedIndex.save(to: watchedIndexURL())
+    }
+
+    func enqueueWatched(_ file: WatchedFile, collection: String, settingsHash: String) {
+        let url = URL(fileURLWithPath: file.path)
+        guard FileManager.default.isReadableFile(atPath: url.path) else { return }
+        if jobs.contains(where: { $0.watchedPath == file.path && $0.status != .completed && $0.status != .failed }) { return }
+        let job = ProcessingJob(url: url)
+        job.watchedDocID = file.docID
+        job.watchedCollection = collection
+        job.watchedPath = file.path
+        job.watchedContentHash = file.contentHash
+        job.watchedSettingsHash = settingsHash
+        job.watchedModified = file.modified
+        jobs.append(job)
+    }
+
+    func noteWatchedSuccess(_ job: ProcessingJob) {
+        guard job.status == .completed, !job.uploadedPointIDs.isEmpty, let path = job.watchedPath, let hash = job.watchedContentHash, let settingsHash = job.watchedSettingsHash else { return }
+        var records = watchedIndex.records
+        let record = WatchedRecord(
+            path: path,
+            contentHash: hash,
+            settingsHash: settingsHash,
+            docID: job.watchedDocID ?? hash,
+            pointIDs: job.uploadedPointIDs,
+            modified: job.watchedModified ?? Date()
+        )
+        if let index = records.firstIndex(where: { $0.path == path }) {
+            records[index] = record
+        } else {
+            records.append(record)
+        }
+        var index = watchedIndex
+        index.records = records
+        watchedIndex = index
+        saveWatchedFolders()
+    }
+
+    func scanWatchedFolders() {
+        var records = watchedIndex.records
+        var ingested = 0
+        var skipped = 0
+        var replaced = 0
+        var removed = 0
+        let inFlight = Set(jobs.compactMap { job -> String? in
+            guard let path = job.watchedPath, job.status != .completed, job.status != .failed else { return nil }
+            return path
+        })
+        for folder in watchedIndex.folders where !folder.paused {
+            let prefix = folder.path.hasSuffix("/") ? folder.path : folder.path + "/"
+            let owned = records.filter { $0.path == folder.path || $0.path.hasPrefix(prefix) }
+            let outside = records.filter { $0.path != folder.path && !$0.path.hasPrefix(prefix) }
+            let files = WatchedFolderFiles.list(directory: URL(fileURLWithPath: folder.path)).compactMap {
+                WatchedFolderFiles.file(at: $0)
+            }
+            let fingerprint = fingerprint(for: folder)
+            let plan = FolderSync.plan(
+                files: files,
+                records: owned,
+                settingsHash: fingerprint,
+                deleteRemoved: folder.deleteRemoved,
+                inFlight: inFlight
+            )
+            var pointIDs: [String] = []
+            FolderSyncApply.apply(plan.actions, enqueue: { file in
+                enqueueWatched(file, collection: folder.collection, settingsHash: fingerprint)
+            }, delete: { ids in
+                pointIDs.append(contentsOf: ids)
+            })
+            for action in plan.actions {
+                switch action {
+                case .ingest: ingested += 1
+                case .skip: skipped += 1
+                case .replace: replaced += 1
+                case .delete: removed += 1
+                }
+            }
+            records = outside + plan.records
+            if !pointIDs.isEmpty {
+                let collection = folder.collection
+                Task { await deletePoints(ids: pointIDs, collection: collection) }
+            }
+        }
+        var index = watchedIndex
+        index.records = records
+        watchedIndex = index
+        saveWatchedFolders()
+        watchedStatus = "Ingest \(ingested), replace \(replaced), skip \(skipped), delete \(removed)."
+        if ingested + replaced > 0 {
+            if isProcessing {
+                watchedFollowUp = true
+            } else {
+                watchedRunToken += 1
+            }
+        }
+        startWatchingFolders()
+    }
+
+    private func fingerprint(for folder: WatchedFolder) -> String {
+        FolderSync.settingsFingerprint(
+            collection: folder.collection,
+            embeddingModel: settings.embeddingModel,
+            embeddingBackend: settings.embeddingBackend,
+            chunkTokens: settings.maxTokensPerChunk,
+            overlap: settings.chunkOverlap,
+            chunkTokenizer: settings.chunkTokenizer,
+            doclingModel: settings.doclingModel,
+            doOCR: settings.doOCR,
+            ocrLanguage: settings.ocrLanguage,
+            doTableExtraction: settings.doTableExtraction,
+            tableMode: settings.tableMode,
+            doFormulaEnrichment: settings.doFormulaEnrichment
+        )
+    }
+
+    func startWatchedFolders() {
+        loadWatchedFolders()
+        scanWatchedFolders()
+    }
+
+    func startWatchingFolders() {
+        let paths = watchedIndex.folders.filter { !$0.paused }.map(\.path)
+        folderWatcher.start(paths: paths) { [weak self] in
+            Task { @MainActor in
+                self?.scanWatchedFolders()
+            }
         }
     }
 
@@ -100,6 +251,9 @@ class AppState: ObservableObject {
     }
 
     func storeFinishedRun(_ job: ProcessingJob, settings: AppSettings) {
+        if job.status == .completed {
+            noteWatchedSuccess(job)
+        }
         guard job.status == .completed || job.status == .failed else { return }
         guard !job.analyticsStored, !job.analyticsPending else { return }
         job.analyticsPending = true
@@ -122,7 +276,10 @@ class AppState: ObservableObject {
         }
     }
 
-    func requestCancellation() { isCancellationRequested = true }
+    func requestCancellation() {
+        isCancellationRequested = true
+        watchedFollowUp = false
+    }
     func resetCancellation() { isCancellationRequested = false }
 
     deinit {
@@ -204,14 +361,14 @@ class AppState: ObservableObject {
     }
 
     @MainActor
-    func deletePoints(ids: [String]) async {
+    func deletePoints(ids: [String], collection: String? = nil) async {
         guard !ids.isEmpty else { return }
 
         do {
             try await ensureQdrantConnection()
 
             guard let service = qdrantService else { return }
-            let collectionName = settings.defaultCollection
+            let collectionName = collection ?? settings.defaultCollection
 
             try await service.deletePoints(collectionName: collectionName, ids: ids)
 

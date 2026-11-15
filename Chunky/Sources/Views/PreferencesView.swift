@@ -1,3 +1,4 @@
+import AppKit
 import Combine
 import SwiftUI
 import UniformTypeIdentifiers
@@ -1064,6 +1065,23 @@ struct PreferencesView: View {
             }
 
             Section {
+                WatchedFoldersPane(
+                    folders: appState.watchedIndex.folders,
+                    status: appState.watchedStatus,
+                    onAdd: addWatchedFolder,
+                    onScan: { appState.scanWatchedFolders() },
+                    onTogglePause: toggleWatchedPause,
+                    onToggleDelete: toggleWatchedDelete,
+                    onRemove: removeWatchedFolder
+                )
+                .onAppear {
+                    appState.startWatchedFolders()
+                }
+            } header: {
+                Text("Watched folders")
+            }
+
+            Section {
                 ChunkCacheSettingsPane(
                     limitMB: $appState.settings.chunkCacheLimitMB,
                     onClear: clearChunkCache
@@ -1092,6 +1110,45 @@ struct PreferencesView: View {
 
     private var appVersion: String {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
+    }
+
+    private func addWatchedFolder() {
+        let panel = NSOpenPanel()
+        panel.canChooseFiles = false
+        panel.canChooseDirectories = true
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url else { return }
+        appState.loadWatchedFolders()
+        var index = appState.watchedIndex
+        index.folders.append(WatchedFolder(path: url.path, collection: appState.settings.defaultCollection))
+        appState.watchedIndex = index
+        appState.saveWatchedFolders()
+        appState.scanWatchedFolders()
+    }
+
+    private func toggleWatchedPause(_ id: UUID) {
+        guard let offset = appState.watchedIndex.folders.firstIndex(where: { $0.id == id }) else { return }
+        var index = appState.watchedIndex
+        index.folders[offset].paused.toggle()
+        appState.watchedIndex = index
+        appState.saveWatchedFolders()
+        appState.startWatchingFolders()
+    }
+
+    private func toggleWatchedDelete(_ id: UUID) {
+        guard let offset = appState.watchedIndex.folders.firstIndex(where: { $0.id == id }) else { return }
+        var index = appState.watchedIndex
+        index.folders[offset].deleteRemoved.toggle()
+        appState.watchedIndex = index
+        appState.saveWatchedFolders()
+    }
+
+    private func removeWatchedFolder(_ id: UUID) {
+        var index = appState.watchedIndex
+        index.folders.removeAll { $0.id == id }
+        appState.watchedIndex = index
+        appState.saveWatchedFolders()
+        appState.startWatchingFolders()
     }
 
     private func clearChunkCache() {
