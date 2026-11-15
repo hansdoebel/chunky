@@ -90,3 +90,51 @@ def test_formula_and_code_do_not_force_picture_images():
     assert vlm.generate_picture_images is False
     assert vlm.images_scale == 1.0
     assert vlm.do_picture_description is False
+
+
+def test_daemon_forwards_enrichment_flags_to_the_vlm_builder(monkeypatch):
+    import types
+
+    converter_mod = types.ModuleType("docling.document_converter")
+
+    class DocumentConverter:
+        def __init__(self, format_options=None):
+            self.format_options = format_options
+
+    converter_mod.DocumentConverter = DocumentConverter
+    monkeypatch.setitem(sys.modules, "docling", types.ModuleType("docling"))
+    monkeypatch.setitem(sys.modules, "docling.document_converter", converter_mod)
+
+    import docling_convert
+    import docling_daemon
+
+    seen = {}
+
+    def fake_build(vlm_model, ollama_url, **kwargs):
+        seen["model"] = vlm_model
+        seen["url"] = ollama_url
+        seen["kwargs"] = kwargs
+        return {}
+
+    monkeypatch.setattr(docling_convert, "_build_vlm_format_options", fake_build)
+    docling_daemon._converter_cache.clear()
+    docling_daemon._get_converter(
+        {
+            "vlm_model": "granite-docling-mlx",
+            "ollama_url": "http://127.0.0.1:11434",
+            "do_picture_description": True,
+            "do_picture_classification": True,
+            "do_chart_extraction": True,
+            "do_formula_enrichment": True,
+            "do_code_enrichment": True,
+            "generate_images": True,
+        }
+    )
+    assert seen["model"] == "granite-docling-mlx"
+    assert seen["url"] == "http://127.0.0.1:11434"
+    assert seen["kwargs"]["do_picture_description"] is True
+    assert seen["kwargs"]["do_picture_classification"] is True
+    assert seen["kwargs"]["do_chart_extraction"] is True
+    assert seen["kwargs"]["do_formula_enrichment"] is True
+    assert seen["kwargs"]["do_code_enrichment"] is True
+    assert seen["kwargs"]["generate_images"] is True
