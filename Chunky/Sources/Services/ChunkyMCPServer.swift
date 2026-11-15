@@ -237,7 +237,7 @@ nonisolated enum ChunkyMCPMain {
 
     static func serve() async {
         let context = ChunkyMCPContext.load(defaults: .standard, secrets: KeychainSecretStore())
-        let search = ChunkySearchBackend.make(context: context)
+        let search = ChunkySearchBackend.make()
         let input = FileHandle.standardInput
         let output = FileHandle.standardOutput
         var buffer = Data()

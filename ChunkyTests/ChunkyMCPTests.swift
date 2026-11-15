@@ -95,6 +95,44 @@ struct ChunkyMCPTests {
         #expect(toolText(missing)?.contains("query") == true)
     }
 
+    @Test func retrievalServiceReceivesTheSavedSearch() async throws {
+        let name = "chunky-test-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        defer { defaults.removePersistentDomain(forName: name) }
+        let secrets = MemorySecretStore()
+        let settings = AppSettings(defaults: defaults, secrets: secrets)
+        settings.defaultCollection = "manuals"
+        settings.embeddingModel = "qwen3-embedding"
+        settings.embeddingBackend = "ollama"
+        settings.qdrantURL = "http://127.0.0.1:6334"
+        settings.qdrantAPIKey = "super-secret-token"
+        let script = ScriptedRetrieval()
+        let backend = RetrievalServiceSearch(settings: settings, retrieval: script)
+        let page = try await backend.search(
+            ChunkySearchRequest(
+                query: "voltage",
+                collection: "",
+                topK: 4,
+                filters: [ChunkySearchFilter(key: "source", match: "manual.pdf", gt: nil, gte: nil, lt: nil, lte: nil)]
+            )
+        )
+        #expect(page.collection == "manuals")
+        #expect(page.results.first?.id == "chunk-9")
+        #expect(page.results.first?.payload["text"] == "kept")
+        let sent = await script.lastRequest
+        #expect(sent?.text == "voltage")
+        #expect(sent?.collection == "manuals")
+        #expect(sent?.limit == 4)
+        #expect(sent?.filters.first?.key == "source")
+        #expect(sent?.qdrantAPIKey != "super-secret-token")
+        let names = try await backend.listCollections()
+        #expect(names == ["manuals", "notes"])
+        let listed = await script.listed
+        #expect(listed?.url == "http://127.0.0.1:6334")
+        #expect(listed?.apiKey == "super-secret-token")
+    }
+
     @Test func settingsLoadSecretsFromTheStoreAndOmitThemFromTheSummary() throws {
         let name = "chunky-test-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!
@@ -227,6 +265,41 @@ private final class MCPLaunchTransport: PiByteStream, @unchecked Sendable {
     func terminate() {
         running = false
         continuation.finish()
+    }
+}
+
+private actor ScriptedRetrieval: ChunkyRetrievalCalling {
+    var lastRequest: RetrievalRequest?
+    var listed: (url: String, apiKey: String)?
+
+    func search(_ request: RetrievalRequest) async throws -> RetrievalPage {
+        lastRequest = request
+        return RetrievalPage(
+            hits: [
+                RetrievalHit(
+                    id: "chunk-9",
+                    score: 0.5,
+                    text: "kept",
+                    source: "manual.pdf",
+                    page: 1,
+                    headings: [],
+                    payload: ["text": "kept", "source": "manual.pdf"]
+                )
+            ],
+            limit: request.limit,
+            offset: 0,
+            nextOffset: nil,
+            embeddingModel: request.embeddingModel,
+            embeddingBackend: request.embeddingBackend,
+            embeddingDim: 1024,
+            collection: request.collection,
+            route: request.route
+        )
+    }
+
+    func listCollections(url: String, apiKey: String) async throws -> [String] {
+        listed = (url, apiKey)
+        return ["manuals", "notes"]
     }
 }
 
