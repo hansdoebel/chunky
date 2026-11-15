@@ -20,7 +20,8 @@ struct WatchedFoldersPane: View {
                 Text("No watched folders")
                     .foregroundStyle(.secondary)
             }
-            ForEach(folders, id: \.id) { folder in
+            ForEach(0..<folders.count, id: \.self) { index in
+                let folder = folders[index]
                 VStack(alignment: .leading, spacing: 4) {
                     HStack {
                         Text((folder.path as NSString).lastPathComponent)
