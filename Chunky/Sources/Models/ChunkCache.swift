@@ -79,10 +79,10 @@ struct ChunkCacheChunk: Equatable, Sendable {
                 coordOrigin: text(item["coord_origin"])
             )
         }
-        let text = string(raw["text"])
+        let rawText = string(raw["text"])
         return ChunkCacheChunk(
-            text: text,
-            embeddingText: string(raw["embedding_text"]).isEmpty ? text : string(raw["embedding_text"]),
+            text: rawText,
+            embeddingText: string(raw["embedding_text"]).isEmpty ? rawText : string(raw["embedding_text"]),
             page: page,
             pageEnd: pageEnd,
             pages: pageList,
