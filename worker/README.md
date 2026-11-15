@@ -103,14 +103,22 @@ Put that value in the Mac Keychain. Do not commit it.
 
 **Bind address.** The default is `127.0.0.1:8080` (`CHUNKY_WORKER_HOST` /
 `CHUNKY_WORKER_PORT`, or `--host` / `--port`). On the devbox, set
-`CHUNKY_WORKER_HOST` to the static address of the 10GbE NIC. Do not hardcode
-that address in the repo. Binding `0.0.0.0` logs a warning; prefer the single
-interface plus a firewall that allows the worker port only from the Mac's
-10GbE address:
+`CHUNKY_WORKER_HOST` to the static address of the 10GbE NIC, `0.0.0.0`, or the
+Tailscale address. Do not hardcode that address in the repo. Any bind other
+than `127.0.0.1`, `localhost`, or `::1` refuses to start until
+`CHUNKY_WORKER_TOKEN` or `CHUNKY_WORKER_TOKEN_FILE` is set. Binding `0.0.0.0`
+logs a warning; prefer one interface plus a firewall that allows the worker
+port only from the Mac:
+
+`0.0.0.0` is the supported way to accept the Mac Studio on 10GbE, the MacBook on
+the LAN, and a Tailscale address (`tailscale ip -4`) in one process. A single
+address is enough when only one path is needed. Do not hardcode those
+addresses. Example firewall, using your own values:
 
 ```bash
-# placeholders — use your own addresses
-sudo ufw allow from MAC_10GBE_IP to DEVBOX_10GBE_IP port 8080 proto tcp
+sudo ufw allow from MAC_10GBE_IP to any port 8080 proto tcp
+sudo ufw allow from LAN_SUBNET to any port 8080 proto tcp
+sudo ufw allow from 100.64.0.0/10 to any port 8080 proto tcp
 sudo ufw deny 8080/tcp
 ```
 

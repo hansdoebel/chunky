@@ -4,7 +4,15 @@ from __future__ import annotations
 
 import pytest
 
-from chunky_worker.settings import Settings, is_loopback_url, load_token
+from chunky_worker.app import create_app
+from chunky_worker.settings import (
+    BindWithoutTokenError,
+    Settings,
+    is_loopback_host,
+    is_loopback_url,
+    load_token,
+    require_token_when_exposed,
+)
 
 
 TOKEN_ENV = [
@@ -111,6 +119,31 @@ def test_qdrant_target_from_env_stays_out_of_repr(clean_env, monkeypatch):
     assert settings.qdrant_url == "https://example.cloud.qdrant.io"
     assert settings.qdrant_api_key == "secret-key"
     assert "secret-key" not in repr(settings)
+
+
+@pytest.mark.parametrize("host", ["127.0.0.1", "localhost", "::1", "  [::1]  "])
+def test_loopback_bind_starts_without_a_token(host):
+    settings = Settings(host=host, token=None)
+    require_token_when_exposed(settings)
+    assert is_loopback_host(host)
+
+
+@pytest.mark.parametrize("host", ["0.0.0.0", "::", "192.0.2.10", "100.64.1.2", "devbox.tailnet.ts.net"])
+def test_exposed_bind_refuses_to_start_without_a_token(host):
+    settings = Settings(host=host, port=9090, token=None)
+    with pytest.raises(BindWithoutTokenError, match="CHUNKY_WORKER_TOKEN"):
+        require_token_when_exposed(settings)
+
+
+def test_exposed_bind_starts_when_a_token_is_set():
+    settings = Settings(host="100.64.1.2", token="secret-token")
+    require_token_when_exposed(settings)
+
+
+def test_create_app_refuses_exposed_bind_without_a_token(tmp_path):
+    settings = Settings(host="0.0.0.0", log_dir=tmp_path, work_dir=tmp_path, token=None)
+    with pytest.raises(BindWithoutTokenError):
+        create_app(settings)
 
 
 def test_loopback_detection():

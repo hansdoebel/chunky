@@ -27,7 +27,7 @@ from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
 from chunky_worker.search import QdrantPointSearcher, SearchError, parse_search_request, run_search
-from chunky_worker.settings import Settings, is_loopback_url
+from chunky_worker.settings import Settings, is_loopback_url, require_token_when_exposed
 from chunky_worker.vlm import GRANITE_PRESET, GRANITE_REPO_ID, gpu_probe
 
 log = logging.getLogger(__name__)
@@ -64,6 +64,7 @@ def create_app(
     downloader=None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
+    require_token_when_exposed(settings)
     settings.log_dir.mkdir(parents=True, exist_ok=True)
     settings.work_dir.mkdir(parents=True, exist_ok=True)
     configure_logging(settings.log_dir)
