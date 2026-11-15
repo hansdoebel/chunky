@@ -11,33 +11,67 @@ struct FolderSyncTests {
         WatchedFile(path: path, contentHash: hash, modified: now, doi: doi)
     }
 
+    private func committed(_ file: WatchedFile, settings: String, points: [String]) -> WatchedRecord {
+        WatchedRecord(
+            path: file.path,
+            contentHash: file.contentHash,
+            settingsHash: settings,
+            docID: file.docID,
+            pointIDs: points,
+            modified: file.modified
+        )
+    }
+
+    private func fingerprint(
+        collection: String = "documents",
+        embeddingModel: String = "qwen",
+        doOCR: Bool = false,
+        doclingModel: String = "standard"
+    ) -> String {
+        FolderSync.settingsFingerprint(
+            collection: collection,
+            embeddingModel: embeddingModel,
+            embeddingBackend: "ollama",
+            chunkTokens: 512,
+            overlap: 50,
+            chunkTokenizer: "docling",
+            doclingModel: doclingModel,
+            doOCR: doOCR,
+            ocrLanguage: "eng",
+            doTableExtraction: true,
+            tableMode: "accurate",
+            doFormulaEnrichment: false
+        )
+    }
+
     @Test func newFileIsIngestedAndIdenticalFileIsSkipped() {
         let paper = file("/papers/a.pdf", hash: "abc")
         let first = FolderSync.plan(files: [paper], records: [], settingsHash: "s", deleteRemoved: false)
         #expect(first.actions == [.ingest(paper)])
-        let second = FolderSync.plan(files: [paper], records: first.records, settingsHash: "s", deleteRemoved: false)
+        #expect(first.records.isEmpty)
+        let saved = committed(paper, settings: "s", points: ["p1"])
+        let second = FolderSync.plan(files: [paper], records: [saved], settingsHash: "s", deleteRemoved: false)
         #expect(second.actions == [.skip(paper)])
-        var queued: [String] = []
+        #expect(second.records == [saved])
+        var queued: [WatchedFile] = []
         var deleted: [String] = []
-        FolderSyncApply.apply(second.actions, enqueue: { url, _ in queued.append(url.path) }, delete: { deleted.append(contentsOf: $0) })
+        FolderSyncApply.apply(second.actions, enqueue: { queued.append($0) }, delete: { deleted.append(contentsOf: $0) })
         #expect(queued.isEmpty)
         #expect(deleted.isEmpty)
     }
 
     @Test func changedFileReplacesPreviousPoints() {
         let original = file("/papers/a.pdf", hash: "abc")
-        var record = FolderSync.plan(files: [original], records: [], settingsHash: "s", deleteRemoved: false).records[0]
-        record.pointIDs = ["p1", "p2"]
+        let record = committed(original, settings: "s", points: ["p1", "p2"])
         let edited = file("/papers/a.pdf", hash: "def")
         let plan = FolderSync.plan(files: [edited], records: [record], settingsHash: "s", deleteRemoved: false)
         #expect(plan.actions == [.replace(edited, previousPointIDs: ["p1", "p2"])])
-        #expect(plan.records[0].pointIDs.isEmpty)
-        #expect(plan.records[0].docID == "def")
+        #expect(plan.records == [record])
         var deleted: [[String]] = []
         var queued: [String] = []
-        FolderSyncApply.apply(plan.actions, enqueue: { url, docID in
-            queued.append(docID)
-            #expect(url.path == "/papers/a.pdf")
+        FolderSyncApply.apply(plan.actions, enqueue: { file in
+            queued.append(file.docID)
+            #expect(file.path == "/papers/a.pdf")
         }, delete: { deleted.append($0) })
         #expect(deleted == [["p1", "p2"]])
         #expect(queued == ["def"])
@@ -45,27 +79,59 @@ struct FolderSyncTests {
 
     @Test func doiBecomesTheDocumentIdentity() {
         let paper = file("/papers/a.pdf", hash: "abc", doi: "10.1000/xyz")
+        #expect(paper.docID == "10.1000/xyz")
         let plan = FolderSync.plan(files: [paper], records: [], settingsHash: "s", deleteRemoved: false)
-        #expect(plan.records[0].docID == "10.1000/xyz")
+        #expect(plan.actions == [.ingest(paper)])
     }
 
     @Test func settingsChangeReembedsWithoutDeletingWhenPointsAreKeptUntilReplace() {
         let paper = file("/papers/a.pdf", hash: "abc")
-        var record = FolderSync.plan(files: [paper], records: [], settingsHash: "old", deleteRemoved: false).records[0]
-        record.pointIDs = ["p1"]
+        let record = committed(paper, settings: "old", points: ["p1"])
         let plan = FolderSync.plan(files: [paper], records: [record], settingsHash: "new", deleteRemoved: false)
         #expect(plan.actions == [.replace(paper, previousPointIDs: ["p1"])])
+        #expect(plan.records == [record])
     }
 
     @Test func deleteOnRemoveIsOffByDefaultAndOnWhenEnabled() {
         let paper = file("/papers/a.pdf", hash: "abc")
-        let record = FolderSync.plan(files: [paper], records: [], settingsHash: "s", deleteRemoved: false).records[0]
+        let record = committed(paper, settings: "s", points: ["p1"])
         let kept = FolderSync.plan(files: [], records: [record], settingsHash: "s", deleteRemoved: false)
         #expect(kept.actions.isEmpty)
         #expect(kept.records == [record])
         let removed = FolderSync.plan(files: [], records: [record], settingsHash: "s", deleteRemoved: true)
-        #expect(removed.actions == [.delete(path: "/papers/a.pdf", pointIDs: [])])
+        #expect(removed.actions == [.delete(path: "/papers/a.pdf", pointIDs: ["p1"])])
         #expect(removed.records.isEmpty)
+    }
+
+    @Test func inFlightFileIsLeftAloneUntilTheJobFinishes() {
+        let paper = file("/papers/a.pdf", hash: "abc")
+        let record = committed(paper, settings: "s", points: ["p1"])
+        let plan = FolderSync.plan(files: [paper], records: [record], settingsHash: "s", deleteRemoved: false, inFlight: [paper.path])
+        #expect(plan.actions.isEmpty)
+        #expect(plan.records == [record])
+    }
+
+    @MainActor
+    @Test func finishedUploadIsWhatTheNextScanSkips() {
+        let state = AppState()
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        state.watchedIndexLocationOverride = folder.appendingPathComponent("watched-folders.json")
+        let job = ProcessingJob(url: URL(fileURLWithPath: "/papers/a.pdf"))
+        job.status = .completed
+        job.watchedPath = "/papers/a.pdf"
+        job.watchedContentHash = "abc"
+        job.watchedSettingsHash = "s"
+        job.watchedDocID = "10.1000/xyz"
+        job.watchedModified = now
+        job.uploadedPointIDs = ["p1", "p2"]
+        state.noteWatchedSuccess(job)
+        #expect(state.watchedIndex.records.count == 1)
+        #expect(state.watchedIndex.records[0].pointIDs == ["p1", "p2"])
+        #expect(state.watchedIndex.records[0].docID == "10.1000/xyz")
+        job.status = .failed
+        job.uploadedPointIDs = ["gone"]
+        state.noteWatchedSuccess(job)
+        #expect(state.watchedIndex.records[0].pointIDs == ["p1", "p2"])
     }
 
     @Test func nonDocumentFilesAreIgnored() {
@@ -84,10 +150,14 @@ struct FolderSyncTests {
         }
     }
 
-    @Test func fingerprintChangesWhenTheEmbedderChanges() {
-        let first = FolderSync.settingsFingerprint(collection: "documents", embeddingModel: "qwen", chunkTokens: 512, overlap: 50)
-        let second = FolderSync.settingsFingerprint(collection: "documents", embeddingModel: "other", chunkTokens: 512, overlap: 50)
+    @Test func fingerprintChangesWhenTheEmbedderOrOCRChanges() {
+        let first = fingerprint()
+        let second = fingerprint(embeddingModel: "other")
+        let ocr = fingerprint(doOCR: true)
+        let model = fingerprint(doclingModel: "granite")
         #expect(first != second)
+        #expect(first != ocr)
+        #expect(first != model)
         #expect(first.count == 64)
     }
 

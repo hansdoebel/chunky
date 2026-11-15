@@ -51,8 +51,34 @@ enum FolderSync {
         documentExtensions.contains((path as NSString).pathExtension.lowercased())
     }
 
-    static func settingsFingerprint(collection: String, embeddingModel: String, chunkTokens: Int, overlap: Int) -> String {
-        let text = "\(collection)|\(embeddingModel)|\(chunkTokens)|\(overlap)"
+    static func settingsFingerprint(
+        collection: String,
+        embeddingModel: String,
+        embeddingBackend: String,
+        chunkTokens: Int,
+        overlap: Int,
+        chunkTokenizer: String,
+        doclingModel: String,
+        doOCR: Bool,
+        ocrLanguage: String,
+        doTableExtraction: Bool,
+        tableMode: String,
+        doFormulaEnrichment: Bool
+    ) -> String {
+        let text = [
+            collection,
+            embeddingModel,
+            embeddingBackend,
+            String(chunkTokens),
+            String(overlap),
+            chunkTokenizer,
+            doclingModel,
+            doOCR ? "ocr" : "no-ocr",
+            ocrLanguage,
+            doTableExtraction ? "tables" : "no-tables",
+            tableMode,
+            doFormulaEnrichment ? "formula" : "no-formula",
+        ].joined(separator: "|")
         return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
     }
 
@@ -60,7 +86,8 @@ enum FolderSync {
         files: [WatchedFile],
         records: [WatchedRecord],
         settingsHash: String,
-        deleteRemoved: Bool
+        deleteRemoved: Bool,
+        inFlight: Set<String> = []
     ) -> (actions: [FolderSyncAction], records: [WatchedRecord]) {
         let documents = files.filter { isDocument($0.path) }
         let previous = Dictionary(records.map { ($0.path, $0) }, uniquingKeysWith: { _, latest in latest })
@@ -69,36 +96,27 @@ enum FolderSync {
         var seen = Set<String>()
         for file in documents {
             seen.insert(file.path)
+            if inFlight.contains(file.path) {
+                if let record = previous[file.path] {
+                    next.append(record)
+                }
+                continue
+            }
             if let record = previous[file.path], record.contentHash == file.contentHash, record.settingsHash == settingsHash {
                 actions.append(.skip(file))
                 next.append(WatchedRecord(
                     path: file.path,
                     contentHash: file.contentHash,
                     settingsHash: settingsHash,
-                    docID: file.docID,
+                    docID: record.docID,
                     pointIDs: record.pointIDs,
                     modified: file.modified
                 ))
             } else if let record = previous[file.path] {
                 actions.append(.replace(file, previousPointIDs: record.pointIDs))
-                next.append(WatchedRecord(
-                    path: file.path,
-                    contentHash: file.contentHash,
-                    settingsHash: settingsHash,
-                    docID: file.docID,
-                    pointIDs: [],
-                    modified: file.modified
-                ))
+                next.append(record)
             } else {
                 actions.append(.ingest(file))
-                next.append(WatchedRecord(
-                    path: file.path,
-                    contentHash: file.contentHash,
-                    settingsHash: settingsHash,
-                    docID: file.docID,
-                    pointIDs: [],
-                    modified: file.modified
-                ))
             }
         }
         if deleteRemoved {
@@ -115,7 +133,7 @@ enum FolderSync {
 enum FolderSyncApply {
     static func apply(
         _ actions: [FolderSyncAction],
-        enqueue: (URL, String) -> Void,
+        enqueue: (WatchedFile) -> Void,
         delete: ([String]) -> Void
     ) {
         for action in actions {
@@ -123,10 +141,10 @@ enum FolderSyncApply {
             case .skip:
                 break
             case .ingest(let file):
-                enqueue(URL(fileURLWithPath: file.path), file.docID)
+                enqueue(file)
             case .replace(let file, let ids):
                 if !ids.isEmpty { delete(ids) }
-                enqueue(URL(fileURLWithPath: file.path), file.docID)
+                enqueue(file)
             case .delete(_, let ids):
                 if !ids.isEmpty { delete(ids) }
             }

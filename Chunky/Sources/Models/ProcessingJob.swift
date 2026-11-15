@@ -36,6 +36,12 @@ class ProcessingJob: ObservableObject, Identifiable {
     var preparedEmbeddings: [[Float]]?
     var bibliography: BibliographicMetadata?
     var watchedDocID: String?
+    var watchedCollection: String?
+    var watchedPath: String?
+    var watchedContentHash: String?
+    var watchedSettingsHash: String?
+    var watchedModified: Date?
+    var uploadedPointIDs: [String] = []
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }

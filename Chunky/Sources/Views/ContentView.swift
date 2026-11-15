@@ -19,6 +19,62 @@ struct ContentView: View {
         .onAppear {
             processor.appState = appState
             appState.reloadHistory()
+            appState.startWatchedFolders()
+            runWatchedJobs()
+        }
+        .onChange(of: appState.watchedRunToken) { _, _ in
+            runWatchedJobs()
+        }
+        .onChange(of: appState.isProcessing) { _, running in
+            if !running && appState.watchedFollowUp {
+                appState.watchedFollowUp = false
+                runWatchedJobs()
+            }
+        }
+    }
+
+    private func runWatchedJobs() {
+        let jobs = appState.pendingJobs.filter { $0.watchedCollection != nil }
+        guard !jobs.isEmpty else { return }
+        guard !appState.isProcessing else {
+            appState.watchedFollowUp = true
+            return
+        }
+        appState.isProcessing = true
+        appState.resetCancellation()
+        let settings = appState.settings
+        let maxParallel = max(1, settings.maxParallelJobs)
+        appState.processingTask = Task {
+            if maxParallel <= 1 {
+                for job in jobs {
+                    if Task.isCancelled || appState.isCancellationRequested { break }
+                    await processor.process(job: job, settings: settings, mode: .full)
+                }
+            } else {
+                await withTaskGroup(of: Void.self) { group in
+                    var launched = 0
+                    var jobIndex = 0
+                    while jobIndex < jobs.count {
+                        if Task.isCancelled || appState.isCancellationRequested {
+                            group.cancelAll()
+                            break
+                        }
+                        if launched >= maxParallel {
+                            await group.next()
+                            launched -= 1
+                        }
+                        let job = jobs[jobIndex]
+                        jobIndex += 1
+                        launched += 1
+                        group.addTask {
+                            await self.processor.process(job: job, settings: settings, mode: .full)
+                        }
+                    }
+                    await group.waitForAll()
+                }
+            }
+            appState.isProcessing = false
+            appState.resetCancellation()
         }
     }
 }
@@ -578,7 +634,6 @@ struct BottomBarView: View {
     @ObservedObject var processor: DocumentProcessor
     @Environment(\.colorScheme) var colorScheme
     @State private var refreshTrigger = false
-    @State private var processingTask: Task<Void, Never>?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -604,7 +659,7 @@ struct BottomBarView: View {
                 Button {
                     appState.requestCancellation()
                     processor.cancel()
-                    processingTask?.cancel()
+                    appState.processingTask?.cancel()
                     appState.benchmarkTask?.cancel()
                 } label: {
                     Text("Stop")
@@ -743,13 +798,14 @@ struct BottomBarView: View {
 
         let jobs = appState.pendingJobs
         let settings = appState.settings
-        let mode = appState.processingMode
+        let selectedMode = appState.processingMode
         let maxParallel = max(1, settings.maxParallelJobs)
 
-        processingTask = Task {
+        appState.processingTask = Task {
             if maxParallel <= 1 {
                 for job in jobs {
                     if Task.isCancelled || appState.isCancellationRequested { break }
+                    let mode: ProcessingMode = job.watchedCollection == nil ? selectedMode : .full
                     await processor.process(job: job, settings: settings, mode: mode)
                 }
             } else {
@@ -771,6 +827,7 @@ struct BottomBarView: View {
                         let job = jobs[jobIndex]
                         jobIndex += 1
                         launched += 1
+                        let mode: ProcessingMode = job.watchedCollection == nil ? selectedMode : .full
 
                         group.addTask {
                             await self.processor.process(job: job, settings: settings, mode: mode)

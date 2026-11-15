@@ -1075,8 +1075,7 @@ struct PreferencesView: View {
                     onRemove: removeWatchedFolder
                 )
                 .onAppear {
-                    appState.loadWatchedFolders()
-                    appState.startWatchingFolders()
+                    appState.startWatchedFolders()
                 }
             } header: {
                 Text("Watched folders")
@@ -1120,26 +1119,34 @@ struct PreferencesView: View {
         panel.allowsMultipleSelection = false
         guard panel.runModal() == .OK, let url = panel.url else { return }
         appState.loadWatchedFolders()
-        appState.watchedIndex.folders.append(WatchedFolder(path: url.path, collection: appState.settings.defaultCollection))
+        var index = appState.watchedIndex
+        index.folders.append(WatchedFolder(path: url.path, collection: appState.settings.defaultCollection))
+        appState.watchedIndex = index
         appState.saveWatchedFolders()
         appState.scanWatchedFolders()
     }
 
     private func toggleWatchedPause(_ id: UUID) {
-        guard let index = appState.watchedIndex.folders.firstIndex(where: { $0.id == id }) else { return }
-        appState.watchedIndex.folders[index].paused.toggle()
+        guard let offset = appState.watchedIndex.folders.firstIndex(where: { $0.id == id }) else { return }
+        var index = appState.watchedIndex
+        index.folders[offset].paused.toggle()
+        appState.watchedIndex = index
         appState.saveWatchedFolders()
         appState.startWatchingFolders()
     }
 
     private func toggleWatchedDelete(_ id: UUID) {
-        guard let index = appState.watchedIndex.folders.firstIndex(where: { $0.id == id }) else { return }
-        appState.watchedIndex.folders[index].deleteRemoved.toggle()
+        guard let offset = appState.watchedIndex.folders.firstIndex(where: { $0.id == id }) else { return }
+        var index = appState.watchedIndex
+        index.folders[offset].deleteRemoved.toggle()
+        appState.watchedIndex = index
         appState.saveWatchedFolders()
     }
 
     private func removeWatchedFolder(_ id: UUID) {
-        appState.watchedIndex.folders.removeAll { $0.id == id }
+        var index = appState.watchedIndex
+        index.folders.removeAll { $0.id == id }
+        appState.watchedIndex = index
         appState.saveWatchedFolders()
         appState.startWatchingFolders()
     }

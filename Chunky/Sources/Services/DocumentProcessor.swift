@@ -43,9 +43,43 @@ class DocumentProcessor: ObservableObject {
         return service
     }
 
+    private func targetCollection(job: ProcessingJob, settings: AppSettings) -> String {
+        if let name = job.watchedCollection, !name.isEmpty { return name }
+        if let name = job.ingestCollection, !name.isEmpty { return name }
+        return settings.defaultCollection
+    }
+
+    private func rememberUploaded(_ points: [ChunkPoint], job: ProcessingJob) {
+        job.uploadedPointIDs.append(contentsOf: points.map(\.id))
+    }
+
+    private func adoptWatchedDOI(job: ProcessingJob, doi: String?) {
+        guard job.watchedPath != nil else { return }
+        let found = doi?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !found.isEmpty {
+            job.watchedDocID = found
+            return
+        }
+        let bibliography = job.bibliography?.doi?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        if !bibliography.isEmpty {
+            job.watchedDocID = bibliography
+        }
+    }
+
+    private func recordWorkerPoints(job: ProcessingJob, chunks: [[String: Any]]) {
+        let ids = chunks.compactMap { $0["id"] as? String }.filter { !$0.isEmpty }
+        guard !ids.isEmpty else { return }
+        job.uploadedPointIDs.append(contentsOf: ids)
+        let source = (chunks.compactMap { $0["source"] as? String }.first { !$0.isEmpty }) ?? job.fileName
+        if !source.isEmpty {
+            job.uploadedPointIDs.append(DocumentSummary.summaryID(source: source))
+        }
+    }
+
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
         defer { appState?.storeFinishedRun(job, settings: settings) }
+        job.ingestCollection = targetCollection(job: job, settings: settings)
         rememberIngestTarget(job: job, settings: settings)
         if settings.processingHost == .devbox {
             await processOnDevbox(job: job, settings: settings, mode: mode)
@@ -182,6 +216,7 @@ class DocumentProcessor: ObservableObject {
             var chunks: [ChunkingService.DocumentChunk]
 
             if let pythonChunks = result.chunks, !pythonChunks.isEmpty {
+                adoptWatchedDOI(job: job, doi: result.doi)
                 let documentId = job.watchedDocID ?? UUID().uuidString
                 chunks = pythonChunks.map { pc in
                     ChunkingService.DocumentChunk(
@@ -433,10 +468,10 @@ class DocumentProcessor: ObservableObject {
                 throw QdrantError.operationFailed("Ollama is not running at \(settings.ollamaURL)")
             }
 
-            let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+            let createOptions = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
             if createOptions.target == .qdrantCloud {
                 throw QdrantError.operationFailed(
-                    "Collection \(settings.defaultCollection) targets Qdrant Cloud. Switch Processing host to Devbox."
+                    "Collection \(targetCollection(job: job, settings: settings)) targets Qdrant Cloud. Switch Processing host to Devbox."
                 )
             }
 
@@ -587,7 +622,7 @@ class DocumentProcessor: ObservableObject {
             return true
         }
         guard vectors.count == cached.chunks.count, !vectors.isEmpty else { return false }
-        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        let options = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
         let supplied: QdrantService?
         if options.target == .qdrantCloud {
             let cloud = QdrantService()
@@ -615,7 +650,7 @@ class DocumentProcessor: ObservableObject {
             language: cached.chunks.first?.language,
             year: cached.chunks.first?.year,
             ingestUpserted: nil,
-            ingestCollection: settings.defaultCollection,
+            ingestCollection: targetCollection(job: job, settings: settings),
             pageCount: cached.chunks.compactMap(\.page).max(),
             tokenCount: cached.chunks.reduce(0) { $0 + $1.tokenCount },
             metrics: nil
@@ -850,7 +885,7 @@ class DocumentProcessor: ObservableObject {
         var cachedHashes: Set<String>? = nil
 
         if settings.enableEmbeddingCache, let appState = appState, let qdrant = appState.qdrantService {
-            let collectionName = settings.defaultCollection
+            let collectionName = targetCollection(job: job, settings: settings)
             let exists = try? await qdrant.collectionExists(collectionName)
             if exists == true {
                 job.statusMessage = "Checking embedding cache..."
@@ -914,7 +949,7 @@ class DocumentProcessor: ObservableObject {
         var allPoints: [ChunkPoint] = []
 
         if !chunksToEmbed.isEmpty {
-            let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
+            let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama, collection: targetCollection(job: job, settings: settings))
             let embeddings: [[Float]]
             if let preparedEmbeddings, preparedEmbeddings.count == chunks.count, chunksToEmbed.count == chunks.count {
                 embeddings = preparedEmbeddings
@@ -957,6 +992,7 @@ class DocumentProcessor: ObservableObject {
 
             let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
             let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            rememberUploaded(newPoints, job: job)
             allPoints = newPoints
 
             job.status = .uploading
@@ -966,7 +1002,7 @@ class DocumentProcessor: ObservableObject {
             let uploadStarted = CFAbsoluteTimeGetCurrent()
             try await uploadToQdrant(
                 points: newPoints,
-                collectionName: settings.defaultCollection,
+                collectionName: targetCollection(job: job, settings: settings),
                 vectorSize: vectorSize,
                 batchSize: settings.qdrantBatchSize,
                 createOptions: createOptions,
@@ -981,11 +1017,12 @@ class DocumentProcessor: ObservableObject {
         } else {
             job.statusMessage = "All chunks cached, skipping embedding"
             let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            rememberUploaded(summaryPoints, job: job)
             if !summaryPoints.isEmpty {
                 try await uploadToQdrant(
                     points: summaryPoints,
-                    collectionName: settings.defaultCollection,
-                    vectorSize: try await probedVectorSize(settings: settings, ollama: ollama),
+                    collectionName: targetCollection(job: job, settings: settings),
+                    vectorSize: try await probedVectorSize(settings: settings, ollama: ollama, collection: targetCollection(job: job, settings: settings)),
                     batchSize: settings.qdrantBatchSize,
                     createOptions: createOptions,
                     dedupSource: nil
@@ -995,7 +1032,7 @@ class DocumentProcessor: ObservableObject {
 
         if let hashes = cachedHashes, let appState = appState, let qdrant = appState.qdrantService {
             let existingPoints = try await qdrant.loadPointsBySource(
-                collectionName: settings.defaultCollection,
+                collectionName: targetCollection(job: job, settings: settings),
                 source: job.fileName
             )
             let staleIds = existingPoints
@@ -1009,10 +1046,11 @@ class DocumentProcessor: ObservableObject {
                 .map { $0.id }
 
             if !staleIds.isEmpty {
-                try await qdrant.deletePoints(collectionName: settings.defaultCollection, ids: staleIds)
+                try await qdrant.deletePoints(collectionName: targetCollection(job: job, settings: settings), ids: staleIds)
             }
         }
 
+        rememberUploaded(cachedPoints, job: job)
         job.embeddedCount = allPoints.count + cachedPoints.count
     }
 
@@ -1032,7 +1070,7 @@ class DocumentProcessor: ObservableObject {
         let batchSize = settings.embeddingBatchSize
         let totalBatches = (chunks.count + batchSize - 1) / batchSize
 
-        let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
+        let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama, collection: targetCollection(job: job, settings: settings))
         var embedSeconds = 0.0
         var uploadSeconds = 0.0
         let firstBatchTexts = Array(chunks.prefix(batchSize)).map { $0.embeddingText ?? $0.text }
@@ -1049,11 +1087,11 @@ class DocumentProcessor: ObservableObject {
 
         if let expected = createOptions.expectedVectorSize, expected != vectorSize {
             throw QdrantError.operationFailed(
-                "Collection \(settings.defaultCollection) was saved with vector size \(expected), but \(settings.embeddingModel) probes \(vectorSize)."
+                "Collection \(targetCollection(job: job, settings: settings)) was saved with vector size \(expected), but \(settings.embeddingModel) probes \(vectorSize)."
             )
         }
         try await qdrant.createCollectionIfNeeded(
-            name: settings.defaultCollection,
+            name: targetCollection(job: job, settings: settings),
             vectorSize: vectorSize,
             hybrid: createOptions.hybrid,
             distance: distanceValue(createOptions.distance),
@@ -1063,15 +1101,16 @@ class DocumentProcessor: ObservableObject {
         )
 
         try await qdrant.deleteBySource(
-            collectionName: settings.defaultCollection,
+            collectionName: targetCollection(job: job, settings: settings),
             source: job.fileName
         )
 
         let firstChunkBatch = Array(chunks.prefix(batchSize))
         let firstSparse = sparseVectors(for: firstChunkBatch, hybrid: createOptions.hybrid)
         let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+        rememberUploaded(firstPoints, job: job)
         let firstUploadStarted = CFAbsoluteTimeGetCurrent()
-        try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: firstPoints, batchSize: settings.qdrantBatchSize)
+        try await qdrant.upsertPoints(collectionName: targetCollection(job: job, settings: settings), points: firstPoints, batchSize: settings.qdrantBatchSize)
         uploadSeconds += CFAbsoluteTimeGetCurrent() - firstUploadStarted
 
         var savedEmbeddings = firstEmbeddings
@@ -1093,8 +1132,9 @@ class DocumentProcessor: ObservableObject {
             let batchSparse = sparseVectors(for: batchChunks, hybrid: createOptions.hybrid)
 
             let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            rememberUploaded(batchPoints, job: job)
             let batchUploadStarted = CFAbsoluteTimeGetCurrent()
-            try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: batchPoints, batchSize: settings.qdrantBatchSize)
+            try await qdrant.upsertPoints(collectionName: targetCollection(job: job, settings: settings), points: batchPoints, batchSize: settings.qdrantBatchSize)
             uploadSeconds += CFAbsoluteTimeGetCurrent() - batchUploadStarted
 
             savedEmbeddings.append(contentsOf: batchEmbeddings)
@@ -1104,8 +1144,9 @@ class DocumentProcessor: ObservableObject {
         }
 
         let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+        rememberUploaded(summaryPoints, job: job)
         if !summaryPoints.isEmpty {
-            try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: summaryPoints, batchSize: settings.qdrantBatchSize)
+            try await qdrant.upsertPoints(collectionName: targetCollection(job: job, settings: settings), points: summaryPoints, batchSize: settings.qdrantBatchSize)
         }
 
         job.embeddedCount = embeddedSoFar
@@ -1171,16 +1212,21 @@ class DocumentProcessor: ObservableObject {
         devboxBaseURL = settings.devboxWorkerURL
         devboxToken = settings.workerToken
         devboxService = DevboxWorkerService()
-        let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        let createOptions = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
         if mode == .full && createOptions.target == .qdrantCloud {
             if settings.qdrantCloudURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.qdrantAPIKey.isEmpty {
                 captureFailure(job: job, settings: settings, started: started)
                 job.status = .failed
-                job.statusMessage = "Set the Qdrant Cloud URL and API key before ingesting \(settings.defaultCollection)."
+                job.statusMessage = "Set the Qdrant Cloud URL and API key before ingesting \(targetCollection(job: job, settings: settings))."
                 return
             }
         }
-        var payload = DevboxJobPayload.settings(from: settings, mode: mode, bibliography: job.bibliography)
+        var payload = DevboxJobPayload.settings(
+            from: settings,
+            mode: mode,
+            bibliography: job.bibliography,
+            collection: targetCollection(job: job, settings: settings)
+        )
         payload["source_path"] = job.sourceURL.path
         do {
             await refreshDoclingVersion(settings: settings)
@@ -1249,7 +1295,9 @@ class DocumentProcessor: ObservableObject {
             case "qdrant_cloud":
                 let count = parsed.ingestUpserted ?? parsed.chunks.count
                 job.embeddedCount = count
-                job.statusMessage = "Upserted \(count) points to \(parsed.ingestCollection ?? settings.defaultCollection)"
+                adoptWatchedDOI(job: job, doi: parsed.chunks.compactMap { $0["doi"] as? String }.first)
+                recordWorkerPoints(job: job, chunks: parsed.chunks)
+                job.statusMessage = "Upserted \(count) points to \(parsed.ingestCollection ?? targetCollection(job: job, settings: settings))"
             case "return_vectors":
                 job.status = .uploading
                 let uploadStarted = CFAbsoluteTimeGetCurrent()
@@ -1283,8 +1331,8 @@ class DocumentProcessor: ObservableObject {
     }
 
     private func rememberIngestTarget(job: ProcessingJob, settings: AppSettings) {
-        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
-        job.ingestCollection = settings.defaultCollection
+        let options = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
+        job.ingestCollection = targetCollection(job: job, settings: settings)
         job.ingestCloud = options.target == .qdrantCloud
     }
 
@@ -1366,18 +1414,20 @@ class DocumentProcessor: ObservableObject {
             guard let connected = appState.qdrantService else { throw QdrantError.notConnected }
             qdrant = connected
         }
-        if try await qdrant.collectionExists(settings.defaultCollection) {
-            let info = try await qdrant.getCollectionInfo(settings.defaultCollection)
+        if try await qdrant.collectionExists(targetCollection(job: job, settings: settings)) {
+            let info = try await qdrant.getCollectionInfo(targetCollection(job: job, settings: settings))
             try EmbeddingDimensionError.validate(
                 existing: info.vectorSize,
                 probed: vectorSize,
-                collection: settings.defaultCollection,
+                collection: targetCollection(job: job, settings: settings),
                 model: settings.embeddingModel
             )
         }
+        adoptWatchedDOI(job: job, doi: parsed.chunks.compactMap { $0["doi"] as? String }.first)
         let documentChunks: [ChunkingService.DocumentChunk] = parsed.chunks.enumerated().map { index, raw in
             ChunkingService.DocumentChunk(
                 id: raw["id"] as? String ?? UUID().uuidString,
+                documentId: job.watchedDocID,
                 text: raw["text"] as? String ?? "",
                 source: job.fileName,
                 page: (raw["page"] as? NSNumber)?.intValue,
@@ -1400,7 +1450,7 @@ class DocumentProcessor: ObservableObject {
         let annotated = job.bibliography.map { record in
             documentChunks.map { $0.applyingBibliography(record) }
         } ?? documentChunks
-        let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        let createOptions = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
         let ingestedAt = ISO8601DateFormatter().string(from: Date())
         let built = buildPoints(
             chunks: annotated,
@@ -1411,9 +1461,10 @@ class DocumentProcessor: ObservableObject {
             sourcePath: job.sourceURL.path
         )
         let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+        rememberUploaded(points, job: job)
         try await uploadToQdrant(
             points: points,
-            collectionName: settings.defaultCollection,
+            collectionName: targetCollection(job: job, settings: settings),
             vectorSize: vectorSize,
             batchSize: settings.qdrantBatchSize,
             createOptions: createOptions,
@@ -1429,17 +1480,17 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func probedVectorSize(settings: AppSettings, ollama: OllamaService) async throws -> Int {
+    private func probedVectorSize(settings: AppSettings, ollama: OllamaService, collection: String) async throws -> Int {
         let probed = try await ollama.probeDimension(model: settings.embeddingModel)
         guard let appState else { return probed }
         try await appState.ensureQdrantConnection()
         guard let qdrant = appState.qdrantService else { return probed }
-        if try await qdrant.collectionExists(settings.defaultCollection) {
-            let info = try await qdrant.getCollectionInfo(settings.defaultCollection)
+        if try await qdrant.collectionExists(collection) {
+            let info = try await qdrant.getCollectionInfo(collection)
             try EmbeddingDimensionError.validate(
                 existing: info.vectorSize,
                 probed: probed,
-                collection: settings.defaultCollection,
+                collection: collection,
                 model: settings.embeddingModel
             )
         }
