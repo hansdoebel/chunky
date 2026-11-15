@@ -101,7 +101,7 @@ let client = try await QdrantGRPCClient(
 | Feature | gRPC | REST |
 |---------|------|------|
 | Performance | Higher throughput | Standard HTTP |
-| Dependencies | grpc-swift, SwiftNIO | None |
+| Dependencies | grpc-swift-2, SwiftNIO | None |
 | Port | 6334 | 6333 |
 | Best For | Production | Prototyping |
 
