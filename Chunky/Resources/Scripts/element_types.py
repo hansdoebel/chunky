@@ -66,10 +66,13 @@ def element_filter_kind(value: str) -> str | None:
 
 
 def stored_values(kind: str) -> list[str]:
-    canonical = canonical_type(kind) or kind
+    canonical = canonical_type(kind) or str(kind or "").strip().lower()
+    if not canonical:
+        return []
     values = [canonical]
-    if canonical == "figure":
-        values.append("picture")
+    for alias, target in ALIASES.items():
+        if target == canonical and alias not in values:
+            values.append(alias)
     return values
 
 

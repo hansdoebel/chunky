@@ -14,12 +14,21 @@ def test_table_and_formula_filters_use_the_shared_filter_object():
     formula = build_query_filter([PayloadFilter(key="content_type", match="formula")])
     picture = build_query_filter([PayloadFilter(key="content_type", match="picture")])
     assert _should_keys(table) == ["content_type", "content_types"]
-    assert table.must[0].should[0].match.any == ["table"]
-    assert table.must[0].should[1].match.value == "table"
-    assert formula.must[0].should[1].match.value == "formula"
+    assert "table" in table.must[0].should[0].match.any
+    assert "table" in table.must[0].should[1].match.any
+    assert "formula" in formula.must[0].should[1].match.any
+    assert "equation" in formula.must[0].should[0].match.any
     assert "figure" in picture.must[0].should[0].match.any
     assert "picture" in picture.must[0].should[0].match.any
-    assert picture.must[0].should[1].match.value == "figure"
+    assert "figure" in picture.must[0].should[1].match.any
+    title = build_query_filter([PayloadFilter(key="content_type", match="title")])
+    assert "title" in title.must[0].should[0].match.any
+    assert "text" in title.must[0].should[0].match.any
+    negated = build_query_filter([PayloadFilter(key="content_type", match="picture", negate=True)])
+    assert "figure" in negated.must_not[0].should[0].match.any
+    grouped = build_query_filter([PayloadFilter(key="content_type", any=["picture"])])
+    assert "figure" in grouped.must[0].should[0].match.any
+    assert "picture" in grouped.must[0].should[0].match.any
 
 
 def test_a_non_element_filter_stays_exact():

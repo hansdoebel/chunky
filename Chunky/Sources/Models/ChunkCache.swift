@@ -61,6 +61,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
     var pictureDescription: String?
     var pictureClass: String?
     var tableMarkdown: String?
+    var contentTypes: [String] = []
+    var formulaLatex: String?
 
     static func normalize(_ raw: [String: Any]) -> ChunkCacheChunk {
         let pages = intList(raw["pages"])
@@ -105,7 +107,9 @@ struct ChunkCacheChunk: Equatable, Sendable {
             tokenCount: intValue(raw["token_count"]) ?? 0,
             pictureDescription: text(raw["picture_description"]),
             pictureClass: text(raw["picture_class"]),
-            tableMarkdown: text(raw["table_markdown"])
+            tableMarkdown: text(raw["table_markdown"]),
+            contentTypes: strings(raw["content_types"]),
+            formulaLatex: text(raw["formula_latex"])
         )
     }
 
@@ -141,6 +145,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
             "picture_description": pictureDescription as Any? ?? NSNull(),
             "picture_class": pictureClass as Any? ?? NSNull(),
             "table_markdown": tableMarkdown as Any? ?? NSNull(),
+            "content_types": contentTypes,
+            "formula_latex": formulaLatex as Any? ?? NSNull(),
         ]
     }
 

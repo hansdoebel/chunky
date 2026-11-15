@@ -73,20 +73,24 @@ struct RetrievalFilter: Equatable, Sendable {
         guard !trimmed.isEmpty else { return [] }
         var items: [Condition] = []
         if let match {
-            let encoded: Match
-            switch match {
-            case .text(let value):
-                encoded = .keyword(value)
-            case .integer(let value):
-                encoded = .integer(Int64(value))
-            case .boolean(let value):
-                encoded = .boolean(value)
-            case .contains(let value):
-                encoded = .text(value)
-            case .anyText(let values):
-                encoded = .anyKeyword(values)
+            if trimmed == "content_type", let clause = Self.elementClause(match) {
+                items.append(clause)
+            } else {
+                let encoded: Match
+                switch match {
+                case .text(let value):
+                    encoded = .keyword(value)
+                case .integer(let value):
+                    encoded = .integer(Int64(value))
+                case .boolean(let value):
+                    encoded = .boolean(value)
+                case .contains(let value):
+                    encoded = .text(value)
+                case .anyText(let values):
+                    encoded = .anyKeyword(values)
+                }
+                items.append(.field(key: trimmed, match: encoded))
             }
-            items.append(.field(key: trimmed, match: encoded))
         }
         if hasRange {
             items.append(.field(key: trimmed, range: Range(lt: lt, gt: gt, lte: lte, gte: gte)))
@@ -120,6 +124,68 @@ struct RetrievalFilter: Equatable, Sendable {
         return object
     }
 
+    private static let elementAliases: [String: String] = [
+        "paragraph": "text", "section": "text", "list": "text", "title": "text",
+        "caption": "text", "narrative": "text", "narrativetext": "text",
+        "picture": "figure", "image": "figure", "chart": "figure",
+        "equation": "formula",
+    ]
+
+    private static let canonicalTypes: Set<String> = ["text", "table", "formula", "figure", "code"]
+
+    private static func elementStored(for raw: String) -> (stored: [String], canonical: String)? {
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        let canonical = elementAliases[name] ?? (canonicalTypes.contains(name) ? name : nil)
+        guard let canonical else { return nil }
+        var stored = [canonical]
+        for (alias, target) in elementAliases where target == canonical && !stored.contains(alias) {
+            stored.append(alias)
+        }
+        return (stored, canonical)
+    }
+
+    private static func elementClause(_ match: RetrievalMatch) -> Condition? {
+        let raw: [String]
+        switch match {
+        case .text(let value):
+            raw = [value]
+        case .anyText(let values):
+            raw = values
+        default:
+            return nil
+        }
+        var stored: [String] = []
+        var kinds: [String] = []
+        for value in raw {
+            guard let item = elementStored(for: value) else { return nil }
+            for alias in item.stored where !stored.contains(alias) {
+                stored.append(alias)
+            }
+            if !kinds.contains(item.canonical) {
+                kinds.append(item.canonical)
+            }
+        }
+        guard !stored.isEmpty else { return nil }
+        return .filter(Filter(should: [
+            .field(key: "content_type", match: .anyKeyword(stored)),
+            .field(key: "content_types", match: .anyKeyword(kinds)),
+        ]))
+    }
+
+    private static func elementMatches(_ payload: [String: Any], _ match: RetrievalMatch) -> Bool {
+        guard let clause = elementClause(match), case .filter(let nested) = clause else { return false }
+        let primary = payload["content_type"]
+        let extras = payload["content_types"]
+        return nested.should.contains { condition in
+            guard case .field(let field) = condition, let match = field.match else { return false }
+            let value = field.key == "content_types" ? extras : primary
+            if case .anyKeyword(let expected) = match {
+                return equalsAny(value, expected)
+            }
+            return false
+        }
+    }
+
     static func qdrantFilter(_ filters: [RetrievalFilter]) -> Filter? {
         let must = filters.filter { !$0.negated }.flatMap { $0.conditions() }
         let mustNot = filters.filter(\.negated).flatMap { $0.conditions() }
@@ -129,12 +195,25 @@ struct RetrievalFilter: Equatable, Sendable {
 
     static func encodedSummaries(_ filters: [RetrievalFilter]) -> [EncodedFilterSummary] {
         filters.flatMap { $0.conditions() }.map { condition in
+            if case .filter(let nested) = condition {
+                guard let first = nested.should.first, case .field(let field) = first else {
+                    return EncodedFilterSummary(key: "content_type")
+                }
+                var summary = EncodedFilterSummary(key: field.key)
+                if case .anyKeyword(let values) = field.match {
+                    summary.keyword = values.first
+                }
+                return summary
+            }
             guard case .field(let field) = condition else {
                 return EncodedFilterSummary(key: "")
             }
             var summary = EncodedFilterSummary(key: field.key)
             if case .keyword(let value) = field.match {
                 summary.keyword = value
+            }
+            if case .anyKeyword(let values) = field.match {
+                summary.keyword = values.first
             }
             if case .text(let value) = field.match {
                 summary.text = value
@@ -256,6 +335,9 @@ struct RetrievalFilter: Equatable, Sendable {
         guard !trimmed.isEmpty else { return true }
         let value = payload[trimmed]
         if let match {
+            if trimmed == "content_type", Self.elementClause(match) != nil {
+                return Self.elementMatches(payload, match)
+            }
             switch match {
             case .text(let expected):
                 if !Self.equals(value, expected) { return false }

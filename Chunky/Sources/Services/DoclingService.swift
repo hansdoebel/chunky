@@ -24,6 +24,8 @@ actor DoclingService {
         let pageLabels: [String]?
         let printedPage: String?
         let pageOffset: Int?
+        let contentTypes: [String]?
+        let formulaLatex: String?
 
         enum CodingKeys: String, CodingKey {
             case text
@@ -40,6 +42,8 @@ actor DoclingService {
             case pageLabels = "page_labels"
             case printedPage = "printed_page"
             case pageOffset = "page_offset"
+            case contentTypes = "content_types"
+            case formulaLatex = "formula_latex"
         }
     }
 

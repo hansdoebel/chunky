@@ -172,7 +172,8 @@ def test_build_query_filter_ands_match_and_range():
     assert [_condition_key(item) for item in must] == ["source", "page", "content_type", "year"]
     assert must[0].match.value == "paper.pdf"
     assert must[1].match.value == 2
-    assert must[2].should[0].match.any == ["text"]
+    assert "text" in must[2].should[0].match.any
+    assert "title" in must[2].should[0].match.any
     assert must[3].range.gte == 2020
     assert must[3].range.lte == 2024
     assert must[3].match is None
@@ -204,7 +205,7 @@ def test_build_query_filter_uses_text_for_author_title_and_heading():
     assert must[2].match.value == "10.1000/xyz"
     assert must[3].match.text == "Revenue"
     assert must[4].match.text == "Results"
-    assert must[5].should[1].match.value == "table"
+    assert "table" in must[5].should[1].match.any
     inside = {
         "year": 2022,
         "authors": "Ada; Bea",
