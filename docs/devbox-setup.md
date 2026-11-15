@@ -2,6 +2,8 @@
 
 Run Chunky on the Mac and do the heavy work on the Ubuntu devbox over the direct 10GbE link. Put addresses and the token on the machines. Do not commit them.
 
+The MacBook path, over Wi-Fi or optional Tailscale, is in [macbook-wifi-tailscale.md](macbook-wifi-tailscale.md). Keep using this page for the desk 10GbE setup.
+
 ## Ubuntu worker
 
 ```bash
@@ -104,7 +106,7 @@ curl -sS -H "Authorization: Bearer $(sudo cat /etc/chunky/worker.token)" \
   "http://127.0.0.1:8080/v1/models"
 ```
 
-From the Mac, use `http://DEVBOX_10GBE_IP:8080`. `401` means the token does not match. A timeout means the bind address, systemd, or the firewall.
+From the Mac, use `http://DEVBOX_10GBE_IP:8080`. `401` means the token does not match. A timeout means the bind address, systemd, or the firewall. A MacBook on Wi-Fi uses a different address. See [macbook-wifi-tailscale.md](macbook-wifi-tailscale.md).
 
 ## Mac app
 
