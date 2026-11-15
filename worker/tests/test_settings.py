@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from chunky_worker.app import create_app
@@ -48,6 +50,13 @@ def test_defaults_are_loopback(clean_env):
     assert settings.qdrant_api_key == ""
     assert is_loopback_url(settings.ollama_url)
     assert is_loopback_url(settings.vllm_url)
+
+
+def test_systemd_unit_pins_the_same_embedding_tag():
+    unit = Path(__file__).resolve().parents[1] / "deploy" / "chunky-worker.service"
+    text = unit.read_text()
+    assert "Environment=CHUNKY_EMBEDDING_MODEL=qwen3-embedding:0.6b" in text
+    assert "Environment=CHUNKY_EMBEDDING_MODEL=qwen3-embedding\n" not in text
 
 def test_bind_host_and_port_are_configurable(clean_env, monkeypatch):
     monkeypatch.setenv("CHUNKY_WORKER_HOST", "192.0.2.10")
