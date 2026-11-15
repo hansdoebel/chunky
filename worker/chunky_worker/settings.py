@@ -91,6 +91,9 @@ class Settings:
     scripts_dir: Path = field(default_factory=default_scripts_dir)
     ollama_url: str = "http://127.0.0.1:11434"
     vllm_url: str = "http://127.0.0.1:8000"
+    # Empty keeps chart extraction on Transformers. The document vLLM server
+    # only serves granite-docling.
+    chart_vllm_url: str = ""
     # vllm calls the granite_docling preset. transformers is the in-process fallback.
     vlm_engine: str = "vllm"
     embedding_model: str = "qwen3-embedding"
@@ -107,6 +110,7 @@ class Settings:
             scripts_dir=default_scripts_dir(),
             ollama_url=os.environ.get("CHUNKY_OLLAMA_URL", "http://127.0.0.1:11434"),
             vllm_url=os.environ.get("CHUNKY_VLLM_URL", "http://127.0.0.1:8000"),
+            chart_vllm_url=os.environ.get("CHUNKY_CHART_VLLM_URL", "").strip(),
             vlm_engine=normalize_vlm_engine(os.environ.get("CHUNKY_VLM_ENGINE", "vllm")),
             embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding"),
             token=load_token(),

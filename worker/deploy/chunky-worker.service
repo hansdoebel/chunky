@@ -23,6 +23,8 @@ Environment=CHUNKY_WORKER_PORT=8080
 Environment=CHUNKY_WORKER_TOKEN_FILE=/etc/chunky/worker.token
 Environment=CHUNKY_OLLAMA_URL=http://127.0.0.1:11434
 Environment=CHUNKY_VLLM_URL=http://127.0.0.1:8000
+# Optional chart server. Leave unset to run Granite Vision in Transformers.
+# Environment=CHUNKY_CHART_VLLM_URL=http://127.0.0.1:8001
 Environment=CHUNKY_VLM_ENGINE=vllm
 Environment=CHUNKY_EMBEDDING_MODEL=qwen3-embedding
 ExecStart=/opt/chunky/worker/.venv/bin/chunky-worker

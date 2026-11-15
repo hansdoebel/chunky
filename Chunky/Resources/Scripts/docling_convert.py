@@ -127,11 +127,19 @@ def _build_vlm_format_options(
     vllm_url=None,
     accelerator="cuda",
     chart_host=None,
+    chart_engine=None,
+    chart_vllm_url=None,
     **enrichment,
 ):
     if vlm_model == "granite-docling-transformers" and vlm_engine in {"vllm", "transformers"}:
         return _build_granite_format_options(
-            vlm_engine, vllm_url, accelerator, chart_host=chart_host, **enrichment
+            vlm_engine,
+            vllm_url,
+            accelerator,
+            chart_host=chart_host,
+            chart_engine=chart_engine,
+            chart_vllm_url=chart_vllm_url,
+            **enrichment,
         )
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import VlmPipelineOptions
@@ -167,8 +175,8 @@ def _build_vlm_format_options(
             pipeline_options,
             enabled=enrichment.get("do_chart_extraction", False),
             host=chart_host,
-            vlm_engine=vlm_engine,
-            vllm_url=vllm_url,
+            vlm_engine=chart_engine,
+            vllm_url=chart_vllm_url,
         )
     else:
         from docling.datamodel.pipeline_options_vlm_model import (
@@ -194,8 +202,8 @@ def _build_vlm_format_options(
             pipeline_options,
             enabled=enrichment.get("do_chart_extraction", False),
             host=chart_host,
-            vlm_engine=vlm_engine,
-            vllm_url=vllm_url,
+            vlm_engine=chart_engine,
+            vllm_url=chart_vllm_url,
         )
 
     format_options: dict[InputFormat, FormatOption] = {
@@ -220,7 +228,15 @@ def _apply_chart_extraction(pipeline_options, **kwargs):
     return apply_chart_extraction(pipeline_options, **kwargs)
 
 
-def _build_granite_format_options(vlm_engine, vllm_url, accelerator, chart_host=None, **enrichment):
+def _build_granite_format_options(
+    vlm_engine,
+    vllm_url,
+    accelerator,
+    chart_host=None,
+    chart_engine=None,
+    chart_vllm_url=None,
+    **enrichment,
+):
     """granite-docling via the DocTags preset. vLLM first, Transformers on CUDA as fallback."""
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import FormatOption, PdfFormatOption
@@ -242,8 +258,8 @@ def _build_granite_format_options(vlm_engine, vllm_url, accelerator, chart_host=
         pipeline_options,
         enabled=enrichment.get("do_chart_extraction", False),
         host=chart_host,
-        vlm_engine=vlm_engine,
-        vllm_url=vllm_url,
+        vlm_engine=chart_engine,
+        vllm_url=chart_vllm_url,
     )
     format_options: dict[InputFormat, FormatOption] = {
         InputFormat.PDF: PdfFormatOption(
@@ -272,6 +288,8 @@ def _build_standard_format_options(
     chart_host=None,
     vlm_engine=None,
     vllm_url=None,
+    chart_engine=None,
+    chart_vllm_url=None,
 ):
     from docling.datamodel.accelerator_options import AcceleratorOptions
     from docling.datamodel.base_models import InputFormat
@@ -309,8 +327,8 @@ def _build_standard_format_options(
         pipeline_options,
         enabled=do_chart_extraction,
         host=chart_host,
-        vlm_engine=vlm_engine,
-        vllm_url=vllm_url,
+        vlm_engine=chart_engine,
+        vllm_url=chart_vllm_url,
     )
 
     if layout_model != "default":
@@ -478,6 +496,8 @@ def convert_document(
     vlm_engine: str | None = None,
     vllm_url: str | None = None,
     chart_host: str | None = None,
+    chart_engine: str | None = None,
+    chart_vllm_url: str | None = None,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -534,6 +554,8 @@ def convert_document(
                 do_picture_description=do_picture_description,
                 do_picture_classification=do_picture_classification,
                 chart_host=chart_host,
+                chart_engine=chart_engine,
+                chart_vllm_url=chart_vllm_url,
             )
         else:
             format_options = _build_standard_format_options(
@@ -553,6 +575,8 @@ def convert_document(
                 chart_host=chart_host,
                 vlm_engine=vlm_engine,
                 vllm_url=vllm_url,
+                chart_engine=chart_engine,
+                chart_vllm_url=chart_vllm_url,
             )
 
         if input_format:

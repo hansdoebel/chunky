@@ -73,15 +73,20 @@ def test_chart_extraction_uses_mlx_on_mac_and_transformers_or_api_on_devbox():
     assert transformers_factory.calls[0][0] == "granite_vision_v4"
     assert "engine_options" not in transformers_factory.calls[0][1]
 
-    api, api_factory = _apply("devbox", "vllm")
+    api, api_factory = _apply("devbox", "vllm", url="http://127.0.0.1:8001")
     preset, kwargs = api_factory.calls[0]
     assert preset == "granite_vision_v4"
-    assert kwargs["engine_options"].kwargs["url"] == "http://127.0.0.1:8000/v1/chat/completions"
+    assert kwargs["engine_options"].kwargs["url"] == "http://127.0.0.1:8001/v1/chat/completions"
     assert kwargs["engine_options"].kwargs["params"]["model"] == "ibm-granite/granite-vision-4.1-4b"
     assert api.chart_extraction_options["preset"] == "granite_vision_v4"
 
+    unset, unset_factory = _apply("devbox", "vllm", url="")
+    assert unset_factory.calls[0][0] == "granite_vision_v4"
+    assert "engine_options" not in unset_factory.calls[0][1]
+
     assert chart_extraction_plan(host="mac")["engine"] == "mlx"
-    assert chart_extraction_plan(host="devbox", vlm_engine="vllm")["engine"] == "api"
+    assert chart_extraction_plan(host="devbox", vlm_engine="vllm", vllm_url="http://127.0.0.1:8001")["engine"] == "api"
+    assert chart_extraction_plan(host="devbox", vlm_engine="vllm", vllm_url="")["engine"] == "transformers"
     assert chart_extraction_plan(host="devbox")["engine"] == "transformers"
 
 

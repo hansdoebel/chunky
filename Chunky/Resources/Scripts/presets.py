@@ -33,13 +33,19 @@ def chart_extraction_plan(
     vlm_engine: str | None = None,
     vllm_url: str | None = None,
 ) -> dict:
-    """Mac uses the MLX Granite Vision 4.1 preset. The devbox uses Transformers or the vLLM API."""
+    """Mac uses the MLX Granite Vision 4.1 preset.
+
+    On the devbox, charts use Transformers unless ``vllm_url`` names a server
+    that actually serves Granite Vision. The document vLLM process only serves
+    granite-docling, so an empty URL stays on Transformers.
+    """
     selected = (host or default_chart_host()).strip().lower()
     engine = (vlm_engine or "").strip().lower()
     if selected in {"mac", "darwin", "local", "localmac"}:
         return {"preset": CHART_MLX_PRESET, "engine": "mlx", "repo_id": CHART_REPO_ID}
-    if engine == "vllm":
-        base = (vllm_url or "http://127.0.0.1:8000").strip().rstrip("/")
+    chart_url = (vllm_url or "").strip()
+    if engine == "vllm" and chart_url:
+        base = chart_url.rstrip("/")
         if base.endswith("/chat/completions"):
             url = base
         elif base.endswith("/v1"):
