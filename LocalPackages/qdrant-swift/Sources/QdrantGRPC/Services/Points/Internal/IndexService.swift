@@ -15,7 +15,8 @@ internal final class IndexService: Sendable {
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool
+        wait: Bool,
+        isTenant: Bool = false
     ) async throws {
         let client = Qdrant_Points.Client(wrapping: base.grpcClient)
 
@@ -24,6 +25,11 @@ internal final class IndexService: Sendable {
         grpcRequest.fieldName = fieldName
         grpcRequest.fieldType = fieldType.grpc
         grpcRequest.wait = wait
+        if isTenant, fieldType == .keyword {
+            var params = Qdrant_KeywordIndexParams()
+            params.isTenant = true
+            grpcRequest.fieldIndexParams.keywordIndexParams = params
+        }
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 

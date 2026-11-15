@@ -361,6 +361,32 @@ class AppState: ObservableObject {
     }
 
     @MainActor
+    func movePoints(ids: [String], libraryID: String, collection: String? = nil) async {
+        guard !ids.isEmpty else { return }
+        do {
+            try await ensureQdrantConnection()
+            guard let service = qdrantService else { return }
+            try await service.movePoints(
+                collectionName: collection ?? settings.defaultCollection,
+                ids: ids,
+                libraryID: libraryID
+            )
+            await loadBrowserPoints()
+        } catch {
+            qdrantConnectionError = error.localizedDescription
+        }
+    }
+
+    @MainActor
+    func addPaperLibrary(name: String) {
+        let libraries = PaperLibrary.load(settings.paperLibrariesJSON)
+        let updated = PaperLibrary.adding(name: name, to: libraries)
+        guard updated != libraries, let created = updated.last else { return }
+        settings.paperLibrariesJSON = PaperLibrary.save(updated)
+        settings.activeLibraryID = created.id
+    }
+
+    @MainActor
     func deletePoints(ids: [String], collection: String? = nil) async {
         guard !ids.isEmpty else { return }
 

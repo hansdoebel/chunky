@@ -71,10 +71,11 @@ struct RetrievalServiceTests {
         #expect(object["embedding_backend"] as? String == "openai")
         #expect(object["offset"] as? Int == 10)
         let filters = try #require(object["filters"] as? [[String: Any]])
-        #expect(filters.count == 1)
+        #expect(filters.count == 3)
         #expect(filters[0]["key"] as? String == "year")
         #expect(filters[0]["gte"] as? Double == 2020)
         #expect(filters[0]["lte"] as? Double == 2024)
+        #expect(filters.contains { ($0["key"] as? String) == "library_id" && ($0["empty"] as? Bool) == true })
         #expect(String(data: data, encoding: .utf8)?.contains("worker-secret") == false)
     }
 
@@ -626,6 +627,9 @@ struct RetrievalScreenshotHost: View {
     @State private var doi = "10.1000/example"
     @State private var title = "Revenue"
     @State private var heading = "Results"
+    @State private var libraryID = PaperLibrary.defaultID
+    @State private var libraryScope = LibrarySearch.selected.rawValue
+    @State private var libraryList = "thesis, default"
     @State private var papersFirst = true
     @State private var expandPapers = true
     @State private var expandSection = true
@@ -659,6 +663,10 @@ struct RetrievalScreenshotHost: View {
             doi: $doi,
             title: $title,
             heading: $heading,
+            libraryID: $libraryID,
+            libraryScope: $libraryScope,
+            libraryList: $libraryList,
+            libraries: [PaperLibrary.starter, PaperLibrary(id: "thesis", name: "Thesis")],
             papersFirst: $papersFirst,
             expandPapers: $expandPapers,
             expandSection: $expandSection,

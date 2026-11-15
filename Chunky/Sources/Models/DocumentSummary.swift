@@ -18,19 +18,27 @@ nonisolated enum DocumentSummary {
     static let documentRecord = "document"
     static let passageOnlyKeys: Set<String> = ["content_type", "page", "page_end", "headings", "section"]
 
-    static func summaryID(source: String) -> String {
+    static func summaryID(source: String, libraryID: String = PaperLibrary.defaultID) -> String {
         let namespace: [UInt8] = [
             0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
             0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
         ]
         var bytes = namespace
-        bytes.append(contentsOf: Array("chunky-summary:\(source)".utf8))
+        bytes.append(contentsOf: Array(summaryName(source: source, libraryID: libraryID).utf8))
         var hash = Array(Insecure.SHA1.hash(data: Data(bytes)))
         hash[6] = (hash[6] & 0x0F) | 0x50
         hash[8] = (hash[8] & 0x3F) | 0x80
         let hex = hash.prefix(16).map { String(format: "%02x", $0) }.joined()
         let chars = Array(hex)
         return "\(String(chars[0..<8]))-\(String(chars[8..<12]))-\(String(chars[12..<16]))-\(String(chars[16..<20]))-\(String(chars[20..<32]))"
+    }
+
+    static func summaryName(source: String, libraryID: String) -> String {
+        let library = LibraryFilter.assignedID(libraryID)
+        if library == PaperLibrary.defaultID {
+            return "chunky-summary:\(source)"
+        }
+        return "chunky-summary:\(library):\(source)"
     }
 
     static func resolve(chunks: [SummaryChunk], title: String, generated: String?) -> DocumentSummaryChoice {

@@ -8,6 +8,7 @@ nonisolated struct SectionSibling: Equatable, Sendable {
     var pageEnd: Int?
     var text: String
     var chunkIndex: Int? = nil
+    var libraryID: String? = nil
 }
 
 nonisolated enum SectionExpansion {
@@ -49,6 +50,18 @@ nonisolated enum SectionExpansion {
             result.append(combined(hits: group, section: section.isEmpty ? group.map(sibling) : section))
         }
         return result
+    }
+
+    static func restricting(_ siblings: [SectionSibling], filters: [RetrievalFilter]) -> [SectionSibling] {
+        let library = filters.filter { $0.key == PaperLibrary.field }
+        guard !library.isEmpty else { return siblings }
+        return siblings.filter { sibling in
+            var payload: [String: Any] = [:]
+            if let libraryID = sibling.libraryID, !libraryID.isEmpty {
+                payload[PaperLibrary.field] = libraryID
+            }
+            return RetrievalFilter.keeps(payload, filters: library)
+        }
     }
 
     static func groupKey(source: String, headings: [String]) -> String {

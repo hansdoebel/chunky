@@ -330,10 +330,16 @@ public final class PointsService: Sendable {
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool = true
+        wait: Bool = true,
+        isTenant: Bool = false
     ) async throws {
         try await index.createFieldIndex(
-            collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait)
+            collection: collection,
+            fieldName: fieldName,
+            fieldType: fieldType,
+            wait: wait,
+            isTenant: isTenant
+        )
     }
 
     public func deleteFieldIndex(

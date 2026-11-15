@@ -272,8 +272,10 @@ def ensure_bm25_text_index(client, collection: str, field_name: str = BM25_TEXT_
             return
         raise
 
+TENANT_PAYLOAD_INDEX = "library_id"
+
 def ensure_payload_indexes(client, collection: str) -> None:
-    from qdrant_client.models import PayloadSchemaType
+    from qdrant_client.models import KeywordIndexParams, PayloadSchemaType
 
     specs = [(name, PayloadSchemaType.KEYWORD) for name in KEYWORD_PAYLOAD_INDEXES]
     specs += [(name, PayloadSchemaType.TEXT) for name in TEXT_PAYLOAD_INDEXES]
@@ -290,6 +292,17 @@ def ensure_payload_indexes(client, collection: str) -> None:
             if "already exists" in message or "already_exists" in message:
                 continue
             raise
+    try:
+        client.create_payload_index(
+            collection_name=collection,
+            field_name=TENANT_PAYLOAD_INDEX,
+            field_schema=KeywordIndexParams(type="keyword", is_tenant=True),
+        )
+    except Exception as exc:
+        message = str(exc).lower()
+        if "already exists" in message or "already_exists" in message:
+            return
+        raise
 
 def _chunk_elements(chunk: dict[str, Any]) -> tuple[str, list[str]] | None:
     import sys
@@ -432,6 +445,8 @@ def _payload(
         payload["cite_key"] = settings.bibliography_cite_key
     if settings.bibliography_source:
         payload["metadata_source"] = settings.bibliography_source
+    library = (settings.library_id or "default").strip() or "default"
+    payload["library_id"] = library
     return payload
 
 def dense_vector_name(info: Any) -> str | None:

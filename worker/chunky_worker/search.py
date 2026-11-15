@@ -32,6 +32,8 @@ class PayloadFilter(BaseModel):
     text: str | None = None
     any: list[str] | None = None
     negate: bool = False
+    empty: bool = False
+    should: bool = False
     gt: float | None = None
     gte: float | None = None
     lt: float | None = None
@@ -70,8 +72,8 @@ class PayloadFilter(BaseModel):
         return text
 
     def check_complete(self) -> None:
-        if self.match is None and self.text is None and not self.any and not self.has_range():
-            raise ValueError(f"Filter {self.key!r} needs a match, text, any, or a range")
+        if self.match is None and self.text is None and not self.any and not self.empty and not self.has_range():
+            raise ValueError(f"Filter {self.key!r} needs a match, text, any, empty, or a range")
 
 class SearchRequest(BaseModel):
     query: str
@@ -203,6 +205,19 @@ def hybrid_query_arguments(
         "with_vectors": False,
     }
 
+def source_scroll_filter(source: str, library_filters: list[PayloadFilter]):
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    library = build_query_filter(library_filters)
+    must = [FieldCondition(key="source", match=MatchValue(value=source))]
+    must_not = None
+    if library is not None:
+        if library.must:
+            must.extend(library.must)
+        must_not = library.must_not
+    return Filter(must=must, must_not=must_not)
+
+
 def _load_element_types():
     import sys
     from pathlib import Path
@@ -255,6 +270,7 @@ def build_query_filter(filters: list[PayloadFilter]):
     from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchText, MatchValue, Range
 
     must = []
+    should = []
     must_not = []
     for item in filters:
         item.check_complete()
@@ -262,8 +278,15 @@ def build_query_filter(filters: list[PayloadFilter]):
             expanded = _element_request(item)
             if expanded is not None:
                 clause = _element_clause(*expanded)
-                (must_not if item.negate else must).append(clause)
+                target = should if item.should else must_not if item.negate else must
+                target.append(clause)
                 continue
+        if item.empty:
+            from qdrant_client.models import IsEmptyCondition, PayloadField
+            condition = IsEmptyCondition(is_empty=PayloadField(key=item.key))
+            target = should if item.should else must_not if item.negate else must
+            target.append(condition)
+            continue
         kwargs: dict[str, Any] = {"key": item.key}
         if item.text is not None:
             kwargs["match"] = MatchText(text=item.text)
@@ -273,8 +296,11 @@ def build_query_filter(filters: list[PayloadFilter]):
             kwargs["match"] = MatchValue(value=item.match)
         if item.has_range():
             kwargs["range"] = Range(gt=item.gt, gte=item.gte, lt=item.lt, lte=item.lte)
-        target = must_not if item.negate else must
-        target.append(FieldCondition(**kwargs))
+        condition = FieldCondition(**kwargs)
+        target = should if item.should else must_not if item.negate else must
+        target.append(condition)
+    if should:
+        must.append(Filter(should=should))
     if not must and not must_not:
         return None
     return Filter(must=must or None, must_not=must_not or None)
@@ -544,8 +570,20 @@ def run_search(
             loaded: list[dict[str, Any]] = []
             loader = getattr(searcher, "section_chunks", None)
             if callable(loader) and sources:
+                library_filters = [item for item in request.filters if item.key == "library_id"]
                 try:
-                    loaded = loader(url=url, api_key=api_key, collection=collection, sources=sources)
+                    loaded = loader(
+                        url=url,
+                        api_key=api_key,
+                        collection=collection,
+                        sources=sources,
+                        library_filters=library_filters,
+                    )
+                except TypeError:
+                    try:
+                        loaded = loader(url=url, api_key=api_key, collection=collection, sources=sources)
+                    except Exception:
+                        loaded = []
                 except Exception:
                     loaded = []
             hits = expand_section_hits(hits, loaded, request.section_ratio)
@@ -621,9 +659,15 @@ class QdrantPointSearcher:
         if _ensure_filter_indexes(client, collection):
             self._indexed.add(key)
 
-    def section_chunks(self, *, url: str, api_key: str, collection: str, sources: list[str]) -> list[dict[str, Any]]:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-
+    def section_chunks(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        collection: str,
+        sources: list[str],
+        library_filters: list[PayloadFilter] | None = None,
+    ) -> list[dict[str, Any]]:
         client = self._open(url, api_key)
         found: list[dict[str, Any]] = []
         try:
@@ -632,7 +676,7 @@ class QdrantPointSearcher:
                 while True:
                     points, offset = client.scroll(
                         collection_name=collection,
-                        scroll_filter=Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))]),
+                        scroll_filter=source_scroll_filter(source, library_filters or []),
                         limit=128,
                         offset=offset,
                         with_payload=True,

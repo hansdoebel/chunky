@@ -57,7 +57,7 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
 
     public private(set) var createFieldIndexCallCount = 0
     public private(set) var createFieldIndexCalls:
-        [(collection: String, fieldName: String, fieldType: FieldType, wait: Bool)] = []
+        [(collection: String, fieldName: String, fieldType: FieldType, wait: Bool, isTenant: Bool)] = []
 
     public private(set) var deleteFieldIndexCallCount = 0
     public private(set) var deleteFieldIndexCalls:
@@ -255,11 +255,12 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool
+        wait: Bool,
+        isTenant: Bool
     ) async throws {
         createFieldIndexCallCount += 1
         createFieldIndexCalls.append(
-            (collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait))
+            (collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: isTenant))
         try createFieldIndexResult.get()
     }
 

@@ -331,7 +331,7 @@ struct RetrievalEvalTests {
         )
         let encoded = RetrievalFilter.encodedSummaries(filters)
         #expect(encoded.map(\.key) == ["year", "authors"])
-        #expect(draft.scope == RetrievalFilter.scopeLabel(filters))
+        #expect(draft.scope == RetrievalFilter.scopeLabel(filters + [RetrievalFilter(key: "library_id", match: .text(PaperLibrary.defaultID))]))
         #expect(index.lastFilter != nil)
         #expect(index.denseCalls == 1)
     }

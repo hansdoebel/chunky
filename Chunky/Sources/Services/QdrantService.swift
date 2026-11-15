@@ -219,6 +219,13 @@ class QdrantService: ObservableObject {
                 collection: collection, fieldName: field, fieldType: .integer, wait: false
             )
         }
+        try? await client.points.createFieldIndex(
+            collection: collection,
+            fieldName: PaperLibrary.field,
+            fieldType: .keyword,
+            wait: false,
+            isTenant: true
+        )
     }
 
     func deleteCollection(_ name: String) async throws {
@@ -416,6 +423,21 @@ class QdrantService: ObservableObject {
         )
     }
 
+    func movePoints(collectionName: String, ids: [String], libraryID: String) async throws {
+        guard let client = client else {
+            throw QdrantServiceError.notConnected
+        }
+        let plan = LibraryMove.plan(ids: ids, libraryID: libraryID)
+        guard !plan.ids.isEmpty, !plan.reembed else { return }
+        let payload = plan.payload.mapValues { PayloadValue.string($0) }
+        try await client.points.setPayload(
+            collection: collectionName,
+            ids: plan.ids.map { StoredPointID.parse($0) },
+            payload: payload,
+            wait: true
+        )
+    }
+
     func deletePoints(collectionName: String, ids: [String]) async throws {
         guard let client = client else {
             throw QdrantServiceError.notConnected
@@ -428,13 +450,15 @@ class QdrantService: ObservableObject {
         )
     }
 
-    func deleteBySource(collectionName: String, source: String) async throws {
+    func deleteBySource(collectionName: String, source: String, libraryID: String? = nil) async throws {
         guard let client = client else {
             throw QdrantServiceError.notConnected
         }
-        let filter = Filter(
-            must: [.field(key: "source", match: .keyword(source))]
-        )
+        var must: [Condition] = [.field(key: "source", match: .keyword(source))]
+        if let libraryID, let library = RetrievalFilter.qdrantFilter(LibraryFilter.membership(ids: [libraryID])) {
+            must.append(contentsOf: library.must)
+        }
+        let filter = Filter(must: must)
         try await client.points.delete(
             collection: collectionName,
             filter: filter,
@@ -484,6 +508,25 @@ class QdrantService: ObservableObject {
             exact: true
         )
         return Int(count)
+    }
+}
+
+enum StoredPointID {
+    static func parse(_ raw: String) -> PointID {
+        let trimmed = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !trimmed.isEmpty, trimmed.allSatisfy(\.isNumber), let number = UInt64(trimmed) {
+            return .integer(number)
+        }
+        return .uuid(trimmed)
+    }
+
+    static func wire(_ raw: String) -> String {
+        switch parse(raw) {
+        case .integer(let number):
+            return "integer:\(number)"
+        case .uuid(let value):
+            return "uuid:\(value)"
+        }
     }
 }
 

@@ -78,11 +78,12 @@ class DocumentProcessor: ObservableObject {
 
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+        let libraryID = LibraryFilter.assignedID(settings.activeLibraryID)
         defer { appState?.storeFinishedRun(job, settings: settings) }
         job.ingestCollection = targetCollection(job: job, settings: settings)
         rememberIngestTarget(job: job, settings: settings)
         if settings.processingHost == .devbox {
-            await processOnDevbox(job: job, settings: settings, mode: mode)
+            await processOnDevbox(job: job, settings: settings, mode: mode, libraryID: libraryID)
             return
         }
         job.status = .chunking
@@ -486,6 +487,7 @@ class DocumentProcessor: ObservableObject {
                     ollama: ollama,
                     createOptions: createOptions,
                     ingestedAt: ingestedAt,
+                    libraryID: libraryID,
                     preparedEmbeddings: prepared
                 )
             } else if settings.streamingPipeline {
@@ -495,7 +497,8 @@ class DocumentProcessor: ObservableObject {
                     settings: settings,
                     ollama: ollama,
                     createOptions: createOptions,
-                    ingestedAt: ingestedAt
+                    ingestedAt: ingestedAt,
+                    libraryID: libraryID
                 )
             } else {
                 try await processSequential(
@@ -505,6 +508,7 @@ class DocumentProcessor: ObservableObject {
                     ollama: ollama,
                     createOptions: createOptions,
                     ingestedAt: ingestedAt,
+                    libraryID: libraryID,
                     preparedEmbeddings: nil
                 )
             }
@@ -566,7 +570,8 @@ class DocumentProcessor: ObservableObject {
         settings: AppSettings,
         mode: ProcessingMode,
         cached: (chunks: [ChunkCacheChunk], vectors: [[Double]]?),
-        started: CFAbsoluteTime
+        started: CFAbsoluteTime,
+        libraryID: String
     ) async throws -> Bool {
         var vectors = (cached.vectors ?? []).map { row in row.map(Float.init) }
         if mode == .full, vectors.count != cached.chunks.count {
@@ -657,7 +662,7 @@ class DocumentProcessor: ObservableObject {
         )
         job.status = .uploading
         let uploadStarted = CFAbsoluteTimeGetCurrent()
-        try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed, qdrant: supplied)
+        try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed, qdrant: supplied, libraryID: libraryID)
         job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
         job.totalTime = CFAbsoluteTimeGetCurrent() - started
         job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
@@ -716,7 +721,8 @@ class DocumentProcessor: ObservableObject {
         settings: AppSettings,
         hybrid: Bool,
         ingestedAt: String,
-        sourcePath: String? = nil
+        sourcePath: String? = nil,
+        libraryID: String? = nil
     ) async throws -> [ChunkPoint] {
         let summaryChunks = chunks.map { SummaryChunk(text: $0.text, headings: $0.headings, page: $0.page) }
         let title = chunks.compactMap(\.docTitle).first { !$0.isEmpty } ?? ""
@@ -741,7 +747,9 @@ class DocumentProcessor: ObservableObject {
             "summary_kind": choice.kind,
             "content_type": "document",
         ]
+        let assignedLibrary = LibraryFilter.assignedID(libraryID ?? settings.activeLibraryID)
         if settings.metadataIncludeTimestamp { metadata["ingested_at"] = ingestedAt }
+        metadata[PaperLibrary.field] = assignedLibrary
         if settings.metadataIncludeDocTitle, !title.isEmpty { metadata["doc_title"] = title }
         if settings.metadataIncludeAuthors, let authors = chunks.compactMap(\.authors).first, !authors.isEmpty {
             metadata["authors"] = authors.joined(separator: "; ")
@@ -754,7 +762,7 @@ class DocumentProcessor: ObservableObject {
         }
         let sparse = hybrid ? SparseVectorService.generateSparseVectors(texts: [choice.text]).first : nil
         let point = ChunkPoint(
-            id: DocumentSummary.summaryID(source: source),
+            id: DocumentSummary.summaryID(source: source, libraryID: assignedLibrary),
             vector: vector,
             sparseVector: sparse,
             text: choice.text,
@@ -801,9 +809,11 @@ class DocumentProcessor: ObservableObject {
         sparseVectors: [SparseVector?],
         settings: AppSettings,
         ingestedAt: String,
-        sourcePath: String? = nil
+        sourcePath: String? = nil,
+        libraryID: String? = nil
     ) -> [ChunkPoint] {
-        zip(chunks, zip(embeddings, sparseVectors)).map { chunk, pair in
+        let assignedLibrary = LibraryFilter.assignedID(libraryID ?? settings.activeLibraryID)
+        return zip(chunks, zip(embeddings, sparseVectors)).map { chunk, pair in
             let (embedding, sparse) = pair
             var metadata: [String: String] = [:]
             if settings.metadataIncludeChunkIndex { metadata["chunk_index"] = String(chunk.chunkIndex) }
@@ -820,6 +830,7 @@ class DocumentProcessor: ObservableObject {
             if settings.metadataIncludeURL, let u = chunk.url { metadata["url"] = u }
             if settings.metadataIncludeLanguage, let l = chunk.language { metadata["language"] = l }
             if settings.metadataIncludeTimestamp { metadata["ingested_at"] = ingestedAt }
+            metadata[PaperLibrary.field] = assignedLibrary
             if settings.enableEmbeddingCache {
                 metadata["content_hash"] = contentHash(text: chunk.embeddingText ?? chunk.text, model: settings.embeddingModel)
             }
@@ -878,6 +889,7 @@ class DocumentProcessor: ObservableObject {
         ollama: OllamaService,
         createOptions: CollectionCreateOptions,
         ingestedAt: String,
+        libraryID: String,
         preparedEmbeddings: [[Float]]? = nil
     ) async throws {
         var chunksToEmbed = chunks
@@ -893,6 +905,7 @@ class DocumentProcessor: ObservableObject {
                     collectionName: collectionName,
                     source: job.fileName
                 )
+                .filter { LibraryFilter.belongs(existing: $0.metadata[PaperLibrary.field], to: libraryID) }
 
                 var hashToPoint: [String: QdrantPoint] = [:]
                 for point in existingPoints {
@@ -990,8 +1003,8 @@ class DocumentProcessor: ObservableObject {
 
             let sparseVectors = sparseVectors(for: chunksToEmbed, hybrid: createOptions.hybrid)
 
-            let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
-            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
+            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
             rememberUploaded(newPoints, job: job)
             allPoints = newPoints
 
@@ -1006,7 +1019,8 @@ class DocumentProcessor: ObservableObject {
                 vectorSize: vectorSize,
                 batchSize: settings.qdrantBatchSize,
                 createOptions: createOptions,
-                dedupSource: dedupSource
+                dedupSource: dedupSource,
+                libraryID: libraryID
             ) { progress in
                 Task { @MainActor in
                     job.progress = progress.fraction
@@ -1016,7 +1030,7 @@ class DocumentProcessor: ObservableObject {
             job.uploadTime = (job.uploadTime ?? 0) + (CFAbsoluteTimeGetCurrent() - uploadStarted)
         } else {
             job.statusMessage = "All chunks cached, skipping embedding"
-            let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
             rememberUploaded(summaryPoints, job: job)
             if !summaryPoints.isEmpty {
                 try await uploadToQdrant(
@@ -1035,6 +1049,7 @@ class DocumentProcessor: ObservableObject {
                 collectionName: targetCollection(job: job, settings: settings),
                 source: job.fileName
             )
+            .filter { LibraryFilter.belongs(existing: $0.metadata[PaperLibrary.field], to: libraryID) }
             let staleIds = existingPoints
                 .filter { point in
                     if point.metadata["record_type"] == DocumentSummary.documentRecord { return false }
@@ -1061,7 +1076,8 @@ class DocumentProcessor: ObservableObject {
         settings: AppSettings,
         ollama: OllamaService,
         createOptions: CollectionCreateOptions,
-        ingestedAt: String
+        ingestedAt: String,
+        libraryID: String
     ) async throws {
         guard let appState = appState else { throw QdrantError.notConnected }
         try await appState.ensureQdrantConnection()
@@ -1103,12 +1119,13 @@ class DocumentProcessor: ObservableObject {
 
         try await qdrant.deleteBySource(
             collectionName: targetCollection(job: job, settings: settings),
-            source: job.fileName
+            source: job.fileName,
+            libraryID: libraryID
         )
 
         let firstChunkBatch = Array(chunks.prefix(batchSize))
         let firstSparse = sparseVectors(for: firstChunkBatch, hybrid: createOptions.hybrid)
-        let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+        let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
         rememberUploaded(firstPoints, job: job)
         let firstUploadStarted = CFAbsoluteTimeGetCurrent()
         try await qdrant.upsertPoints(collectionName: targetCollection(job: job, settings: settings), points: firstPoints, batchSize: settings.qdrantBatchSize)
@@ -1132,7 +1149,7 @@ class DocumentProcessor: ObservableObject {
 
             let batchSparse = sparseVectors(for: batchChunks, hybrid: createOptions.hybrid)
 
-            let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
             rememberUploaded(batchPoints, job: job)
             let batchUploadStarted = CFAbsoluteTimeGetCurrent()
             try await qdrant.upsertPoints(collectionName: targetCollection(job: job, settings: settings), points: batchPoints, batchSize: settings.qdrantBatchSize)
@@ -1144,7 +1161,7 @@ class DocumentProcessor: ObservableObject {
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
         }
 
-        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
         rememberUploaded(summaryPoints, job: job)
         if !summaryPoints.isEmpty {
             try await qdrant.upsertPoints(collectionName: targetCollection(job: job, settings: settings), points: summaryPoints, batchSize: settings.qdrantBatchSize)
@@ -1204,7 +1221,7 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func processOnDevbox(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+    private func processOnDevbox(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode, libraryID: String) async {
         job.status = .chunking
         job.statusMessage = "Uploading to the worker..."
         job.error = nil
@@ -1226,7 +1243,8 @@ class DocumentProcessor: ObservableObject {
             from: settings,
             mode: mode,
             bibliography: job.bibliography,
-            collection: targetCollection(job: job, settings: settings)
+            collection: targetCollection(job: job, settings: settings),
+            libraryID: libraryID
         )
         payload["source_path"] = job.sourceURL.path
         do {
@@ -1239,7 +1257,8 @@ class DocumentProcessor: ObservableObject {
                     settings: settings,
                     mode: mode,
                     cached: cached,
-                    started: started
+                    started: started,
+                    libraryID: libraryID
                 )
                 if finished {
                     return
@@ -1302,7 +1321,7 @@ class DocumentProcessor: ObservableObject {
             case "return_vectors":
                 job.status = .uploading
                 let uploadStarted = CFAbsoluteTimeGetCurrent()
-                try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed)
+                try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed, libraryID: libraryID)
                 job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
             default:
                 job.statusMessage = "\(parsed.chunks.count) chunks from the worker"
@@ -1397,7 +1416,7 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob, qdrant supplied: QdrantService? = nil) async throws {
+    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob, qdrant supplied: QdrantService? = nil, libraryID: String? = nil) async throws {
         guard parsed.embeddings.count == parsed.chunks.count, !parsed.embeddings.isEmpty else {
             throw DevboxClientError.http(
                 url: settings.devboxWorkerURL,
@@ -1460,9 +1479,10 @@ class DocumentProcessor: ObservableObject {
             sparseVectors: sparseVectors(for: documentChunks, hybrid: createOptions.hybrid),
             settings: settings,
             ingestedAt: ingestedAt,
-            sourcePath: job.sourceURL.path
+            sourcePath: job.sourceURL.path,
+            libraryID: libraryID
         )
-        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
         rememberUploaded(points, job: job)
         try await uploadToQdrant(
             points: points,
@@ -1470,7 +1490,8 @@ class DocumentProcessor: ObservableObject {
             vectorSize: vectorSize,
             batchSize: settings.qdrantBatchSize,
             createOptions: createOptions,
-            dedupSource: job.fileName
+            dedupSource: job.fileName,
+            libraryID: libraryID
         ) { progress in
             Task { @MainActor in
                 job.progress = progress.fraction
@@ -1531,6 +1552,7 @@ class DocumentProcessor: ObservableObject {
         batchSize: Int,
         createOptions: CollectionCreateOptions,
         dedupSource: String? = nil,
+        libraryID: String? = nil,
         onProgress: @escaping (UploadProgress) -> Void
     ) async throws {
         guard let appState = appState else {
@@ -1563,7 +1585,8 @@ class DocumentProcessor: ObservableObject {
         if let source = dedupSource {
             try await service.deleteBySource(
                 collectionName: collectionName,
-                source: source
+                source: source,
+                libraryID: libraryID
             )
         }
 

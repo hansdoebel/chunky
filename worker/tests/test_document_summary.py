@@ -1,6 +1,6 @@
 import uuid
 
-from chunky_worker.document_summary import resolve_summary, summary_payload
+from chunky_worker.document_summary import resolve_summary, summary_payload, summary_point_id
 
 
 def test_abstract_is_preferred_over_a_generated_summary():
@@ -57,3 +57,6 @@ def test_summary_id_is_stable_and_disabled_metadata_is_omitted():
     assert "authors" not in payload
     assert "year" not in payload
     assert payload["record_type"] == "document"
+    assert payload["library_id"] == "default"
+    assert summary_point_id("paper.pdf") == point_id
+    assert summary_point_id("paper.pdf", "thesis") != point_id

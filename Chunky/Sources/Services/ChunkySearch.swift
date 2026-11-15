@@ -20,6 +20,8 @@ nonisolated struct ChunkySearchRequest: Equatable, Sendable {
     var collection: String
     var topK: Int
     var filters: [ChunkySearchFilter]
+    var libraryIDs: [String] = []
+    var librarySearch: LibrarySearch = .active
 }
 
 nonisolated struct ChunkySearchHit: Equatable, Sendable {
@@ -112,6 +114,9 @@ nonisolated struct RetrievalServiceSearch: ChunkySearchProviding {
             collection: collection,
             limit: request.topK,
             filters: request.filters.map(Self.retrievalFilter),
+            libraryIDs: request.libraryIDs,
+            librarySearch: request.librarySearch,
+            libraryID: settings.storedActiveLibraryID(),
             settings: settings
         )
         let page = try await retrieval.search(retrievalRequest)
