@@ -128,6 +128,47 @@ def _client(tmp_settings, embeddings, fake, factory_log):
     return TestClient(app, headers=auth_headers(tmp_settings.token or TEST_TOKEN))
 
 
+def test_hybrid_rrf_request_uses_text_query_and_optional_weights():
+    from qdrant_client.models import RrfQuery, TextQuery
+
+    from chunky_worker.search import PayloadFilter, hybrid_query_arguments
+
+    arguments = hybrid_query_arguments(
+        vector=[0.1, 0.2, 0.3],
+        text="revenue by year",
+        using="dense",
+        filters=[PayloadFilter(key="source", match="paper.pdf")],
+        limit=8,
+        offset=2,
+        weights=[0.7, 0.3],
+    )
+    dense, lexical = arguments["prefetch"]
+    assert dense.query == [0.1, 0.2, 0.3]
+    assert dense.using == "dense"
+    assert dense.limit == 8
+    assert isinstance(lexical.query, TextQuery)
+    assert lexical.query.text == "revenue by year"
+    assert lexical.using == "text"
+    assert isinstance(arguments["query"], RrfQuery)
+    assert arguments["query"].rrf.weights == [0.7, 0.3]
+    assert arguments["limit"] == 8
+    assert arguments["offset"] == 2
+    assert arguments["with_payload"] is True
+    assert arguments["with_vectors"] is False
+    plain = hybrid_query_arguments(
+        vector=[0.1],
+        text="revenue",
+        using=None,
+        filters=[],
+        limit=4,
+        offset=0,
+        weights=None,
+    )
+    assert plain["query"].rrf.weights is None
+    assert plain["prefetch"][0].using is None
+    assert plain["query_filter"] is None
+
+
 def test_build_query_filter_ands_match_and_range():
     query_filter = build_query_filter(
         [

@@ -202,6 +202,28 @@ def stored_chunk_text(chunk: dict[str, Any]) -> str:
     return str(chunk.get("text") or "")
 
 
+BM25_TEXT_FIELD = "text"
+
+
+def ensure_bm25_text_index(client, collection: str, field_name: str = BM25_TEXT_FIELD) -> None:
+    from qdrant_client.models import TextIndexParams, TextIndexType, TextScoringParams, TextScoringType
+
+    try:
+        client.create_payload_index(
+            collection_name=collection,
+            field_name=field_name,
+            field_schema=TextIndexParams(
+                type=TextIndexType.TEXT,
+                scoring=TextScoringParams(type=TextScoringType.BM25),
+            ),
+        )
+    except Exception as exc:
+        message = str(exc).lower()
+        if "already exists" in message or "already_exists" in message:
+            return
+        raise
+
+
 def ensure_payload_indexes(client, collection: str) -> None:
     from qdrant_client.models import PayloadSchemaType
 
@@ -388,14 +410,7 @@ class QdrantCloudIngestor:
 
         distance_name = normalize_distance(distance)
         try:
-            from qdrant_client.models import (
-                Distance,
-                Modifier,
-                PointStruct,
-                SparseVector,
-                SparseVectorParams,
-                VectorParams,
-            )
+            from qdrant_client.models import Distance, PointStruct, VectorParams
         except ImportError as exc:
             raise IngestError("qdrant-client is not installed") from exc
 
@@ -427,7 +442,6 @@ class QdrantCloudIngestor:
                     client.create_collection(
                         collection_name=collection,
                         vectors_config={"dense": dense},
-                        sparse_vectors_config={"sparse": SparseVectorParams(modifier=Modifier.IDF)},
                         on_disk_payload=on_disk,
                         quantization_config=compression,
                     )
@@ -439,23 +453,17 @@ class QdrantCloudIngestor:
                         quantization_config=compression,
                     )
             ensure_payload_indexes(client, collection)
+            if hybrid:
+                ensure_bm25_text_index(client, collection)
 
-            sparse_rows = sparse_vectors([point.payload.get("text") or "" for point in points]) if hybrid else None
             total = len(points)
             written = 0
             step = batch_size
             for start in range(0, total, step):
                 batch = points[start : start + step]
                 structs = []
-                for offset, point in enumerate(batch):
-                    if sparse_rows is None:
-                        vector: Any = point.vector
-                    else:
-                        indices, values = sparse_rows[start + offset]
-                        vector = {
-                            "dense": point.vector,
-                            "sparse": SparseVector(indices=indices, values=values),
-                        }
+                for point in batch:
+                    vector: Any = {"dense": point.vector} if hybrid else point.vector
                     structs.append(PointStruct(id=point.id, vector=vector, payload=point.payload))
                 client.upsert(collection_name=collection, points=structs, wait=True)
                 written += len(batch)

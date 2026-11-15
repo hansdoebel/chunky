@@ -64,6 +64,12 @@ larger values are rejected). `offset` pages through results. A full page sets
 `next_offset` to `offset + limit`; a short page sets it to `null`. There is no
 silent 1,000-point cap.
 
+`mode` is `dense` (default) or `hybrid`. Hybrid prefetches the dense vector and a
+Qdrant 1.20 BM25 `TextQuery` on the `text` payload field, then fuses them with
+RRF. Optional `rrf_weights` is two non-negative numbers, dense then BM25.
+Hybrid ingest creates a BM25 text index on `text` and does not store
+batch-local TF-IDF sparse vectors.
+
 `filters` is a list of payload conditions, combined with AND. Each item has
 `key` plus `match` (string, integer, or boolean) and/or a range (`gt`, `gte`,
 `lt`, `lte`). Example keys are `source`, `page`, and `content_type`.

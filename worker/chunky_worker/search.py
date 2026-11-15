@@ -11,7 +11,7 @@ from urllib.parse import urlparse
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
-from chunky_worker.qdrant_ingest import _collection_vector_size, dense_vector_name, redact
+from chunky_worker.qdrant_ingest import BM25_TEXT_FIELD, _collection_vector_size, dense_vector_name, redact
 from chunky_worker.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -66,6 +66,7 @@ class PayloadFilter(BaseModel):
 class SearchRequest(BaseModel):
     query: str
     collection: str
+    mode: str = "dense"
     qdrant_url: str | None = None
     qdrant_api_key: str | None = Field(default=None, repr=False)
     embedding_model: str | None = None
@@ -75,6 +76,7 @@ class SearchRequest(BaseModel):
     offset: int = Field(default=0, ge=0)
     score_threshold: float | None = None
     filters: list[PayloadFilter] = Field(default_factory=list)
+    rrf_weights: list[float] | None = None
 
     @field_validator("query", "collection")
     @classmethod
@@ -83,6 +85,23 @@ class SearchRequest(BaseModel):
         if not text:
             raise ValueError("must not be empty")
         return text
+
+    @field_validator("mode")
+    @classmethod
+    def known_mode(cls, value: str) -> str:
+        mode = value.strip().lower()
+        if mode not in {"dense", "hybrid"}:
+            raise ValueError("mode must be dense or hybrid")
+        return mode
+
+    @field_validator("rrf_weights")
+    @classmethod
+    def two_weights(cls, value: list[float] | None) -> list[float] | None:
+        if value is None:
+            return None
+        if len(value) != 2 or any(item < 0 for item in value):
+            raise ValueError("rrf_weights must be two non-negative numbers")
+        return value
 
     @field_validator("embedding_backend")
     @classmethod
@@ -128,6 +147,51 @@ class QdrantSearcher(Protocol):
         using: str | None,
     ) -> list[ScoredHit]:
         ...
+
+    def query_hybrid(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        collection: str,
+        vector: list[float],
+        text: str,
+        limit: int,
+        offset: int,
+        filters: list[PayloadFilter],
+        score_threshold: float | None,
+        using: str | None,
+        weights: list[float] | None,
+    ) -> list[ScoredHit]:
+        ...
+
+
+def hybrid_query_arguments(
+    *,
+    vector: list[float],
+    text: str,
+    using: str | None,
+    filters: list[PayloadFilter],
+    limit: int,
+    offset: int,
+    weights: list[float] | None,
+) -> dict[str, Any]:
+    from qdrant_client.models import Prefetch, Rrf, RrfQuery, TextQuery
+
+    query_filter = build_query_filter(filters)
+    prefetch_limit = max(limit, 1)
+    dense = Prefetch(query=vector, using=using, filter=query_filter, limit=prefetch_limit)
+    lexical = Prefetch(query=TextQuery(text=text), using=BM25_TEXT_FIELD, filter=query_filter, limit=prefetch_limit)
+    rrf = Rrf(weights=weights) if weights else Rrf()
+    return {
+        "prefetch": [dense, lexical],
+        "query": RrfQuery(rrf=rrf),
+        "query_filter": query_filter,
+        "limit": limit,
+        "offset": offset,
+        "with_payload": True,
+        "with_vectors": False,
+    }
 
 
 def build_query_filter(filters: list[PayloadFilter]):
@@ -275,17 +339,32 @@ def run_search(
         )
 
     try:
-        hits = searcher.query_dense(
-            url=url,
-            api_key=api_key,
-            collection=collection,
-            vector=vector,
-            limit=request.limit,
-            offset=request.offset,
-            filters=request.filters,
-            score_threshold=request.score_threshold,
-            using=layout.using,
-        )
+        if request.mode == "hybrid":
+            hits = searcher.query_hybrid(
+                url=url,
+                api_key=api_key,
+                collection=collection,
+                vector=vector,
+                text=request.query,
+                limit=request.limit,
+                offset=request.offset,
+                filters=request.filters,
+                score_threshold=request.score_threshold,
+                using=layout.using,
+                weights=request.rrf_weights,
+            )
+        else:
+            hits = searcher.query_dense(
+                url=url,
+                api_key=api_key,
+                collection=collection,
+                vector=vector,
+                limit=request.limit,
+                offset=request.offset,
+                filters=request.filters,
+                score_threshold=request.score_threshold,
+                using=layout.using,
+            )
     except SearchError:
         raise
     except Exception as exc:
@@ -416,6 +495,55 @@ class QdrantPointSearcher:
             lowered = message.lower()
             if "dimension" in lowered or "vector dimension" in lowered:
                 raise SearchError(message, status_code=409, error_type="dimension_mismatch") from None
+            raise SearchError(message, status_code=502, error_type="qdrant_error") from None
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
+    def query_hybrid(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        collection: str,
+        vector: list[float],
+        text: str,
+        limit: int,
+        offset: int,
+        filters: list[PayloadFilter],
+        score_threshold: float | None,
+        using: str | None,
+        weights: list[float] | None,
+    ) -> list[ScoredHit]:
+        client = self._open(url, api_key)
+        try:
+            arguments = hybrid_query_arguments(
+                vector=vector,
+                text=text,
+                using=using,
+                filters=filters,
+                limit=limit,
+                offset=offset,
+                weights=weights,
+            )
+            arguments["score_threshold"] = score_threshold
+            response = client.query_points(collection_name=collection, **arguments)
+            points = getattr(response, "points", response)
+            hits: list[ScoredHit] = []
+            for point in points:
+                hits.append(
+                    ScoredHit(
+                        id=str(point.id),
+                        score=float(point.score),
+                        payload=_payload_dict(point.payload),
+                    )
+                )
+            return hits
+        except SearchError:
+            raise
+        except Exception as exc:
+            message = redact(str(exc), api_key)
             raise SearchError(message, status_code=502, error_type="qdrant_error") from None
         finally:
             close = getattr(client, "close", None)

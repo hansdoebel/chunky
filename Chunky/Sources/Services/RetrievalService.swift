@@ -19,6 +19,7 @@ enum RetrievalMode: String, CaseIterable, Identifiable, Sendable {
     var displayName: String {
         switch self {
         case .dense: return "Dense"
+        case .hybrid: return "Hybrid"
         }
     }
 }
@@ -158,6 +159,7 @@ struct RetrievalRequest: Equatable, Sendable {
     var workerURL: String
     var workerToken: String
     var filters: [RetrievalFilter]
+    var rrfWeights: [Double]?
 
     static func make(
         text: String,
@@ -168,6 +170,7 @@ struct RetrievalRequest: Equatable, Sendable {
         backend: String? = nil,
         model: String? = nil,
         filters: [RetrievalFilter] = [],
+        rrfWeights: [Double]? = nil,
         settings: AppSettings
     ) -> RetrievalRequest {
         let resolvedBackend = (backend ?? settings.embeddingBackend).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -190,10 +193,11 @@ struct RetrievalRequest: Equatable, Sendable {
             embeddingURL: embeddingURL,
             route: route,
             qdrantURL: qdrantURL,
-            qdrantAPIKey: route == .worker ? qdrantAPIKey : "",
+            qdrantAPIKey: qdrantAPIKey,
             workerURL: settings.devboxWorkerURL,
             workerToken: settings.workerToken,
-            filters: filters
+            filters: filters,
+            rrfWeights: rrfWeights
         )
     }
 
@@ -201,6 +205,7 @@ struct RetrievalRequest: Equatable, Sendable {
         var body: [String: Any] = [
             "query": text,
             "collection": collection,
+            "mode": mode.rawValue,
             "limit": limit,
             "offset": offset,
             "embedding_model": embeddingModel,
@@ -208,6 +213,9 @@ struct RetrievalRequest: Equatable, Sendable {
             "embedding_url": embeddingURL,
             "filters": filters.map { $0.jsonObject() },
         ]
+        if let rrfWeights {
+            body["rrf_weights"] = rrfWeights
+        }
         if route == .worker && !qdrantURL.isEmpty {
             body["qdrant_url"] = qdrantURL
         }
@@ -278,6 +286,7 @@ enum RetrievalError: LocalizedError, Equatable {
     case emptyQuery
     case invalidLimit(Int)
     case invalidOffset
+    case invalidWeights
     case notConnected
     case missingWorker
     case missingCollection(String)
@@ -293,6 +302,8 @@ enum RetrievalError: LocalizedError, Equatable {
             return "Limit \(limit) is outside 1...\(RetrievalLimits.maximum)."
         case .invalidOffset:
             return "Offset must be zero or greater."
+        case .invalidWeights:
+            return "RRF weights must be two non-negative numbers, or left empty."
         case .notConnected:
             return "Local Qdrant is not connected."
         case .missingWorker:
@@ -325,6 +336,76 @@ protocol RetrievalIndex {
         filter: Filter?,
         vectorName: String?
     ) async throws -> [SearchResult]
+    func hybridRRF(collection: String, url: String, apiKey: String, body: [String: Any]) async throws -> [SearchResult]
+}
+
+enum HybridQuery {
+    static let textField = "text"
+
+    static func body(
+        vector: [Float],
+        text: String,
+        denseUsing: String?,
+        limit: Int,
+        offset: Int,
+        weights: [Double]?
+    ) -> [String: Any] {
+        let prefetchLimit = max(limit, 1)
+        var dense: [String: Any] = ["query": vector, "limit": prefetchLimit]
+        if let denseUsing {
+            dense["using"] = denseUsing
+        }
+        let lexical: [String: Any] = [
+            "query": ["text": text],
+            "using": textField,
+            "limit": prefetchLimit,
+        ]
+        var rrf: [String: Any] = [:]
+        if let weights {
+            rrf["weights"] = weights
+        }
+        return [
+            "prefetch": [dense, lexical],
+            "query": ["rrf": rrf],
+            "limit": limit,
+            "offset": offset,
+            "with_payload": true,
+            "with_vector": false,
+        ]
+    }
+
+    static func restURL(qdrantURL: String, collection: String) -> URL? {
+        guard var components = URLComponents(string: qdrantURL), components.host != nil else { return nil }
+        if components.port == 6334 {
+            components.port = 6333
+        }
+        guard var url = components.url else { return nil }
+        url.appendPathComponent("collections")
+        url.appendPathComponent(collection)
+        url.appendPathComponent("points")
+        url.appendPathComponent("query")
+        return url
+    }
+
+    static func hits(from data: Data) throws -> [SearchResult] {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw RetrievalError.unreadableResponse
+        }
+        let result = object["result"] as? [String: Any] ?? object
+        let rows = result["points"] as? [[String: Any]] ?? object["result"] as? [[String: Any]] ?? []
+        return rows.map { row in
+            let hit = RetrievalHit(workerRow: row)
+            return SearchResult(
+                id: hit.id,
+                score: Float(hit.score),
+                text: hit.text,
+                source: hit.source,
+                page: hit.page,
+                headings: hit.headings,
+                metadata: hit.payload
+            )
+        }
+    }
 }
 
 protocol RetrievalWorker {
@@ -398,6 +479,25 @@ struct QdrantRetrievalIndex: RetrievalIndex {
             vectorName: vectorName
         )
     }
+
+    func hybridRRF(collection: String, url: String, apiKey: String, body: [String: Any]) async throws -> [SearchResult] {
+        guard let endpoint = HybridQuery.restURL(qdrantURL: url, collection: collection) else {
+            throw QdrantServiceError.invalidURL(url)
+        }
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !apiKey.isEmpty {
+            request.setValue(apiKey, forHTTPHeaderField: "api-key")
+        }
+        request.httpBody = try JSONSerialization.data(withJSONObject: body)
+        let (data, response) = try await URLSession.shared.data(for: request)
+        guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
+            let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+            throw RetrievalError.worker(status: status, detail: String(data: data, encoding: .utf8) ?? "")
+        }
+        return try HybridQuery.hits(from: data)
+    }
 }
 
 struct LiveRetrievalWorker: RetrievalWorker {
@@ -439,6 +539,9 @@ struct RetrievalService {
             throw RetrievalError.invalidLimit(request.limit)
         }
         guard request.offset >= 0 else { throw RetrievalError.invalidOffset }
+        if let weights = request.rrfWeights, request.mode == .hybrid, weights.count != 2 || weights.contains(where: { $0 < 0 }) {
+            throw RetrievalError.invalidWeights
+        }
         guard !request.collection.isEmpty else { throw RetrievalError.missingCollection(request.collection) }
 
         switch request.route {
@@ -489,14 +592,32 @@ struct RetrievalService {
             )
         }
         let vectorName = try await index.vectorName(collection: request.collection)
-        let hits = try await index.denseSearch(
-            collection: request.collection,
-            vector: vector,
-            limit: request.limit,
-            offset: request.offset,
-            filter: RetrievalFilter.qdrantFilter(request.filters),
-            vectorName: vectorName
-        ).map(RetrievalHit.init(result:))
+        let hits: [RetrievalHit]
+        if request.mode == .hybrid {
+            let body = HybridQuery.body(
+                vector: vector,
+                text: request.text,
+                denseUsing: vectorName,
+                limit: request.limit,
+                offset: request.offset,
+                weights: request.rrfWeights
+            )
+            hits = try await index.hybridRRF(
+                collection: request.collection,
+                url: request.qdrantURL,
+                apiKey: request.qdrantAPIKey,
+                body: body
+            ).map(RetrievalHit.init(result:))
+        } else {
+            hits = try await index.denseSearch(
+                collection: request.collection,
+                vector: vector,
+                limit: request.limit,
+                offset: request.offset,
+                filter: RetrievalFilter.qdrantFilter(request.filters),
+                vectorName: vectorName
+            ).map(RetrievalHit.init(result:))
+        }
         let nextOffset: Int? = hits.count == request.limit ? request.offset + request.limit : nil
         return RetrievalPage(
             hits: hits,
