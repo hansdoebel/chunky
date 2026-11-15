@@ -112,6 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
+          rm -rf /tmp/chunky-ui-snapshots
+          mkdir -p /tmp/chunky-ui-snapshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -123,6 +125,14 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
             ENABLE_HARDENED_RUNTIME=NO
+
+      - name: Upload Preferences screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: preferences-screenshots
+          path: /tmp/chunky-ui-snapshots/*.png
+          if-no-files-found: ignore
 
       - name: Build qdrant-swift and run its unit tests
         # Same fail-open rule as the job: skip only on an explicit false.

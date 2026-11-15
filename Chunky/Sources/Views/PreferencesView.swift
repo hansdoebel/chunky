@@ -207,12 +207,6 @@ struct PreferencesView: View {
         .padding()
     }
 
-    private var recommendedModels: [ManagedModel] {
-        let host = appState.settings.processingHost
-        let models = ModelCatalog.visible(ModelCatalog.recommended(host: host), host: host)
-        return ModelCatalog.marking(models, installed: [], downloading: downloadingModels)
-    }
-
     private func downloadModel(_ repoID: String) async {
         downloadingModels.insert(repoID)
         do {
@@ -275,34 +269,12 @@ struct PreferencesView: View {
                         .foregroundColor(.secondary)
                 }
 
-                Section {
-                    ForEach(recommendedModels) { model in
-                        HStack {
-                            Text(model.name)
-                            Spacer()
-                            Text(model.state.rawValue)
-                                .foregroundStyle(.secondary)
-                            if !model.sizeLabel.isEmpty {
-                                Text(model.sizeLabel)
-                                    .foregroundStyle(.secondary)
-                            }
-                            if model.state == .missing && appState.settings.processingHost == .devbox {
-                                Button("Download") { Task { await downloadModel(model.name) } }
-                            }
-                        }
-                    }
-                    if !modelStatusMessage.isEmpty {
-                        Text(modelStatusMessage)
-                            .font(.caption)
-                            .foregroundStyle(.secondary)
-                    }
-                } header: {
-                    Text("Recommended models")
-                } footer: {
-                    Text(appState.settings.processingHost == .devbox
-                         ? "Devbox: qwen3-embedding, granite-docling, and granite-vision. MLX models stay on the Mac. The worker reports what is actually cached."
-                         : "Mac: Granite-Docling MLX. A devbox download uses the worker token.")
-                }
+                RecommendedModelsSection(
+                    host: appState.settings.processingHost,
+                    downloading: downloadingModels,
+                    statusMessage: modelStatusMessage,
+                    onDownload: { repo in Task { await downloadModel(repo) } }
+                )
 
                 Picker("VLM Model", selection: $appState.settings.doclingModel) {
                     ForEach(DoclingModel.models(for: appState.settings.processingHost), id: \.rawValue) { model in
