@@ -593,6 +593,7 @@ def convert_document(
     ocr_batch_size: int = 0,
     layout_batch_size: int = 0,
     table_batch_size: int = 0,
+    page_offset: int | None = None,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -783,7 +784,9 @@ def convert_document(
             )
             chunk_ms = (time.perf_counter() - chunk_started) * 1000
             if chunk_result is not None:
-                result_data["chunks"] = chunk_result
+                from page_labels import apply_printed_labels
+
+                result_data["chunks"] = apply_printed_labels(chunk_result, input_path, page_offset)
         result_data["stage_ms"] = _conversion_stage_ms(
             convert_ms,
             chunk_ms,

@@ -44,6 +44,17 @@ from chunky_worker.verification import (
 
 log = logging.getLogger(__name__)
 
+
+def _apply_printed_labels(chunks: list[dict[str, Any]], pdf_path: Path, settings: JobSettings) -> list[dict[str, Any]]:
+    import sys
+
+    scripts = str(Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    from page_labels import apply_printed_labels
+
+    return apply_printed_labels(chunks, pdf_path, settings.page_offset)
+
 TERMINAL = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
 
 class JobStore:
@@ -306,6 +317,10 @@ class JobRunner:
 
             chunks = list(raw.get("chunks") or [])
             ensure_chunk_ids(chunks, hash_file(input_path))
+            chunks = _apply_printed_labels(chunks, input_path, job.settings)
+            raw["chunks"] = chunks
+            if job.settings.page_offset is not None:
+                raw["page_offset"] = job.settings.page_offset
             vectors: list[list[float]] | None = None
             result = JobResult(
                 mode=job.settings.mode,

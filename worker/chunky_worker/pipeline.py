@@ -125,6 +125,7 @@ class DoclingPipeline:
             chunk_merge_peers=settings.chunk_merge_peers,
             chunk_tokenizer=settings.chunk_tokenizer,
             embedding_model=settings.embedding_model or self.embedding_model,
+            page_offset=settings.page_offset,
             on_progress=hooked,
         )
 

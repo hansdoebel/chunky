@@ -232,7 +232,13 @@ def _handle_convert(cmd):
             cmd.get("embedding_model", ""),
         )
         if chunk_result is not None:
-            result_data["chunks"] = chunk_result
+            from page_labels import apply_printed_labels
+
+            result_data["chunks"] = apply_printed_labels(
+                chunk_result,
+                input_file,
+                cmd.get("page_offset"),
+            )
 
     extract_schema = cmd.get("extract_schema")
     if extract_schema:
