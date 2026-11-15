@@ -52,6 +52,9 @@ actor ChunkingService {
         let year: Int?
         let language: String?
         let embeddingText: String?
+        let pictureDescription: String?
+        let pictureClass: String?
+        let tableMarkdown: String?
 
         init(
             id: String = UUID().uuidString,
@@ -72,7 +75,10 @@ actor ChunkingService {
             url: String? = nil,
             year: Int? = nil,
             language: String? = nil,
-            embeddingText: String? = nil
+            embeddingText: String? = nil,
+            pictureDescription: String? = nil,
+            pictureClass: String? = nil,
+            tableMarkdown: String? = nil
         ) {
             self.id = id
             self.text = text
@@ -93,6 +99,36 @@ actor ChunkingService {
             self.year = year
             self.language = language
             self.embeddingText = embeddingText
+            self.pictureDescription = pictureDescription
+            self.pictureClass = pictureClass
+            self.tableMarkdown = tableMarkdown
+        }
+
+        func replacing(text: String, formattedContent: String, contentType: String, tokenCount: Int) -> DocumentChunk {
+            DocumentChunk(
+                id: id,
+                text: text,
+                source: source,
+                page: page,
+                headings: headings,
+                metadata: metadata,
+                tokenCount: tokenCount,
+                formattedContent: formattedContent,
+                chunkIndex: chunkIndex,
+                contentType: contentType,
+                section: section,
+                docTitle: docTitle,
+                authors: authors,
+                doi: doi,
+                documentId: documentId,
+                url: url,
+                year: year,
+                language: language,
+                embeddingText: embeddingText,
+                pictureDescription: pictureDescription,
+                pictureClass: pictureClass,
+                tableMarkdown: tableMarkdown
+            )
         }
     }
 }
@@ -104,46 +140,22 @@ struct CleanupService {
             let cleanedFormatted = cleanText(chunk.formattedContent)
 
             if isToCChunk(cleanedText) {
-                return ChunkingService.DocumentChunk(
-                    id: chunk.id,
+                return chunk.replacing(
                     text: cleanedText,
-                    source: chunk.source,
-                    page: chunk.page,
-                    headings: chunk.headings,
-                    metadata: chunk.metadata,
-                    tokenCount: max(1, cleanedText.count / 4),
                     formattedContent: cleanedFormatted,
-                    chunkIndex: chunk.chunkIndex,
                     contentType: "toc",
-                    section: chunk.section,
-                    docTitle: chunk.docTitle,
-                    authors: chunk.authors,
-                    doi: chunk.doi,
-                    documentId: chunk.documentId,
-                    url: chunk.url
+                    tokenCount: max(1, cleanedText.count / 4)
                 )
             }
 
             let trimmed = cleanedText.trimmingCharacters(in: .whitespacesAndNewlines)
             if trimmed.isEmpty { return nil }
 
-            return ChunkingService.DocumentChunk(
-                id: chunk.id,
+            return chunk.replacing(
                 text: cleanedText,
-                source: chunk.source,
-                page: chunk.page,
-                headings: chunk.headings,
-                metadata: chunk.metadata,
-                tokenCount: max(1, cleanedText.count / 4),
                 formattedContent: cleanedFormatted,
-                chunkIndex: chunk.chunkIndex,
                 contentType: chunk.contentType,
-                section: chunk.section,
-                docTitle: chunk.docTitle,
-                authors: chunk.authors,
-                doi: chunk.doi,
-                documentId: chunk.documentId,
-                url: chunk.url
+                tokenCount: max(1, cleanedText.count / 4)
             )
         }
     }

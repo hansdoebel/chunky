@@ -86,8 +86,49 @@ def test_payload_matches_mac_field_names():
     assert payload["language"] == "en"
     assert payload["ingested_at"] == "2026-11-15T00:00:00Z"
     assert payload["content_hash"] == content_hash("Hello world", "qwen3-embedding")
+    assert payload["embedding_text"] == "Hello world"
+    assert "picture_description" not in payload
+    assert "picture_class" not in payload
+    assert "table_markdown" not in payload
     assert isinstance(payload["page"], int)
     assert isinstance(payload["chunk_index"], str)
+
+
+def test_picture_and_table_payloads_keep_serialized_text():
+    settings = JobSettings()
+    picture = {
+        "text": "Figure 1",
+        "embedding_text": "Figure 1\nA bar chart of revenue.",
+        "content_type": "picture",
+        "picture_description": "A bar chart of revenue.",
+        "picture_class": "bar_chart",
+    }
+    table = {
+        "text": "Year Revenue",
+        "embedding_text": "Year Revenue\n| Year | Revenue |",
+        "content_type": "table",
+        "table_markdown": "| Year | Revenue |\n| --- | --- |\n| 2024 | 10 |",
+    }
+    points = build_points(
+        [picture, table],
+        [[0.1, 0.2], [0.3, 0.4]],
+        source="paper.pdf",
+        settings=settings,
+        embedding_model="qwen3-embedding",
+    )
+    picture_payload, table_payload = (point.payload for point in points)
+    assert picture_payload["text"] == "Figure 1\nA bar chart of revenue."
+    assert picture_payload["embedding_text"] == picture_payload["text"]
+    assert picture_payload["content_type"] == "picture"
+    assert picture_payload["picture_description"] == "A bar chart of revenue."
+    assert picture_payload["picture_class"] == "bar_chart"
+    assert "table_markdown" not in picture_payload
+    assert table_payload["text"] == "Year Revenue\n| Year | Revenue |"
+    assert table_payload["embedding_text"] == table_payload["text"]
+    assert table_payload["content_type"] == "table"
+    assert table_payload["table_markdown"].startswith("| Year | Revenue |")
+    assert "picture_description" not in table_payload
+    assert "picture_class" not in table_payload
 
 
 def test_disabled_metadata_flags_omit_fields():
@@ -254,6 +295,9 @@ def test_cloud_client_creates_collection_and_batches(monkeypatch):
         def upsert(self, **kwargs):
             created.setdefault("upserts", []).append(kwargs)
 
+        def create_payload_index(self, **kwargs):
+            created.setdefault("indexes", []).append(kwargs)
+
         def close(self):
             created["closed"] = True
 
@@ -280,6 +324,11 @@ def test_cloud_client_creates_collection_and_batches(monkeypatch):
     assert len(created["upserts"][0]["points"]) == 2
     assert len(created["upserts"][1]["points"]) == 1
     assert created["closed"] is True
+    indexed = {call["field_name"]: call["field_schema"] for call in created["indexes"]}
+    assert indexed["picture_class"].value == "keyword"
+    assert indexed["picture_description"].value == "text"
+    assert indexed["table_markdown"].value == "text"
+    assert indexed["embedding_text"].value == "text"
     assert API_KEY not in repr(vars(ingestor))
 
 
@@ -355,6 +404,9 @@ def test_named_dense_vector_size_is_read(monkeypatch):
             return Info()
 
         def upsert(self, **kwargs):
+            return None
+
+        def create_payload_index(self, **kwargs):
             return None
 
         def close(self):

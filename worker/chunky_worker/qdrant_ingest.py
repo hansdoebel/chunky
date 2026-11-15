@@ -119,6 +119,49 @@ def build_points(
     return points
 
 
+KEYWORD_PAYLOAD_INDEXES = (
+    "source",
+    "doc_title",
+    "authors",
+    "content_type",
+    "language",
+    "doi",
+    "picture_class",
+)
+TEXT_PAYLOAD_INDEXES = (
+    "picture_description",
+    "table_markdown",
+    "embedding_text",
+)
+
+
+def stored_chunk_text(chunk: dict[str, Any]) -> str:
+    """Payload text matches the string that was embedded."""
+    serialized = chunk.get("embedding_text")
+    if isinstance(serialized, str) and serialized != "":
+        return serialized
+    return str(chunk.get("text") or "")
+
+
+def ensure_payload_indexes(client, collection: str) -> None:
+    from qdrant_client.models import PayloadSchemaType
+
+    specs = [(name, PayloadSchemaType.KEYWORD) for name in KEYWORD_PAYLOAD_INDEXES]
+    specs += [(name, PayloadSchemaType.TEXT) for name in TEXT_PAYLOAD_INDEXES]
+    for field_name, schema in specs:
+        try:
+            client.create_payload_index(
+                collection_name=collection,
+                field_name=field_name,
+                field_schema=schema,
+            )
+        except Exception as exc:
+            message = str(exc).lower()
+            if "already exists" in message or "already_exists" in message:
+                continue
+            raise
+
+
 def _payload(
     chunk: dict[str, Any],
     *,
@@ -132,9 +175,17 @@ def _payload(
     ingested_at: str,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
-        "text": chunk.get("text") or "",
+        "text": stored_chunk_text(chunk),
         "source": chunk.get("source") or source,
     }
+    embedding_text = chunk.get("embedding_text")
+    if isinstance(embedding_text, str) and embedding_text != "":
+        payload["embedding_text"] = embedding_text
+    put_visual = (
+        ("picture_description", chunk.get("picture_description")),
+        ("picture_class", chunk.get("picture_class")),
+        ("table_markdown", chunk.get("table_markdown")),
+    )
     page = chunk.get("page")
     if settings.metadata_include_page and page is not None:
         payload["page"] = int(page)
@@ -154,6 +205,8 @@ def _payload(
     if settings.metadata_include_chunk_index and chunk.get("chunk_index") is not None:
         payload["chunk_index"] = str(chunk["chunk_index"])
     put_string(settings.metadata_include_content_type, "content_type", chunk.get("content_type"))
+    for key, value in put_visual:
+        put_string(True, key, value)
     put_string(settings.metadata_include_section, "section", chunk.get("section"))
     put_string(
         settings.metadata_include_doc_title,
@@ -284,6 +337,7 @@ class QdrantCloudIngestor:
                     collection_name=collection,
                     vectors_config=VectorParams(size=vector_size, distance=distance_enum),
                 )
+            ensure_payload_indexes(client, collection)
 
             total = len(points)
             written = 0

@@ -380,36 +380,11 @@ def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, p
         repeat_table_header=True,
     )
 
+    from chunk_fields import record_from_chunk
+
     chunk_list = []
     for i, chunk in enumerate(chunker.chunk(doc)):
-        contextualized = chunker.serialize(chunk)
-
-        page = None
-        content_type = "text"
-        if chunk.meta and chunk.meta.doc_items:
-            first_item = chunk.meta.doc_items[0]
-            if hasattr(first_item, "prov") and first_item.prov:
-                prov = first_item.prov[0] if isinstance(first_item.prov, list) else first_item.prov
-                if hasattr(prov, "page_no"):
-                    page = prov.page_no
-            if hasattr(first_item, "label") and first_item.label:
-                content_type = str(first_item.label)
-
-        headings = []
-        if chunk.meta and chunk.meta.headings:
-            headings = [str(h) for h in chunk.meta.headings]
-
-        token_count = chunker.tokenizer.count_tokens(chunk.text)
-
-        chunk_list.append({
-            "text": chunk.text,
-            "embedding_text": contextualized,
-            "page": page,
-            "headings": headings,
-            "content_type": content_type,
-            "chunk_index": i,
-            "token_count": token_count,
-        })
+        chunk_list.append(record_from_chunk(chunk, i, chunker, doc))
 
     progress_callback(f"Chunked into {len(chunk_list)} chunks", 92)
     return chunk_list

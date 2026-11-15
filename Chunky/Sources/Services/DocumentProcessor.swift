@@ -139,7 +139,10 @@ class DocumentProcessor: ObservableObject {
                         url: result.docURL,
                         year: result.year,
                         language: result.language,
-                        embeddingText: pc.embeddingText
+                        embeddingText: pc.embeddingText,
+                        pictureDescription: pc.pictureDescription,
+                        pictureClass: pc.pictureClass,
+                        tableMarkdown: pc.tableMarkdown
                     )
                 }
             } else {
@@ -429,7 +432,7 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func buildPoints(
+    func buildPoints(
         chunks: [ChunkingService.DocumentChunk],
         embeddings: [[Float]],
         sparseVectors: [SparseVector?],
@@ -452,11 +455,24 @@ class DocumentProcessor: ObservableObject {
             if settings.enableEmbeddingCache {
                 metadata["content_hash"] = contentHash(text: chunk.embeddingText ?? chunk.text, model: settings.embeddingModel)
             }
+            if let embeddingText = chunk.embeddingText, !embeddingText.isEmpty {
+                metadata["embedding_text"] = embeddingText
+            }
+            if let pictureDescription = chunk.pictureDescription, !pictureDescription.isEmpty {
+                metadata["picture_description"] = pictureDescription
+            }
+            if let pictureClass = chunk.pictureClass, !pictureClass.isEmpty {
+                metadata["picture_class"] = pictureClass
+            }
+            if let tableMarkdown = chunk.tableMarkdown, !tableMarkdown.isEmpty {
+                metadata["table_markdown"] = tableMarkdown
+            }
+            let storedText = (chunk.embeddingText?.isEmpty == false) ? chunk.embeddingText! : chunk.text
             return ChunkPoint(
                 id: chunk.id,
                 vector: embedding,
                 sparseVector: sparse,
-                text: chunk.text,
+                text: storedText,
                 source: chunk.source,
                 page: chunk.page,
                 headings: chunk.headings,
@@ -799,7 +815,10 @@ class DocumentProcessor: ObservableObject {
                 headings: (raw["headings"] as? [Any])?.compactMap { $0 as? String } ?? [],
                 chunkIndex: (raw["chunk_index"] as? NSNumber)?.intValue ?? index,
                 contentType: raw["content_type"] as? String ?? "text",
-                embeddingText: raw["embedding_text"] as? String
+                embeddingText: raw["embedding_text"] as? String,
+                pictureDescription: raw["picture_description"] as? String,
+                pictureClass: raw["picture_class"] as? String,
+                tableMarkdown: raw["table_markdown"] as? String
             )
         }
         let points = buildPoints(

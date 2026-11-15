@@ -18,6 +18,9 @@ actor DoclingService {
         let contentType: String?
         let chunkIndex: Int
         let tokenCount: Int
+        let pictureDescription: String?
+        let pictureClass: String?
+        let tableMarkdown: String?
 
         enum CodingKeys: String, CodingKey {
             case text
@@ -26,6 +29,9 @@ actor DoclingService {
             case contentType = "content_type"
             case chunkIndex = "chunk_index"
             case tokenCount = "token_count"
+            case pictureDescription = "picture_description"
+            case pictureClass = "picture_class"
+            case tableMarkdown = "table_markdown"
         }
     }
 
