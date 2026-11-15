@@ -55,9 +55,10 @@ struct CollectionBrowserView: View {
                         .tint(AppTheme.accentFallback)
                 }
 
-                Text("\(filteredPoints.count) of \(appState.browserPointCount)")
+                Text("\(filteredPoints.count) of \(appState.browserPointCount) · limit \(CollectionBrowse.pointLimit)")
                     .foregroundStyle(.tertiary)
                     .font(.system(.caption, design: .rounded, weight: .medium))
+                    .help("Substring browse loads at most \(CollectionBrowse.pointLimit) points. Use Retrieval for semantic search.")
 
                 Button("New") { showNewCollection = true }
                     .buttonStyle(.bordered)

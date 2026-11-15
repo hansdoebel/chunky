@@ -5,6 +5,7 @@ import SwiftUI
 enum ViewMode: String, CaseIterable {
     case queue = "Queue"
     case collections = "Collections"
+    case retrieval = "Retrieval"
     case analytics = "Analytics"
     case benchmark = "Benchmark"
 }

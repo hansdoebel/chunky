@@ -28,8 +28,29 @@ extension CollectionInfo {
             indexedVectorsCount: grpc.hasIndexedVectorsCount ? grpc.indexedVectorsCount : nil,
             pointsCount: grpc.hasPointsCount ? grpc.pointsCount : nil,
             segmentsCount: grpc.segmentsCount,
-            vectorSize: Self.denseVectorSize(from: grpc)
+            vectorSize: Self.denseVectorSize(from: grpc),
+            vectorName: Self.denseVectorName(from: grpc)
         )
+    }
+
+    static func denseVectorName(from grpc: Qdrant_CollectionInfo) -> String? {
+        guard grpc.hasConfig, grpc.config.hasParams, grpc.config.params.hasVectorsConfig else {
+            return nil
+        }
+        switch grpc.config.params.vectorsConfig.config {
+        case .params:
+            return nil
+        case .paramsMap(let map):
+            if map.map["dense"] != nil {
+                return "dense"
+            }
+            if map.map.count == 1 {
+                return map.map.keys.first
+            }
+            return nil
+        case nil:
+            return nil
+        }
     }
 
     static func denseVectorSize(from grpc: Qdrant_CollectionInfo) -> UInt64? {
