@@ -111,7 +111,9 @@ From the Mac, use `http://DEVBOX_10GBE_IP:8080`. `401` means the token does not 
 ## Mac app
 
 1. Preferences, Documents, Processing host: **Devbox**.
-2. Worker URL `http://DEVBOX_10GBE_IP:8080` and the token. Test connection calls `/v1/health`, then `/v1/models` with the bearer token. The message distinguishes an unreachable host, HTTP 401, a dimension mismatch, and App Transport Security.
-3. Plain HTTP to a private LAN address is allowed by `NSAllowsLocalNetworking` in `Info.plist`. A public IP still needs HTTPS.
+2. Save a worker profile named Mac Studio 10GbE with URL `http://DEVBOX_10GBE_IP:8080` and the bearer token, then press Use. Check reachability calls `/v1/health`, then `/v1/models`. It reports unreachable, HTTP 401, App Transport Security, success, and latency. The token stays in the Keychain. Wi-Fi and Tailscale profiles are in [macbook-wifi-tailscale.md](macbook-wifi-tailscale.md).
+3. Plain HTTP to a private LAN address is allowed by `NSAllowsLocalNetworking` in `Info.plist`. A public IP still needs HTTPS. MagicDNS HTTP uses the `ts.net` exception, or use `tailscale serve` HTTPS.
 4. Preferences, Qdrant, Devbox ingest: **Local Docker** returns vectors for the Mac to upsert, or **Qdrant Cloud** sends the Cloud URL and Keychain API key with the job. The worker does not store the key.
 5. Chunk Only sends `ingest_target=none`. Chunk & Ingest sends `return_vectors` or `qdrant_cloud`. Local Mac keeps the current path.
+
+After ingest, Retrieval searches that collection. Hybrid fuses dense search with Qdrant BM25 using RRF. Rerank runs on the Mac, not on the worker. Eval scores a saved query set. RAG chat answers from those hits with citations, using pi or an OpenAI-compatible chat API. The same search is available to other agents through [mcp.md](mcp.md).

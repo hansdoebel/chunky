@@ -206,7 +206,9 @@ Preferences, Documents, saves these named worker endpoints. Fill in the URL and 
 | Wi-Fi LAN | `http://DEVBOX_LAN_IP:8080` or `http://HOSTNAME.local:8080` | Same LAN. Use this when Tailscale is via DERP |
 | Tailscale | `http://devbox:8080` or `https://devbox.TAILNET.ts.net` | Stable name, or you are off the LAN |
 
-The same token is used for all three.
+The same token is used for all three. Selecting a profile only fills the form. Use is what the next upload calls, and what Retrieval calls when Devbox ingest is Qdrant Cloud. Check reachability uses the form fields and shows latency. A result from an older check is dropped when the URL or token changes.
+
+Retrieval searches through the active profile in that Cloud case, including hybrid dense plus BM25 with RRF. Local Docker ingest still searches the Qdrant URL on the Mac. Rerank, Eval, and citation chat run in the app. The worker URL is only an HTTP base URL. There is no Tailscale SDK in the app.
 
 ## Troubleshooting
 
