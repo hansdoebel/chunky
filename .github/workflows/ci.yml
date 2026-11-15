@@ -1,14 +1,12 @@
 # CI for Chunky.
 #
-# Python is pinned to 3.12 (worker requires >=3.11). The script integration
-# suite (test_docling_integration) needs Docling and is not run here.
+# Python is pinned to 3.12. The script integration suite
+# (test_docling_integration) needs Docling and is not run here.
 #
-# macOS deployment target is 26.2 (MACOSX_DEPLOYMENT_TARGET in the Xcode
-# project, created with Xcode 26.2). The macos-26 runner ships Xcode 26.2
-# through 26.6; this job selects 26.2 so the SDK matches that target.
-# Codesigning is disabled. UI tests launch the GUI app and are excluded;
-# ChunkyTests is the unit-test bundle. qdrant-swift integration tests need
-# a live Qdrant and are skipped.
+# macOS deployment target is 27.0. The xcode-27 runner (GA 2026-10-15)
+# includes Xcode 27.2 (build 27B52, SDK macosx27.2). Codesigning is disabled.
+# UI tests launch the GUI app and are excluded; ChunkyTests is the unit-test
+# bundle. qdrant-swift integration tests need a live Qdrant and are skipped.
 
 name: CI
 
@@ -41,14 +39,14 @@ jobs:
         run: python -m unittest test_docling_convert -v
 
   macos:
-    name: macOS build and unit tests (Xcode 26.2)
-    runs-on: macos-26
+    name: macOS build and unit tests (Xcode 27.2)
+    runs-on: xcode-27
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
 
-      - name: Select Xcode 26.2
-        run: sudo xcode-select -s /Applications/Xcode_26.2.app/Contents/Developer
+      - name: Select Xcode 27.2
+        run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
 
       - name: Show selected Xcode
         run: xcodebuild -version

@@ -1,0 +1,10 @@
+# Installed on the Ubuntu worker together with the runtime pins.
+# torch==2.15.0 from PyPI is the default build. On the ROCm devbox, install
+# this same version from the matching ROCm wheel index instead (see
+# docs/devbox-setup.md) so the GPU is visible as torch.cuda.
+-r requirements.txt
+docling==2.150.1
+docling-core==2.107.0
+docling-ibm-models==4.0.4
+transformers==5.23.0
+torch==2.15.0

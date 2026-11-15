@@ -1,7 +1,6 @@
 import Foundation
 
 /// Service for generating embeddings using Ollama
-@available(macOS 15.0, *)
 actor OllamaService {
 
     // MARK: - Types
@@ -252,7 +251,6 @@ private final class UnsafeSendableCounter: @unchecked Sendable {
     }
 }
 
-@available(macOS 15.0, *)
 extension OllamaService {
     /// Get the embedding dimension for a model by generating a test embedding
     func getEmbeddingDimension(model: String) async throws -> Int {

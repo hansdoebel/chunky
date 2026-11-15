@@ -133,8 +133,10 @@ def create_app(
         dest = job_dir / safe_name
         dest.write_bytes(await file.read())
 
+        # Capture the accept status before the worker thread can finish.
+        accepted = job.status.value
         runner.start(job.id, dest)
-        return {"id": job.id, "status": job.status.value}
+        return {"id": job.id, "status": accepted}
 
     @api.get("/v1/jobs/{job_id}")
     def get_job(job_id: str) -> dict:

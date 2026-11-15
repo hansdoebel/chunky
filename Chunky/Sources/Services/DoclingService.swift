@@ -6,7 +6,6 @@ private extension String {
     }
 }
 
-@available(macOS 15.0, *)
 actor DoclingService {
 
     // MARK: - Types
@@ -748,7 +747,6 @@ actor DoclingService {
 
 // MARK: - Convenience Extensions
 
-@available(macOS 15.0, *)
 extension DoclingService {
 
     func convertToFile(

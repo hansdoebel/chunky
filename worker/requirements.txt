@@ -1,0 +1,8 @@
+# Worker runtime pins, verified on PyPI 2026-11-15. Python 3.12.
+# Docling and torch are the optional "docling" extra (see requirements-docling.txt).
+fastapi==0.163.0
+uvicorn[standard]==0.54.0
+httpx==0.28.1
+python-multipart==0.0.33
+pydantic==2.14.3
+qdrant-client==1.20.0

@@ -17,7 +17,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func connectToLocalQdrant() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = QdrantService()
         try await service.configure(url: Self.testURL, apiKey: nil)
@@ -31,7 +30,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func connectionFailsWithInvalidURL() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = QdrantService()
 
@@ -48,7 +46,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func createAndDeleteCollection() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -80,7 +77,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func createCollectionIfNeededIsIdempotent() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -98,7 +94,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func upsertAndLoadPoints() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -153,7 +148,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func deletePoints() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -182,7 +176,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func countPoints() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -212,7 +205,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func searchSimilarVectors() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -244,7 +236,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func searchWithSourceFilter() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -279,7 +270,6 @@ struct QdrantServiceIntegrationTests {
 
     @Test(.disabled("Requires running Qdrant instance"))
     func getUniqueSources() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         let service = try await createConnectedService()
         let collectionName = Self.testCollection
@@ -307,7 +297,6 @@ struct QdrantServiceIntegrationTests {
 
     // MARK: - Helper Methods
 
-    @available(macOS 15.0, *)
     private func createConnectedService() async throws -> QdrantService {
         let service = QdrantService()
         try await service.configure(url: Self.testURL, apiKey: nil)
@@ -332,7 +321,6 @@ struct QdrantCloudIntegrationTests {
 
     @Test(.disabled("Requires QDRANT_CLOUD_URL and QDRANT_CLOUD_API_KEY environment variables"))
     func connectToQdrantCloud() async throws {
-        guard #available(macOS 15.0, *) else { return }
 
         guard let url = Self.cloudURL, let apiKey = Self.cloudAPIKey else {
             Issue.record("Set QDRANT_CLOUD_URL and QDRANT_CLOUD_API_KEY environment variables")

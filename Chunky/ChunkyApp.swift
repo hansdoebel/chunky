@@ -1,7 +1,6 @@
 import SwiftUI
 
 @main
-@available(macOS 15.0, *)
 struct ChunkyApp: App {
     @StateObject private var appState = AppState()
 

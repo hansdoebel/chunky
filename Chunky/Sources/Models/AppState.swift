@@ -3,7 +3,6 @@ import Combine
 
 // MARK: - AppState
 
-@available(macOS 15.0, *)
 class AppState: ObservableObject {
     @Published var jobs: [ProcessingJob] = []
     @Published var settings = AppSettings()

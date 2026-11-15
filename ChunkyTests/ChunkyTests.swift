@@ -11,7 +11,6 @@ struct AppStateTests {
     // MARK: - Initialization Tests
 
     @Test func initialState() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         #expect(appState.jobs.isEmpty)
@@ -24,7 +23,6 @@ struct AppStateTests {
     // MARK: - Job Management Tests
 
     @Test func addFilesCreatesJobs() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         // Create a temporary file that actually exists
@@ -41,7 +39,6 @@ struct AppStateTests {
     }
 
     @Test func addFilesIgnoresUnreadableFiles() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
         let nonExistentFile = URL(fileURLWithPath: "/nonexistent/path/file.pdf")
 
@@ -51,7 +48,6 @@ struct AppStateTests {
     }
 
     @Test func addFilesPreventsPreventsDuplicates() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -67,7 +63,6 @@ struct AppStateTests {
     }
 
     @Test func removeJobWorks() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -86,7 +81,6 @@ struct AppStateTests {
     }
 
     @Test func clearAllRemovesAllJobs() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -108,7 +102,6 @@ struct AppStateTests {
     }
 
     @Test func clearCompletedOnlyRemovesCompletedJobs() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -136,7 +129,6 @@ struct AppStateTests {
     // MARK: - Computed Properties Tests
 
     @Test func pendingJobsFiltersCorrectly() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -158,7 +150,6 @@ struct AppStateTests {
     }
 
     @Test func failedJobsFiltersCorrectly() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         let tempDir = FileManager.default.temporaryDirectory
@@ -175,7 +166,6 @@ struct AppStateTests {
     }
 
     @Test func hasJobsToProcessReflectsState() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         #expect(appState.hasJobsToProcess == false)
@@ -196,7 +186,6 @@ struct AppStateTests {
     // MARK: - Cancellation Tests
 
     @Test func cancellationRequestWorks() {
-        guard #available(macOS 15.0, *) else { return }
         let appState = AppState()
 
         #expect(appState.isCancellationRequested == false)

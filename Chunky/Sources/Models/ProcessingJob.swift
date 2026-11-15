@@ -64,5 +64,4 @@ class ProcessingJob: ObservableObject, Identifiable {
 
 // MARK: - OllamaModel
 
-@available(macOS 15.0, *)
 typealias OllamaModel = OllamaService.ModelInfo

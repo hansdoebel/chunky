@@ -220,17 +220,15 @@ def _build_standard_format_options(
     if layout_model != "default":
         from docling.datamodel.pipeline_options import LayoutObjectDetectionOptions
 
-        layout_opts = LayoutObjectDetectionOptions()
-        if layout_model in ("egret-medium", "egret-large", "egret-xlarge"):
-            from docling.datamodel import stage_model_specs
-
-            egret_map = {
-                "egret-medium": stage_model_specs.OBJECT_DETECTION_LAYOUT_EGRET_MEDIUM,
-                "egret-large": stage_model_specs.OBJECT_DETECTION_LAYOUT_EGRET_LARGE,
-                "egret-xlarge": stage_model_specs.OBJECT_DETECTION_LAYOUT_EGRET_XLARGE,
-            }
-            preset = egret_map[layout_model]
-            layout_opts.model_spec = preset.model_spec.model_copy(deep=True)
+        preset_ids = {
+            "egret-medium": "layout_egret_medium",
+            "egret-large": "layout_egret_large",
+            "egret-xlarge": "layout_egret_xlarge",
+        }
+        if layout_model in preset_ids:
+            layout_opts = LayoutObjectDetectionOptions.from_preset(preset_ids[layout_model])
+        else:
+            layout_opts = LayoutObjectDetectionOptions()
         pipeline_options.layout_options = layout_opts
 
     if do_chart_extraction:
@@ -326,20 +324,26 @@ def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, p
 
     progress_callback("Chunking document...", 88)
 
-    chunker_kwargs = {
-        "max_tokens": chunk_max_tokens,
-        "merge_peers": chunk_merge_peers,
-        "repeat_table_header": True,
-    }
+    # docling-core 2.107 takes a HuggingFaceTokenizer. Passing max_tokens on
+    # HybridChunker itself is the deprecated path.
+    from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 
-    if chunk_tokenizer:
-        try:
-            chunker = HybridChunker(tokenizer=chunk_tokenizer, **chunker_kwargs)
-        except Exception as e:
-            log.warning("Failed to load tokenizer '%s': %s, using default", chunk_tokenizer, e)
-            chunker = HybridChunker(**chunker_kwargs)
-    else:
-        chunker = HybridChunker(**chunker_kwargs)
+    tokenizer_name = chunk_tokenizer or "sentence-transformers/all-MiniLM-L6-v2"
+    try:
+        tokenizer = HuggingFaceTokenizer.from_pretrained(
+            model_name=tokenizer_name,
+            max_tokens=chunk_max_tokens,
+        )
+    except Exception as e:
+        log.warning("Failed to load tokenizer '%s': %s, using the Docling default", tokenizer_name, e)
+        from docling_core.transforms.chunker.tokenizer.huggingface import get_default_tokenizer
+
+        tokenizer = get_default_tokenizer()
+    chunker = HybridChunker(
+        tokenizer=tokenizer,
+        merge_peers=chunk_merge_peers,
+        repeat_table_header=True,
+    )
 
     chunk_list = []
     for i, chunk in enumerate(chunker.chunk(doc)):

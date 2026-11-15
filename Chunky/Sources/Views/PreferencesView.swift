@@ -8,7 +8,6 @@ extension String {
     }
 }
 
-@available(macOS 15.0, *)
 struct PreferencesView: View {
     @EnvironmentObject var appState: AppState
     @State private var availableModels: [OllamaModel] = []
