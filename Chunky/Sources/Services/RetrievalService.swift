@@ -161,6 +161,7 @@ struct RetrievalRequest: Equatable, Sendable {
     var workerToken: String
     var filters: [RetrievalFilter]
     var rrfWeights: [Double]?
+    var rerank: RerankConfig?
 
     static func make(
         text: String,
@@ -172,6 +173,7 @@ struct RetrievalRequest: Equatable, Sendable {
         model: String? = nil,
         filters: [RetrievalFilter] = [],
         rrfWeights: [Double]? = nil,
+        rerank: RerankConfig? = nil,
         settings: AppSettings
     ) -> RetrievalRequest {
         let resolvedBackend = (backend ?? settings.embeddingBackend).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -198,7 +200,8 @@ struct RetrievalRequest: Equatable, Sendable {
             workerURL: settings.devboxWorkerURL,
             workerToken: settings.workerToken,
             filters: filters,
-            rrfWeights: rrfWeights
+            rrfWeights: rrfWeights,
+            rerank: rerank
         )
     }
 
@@ -276,10 +279,106 @@ struct RetrievalPage: Equatable, Sendable {
     var embeddingDim: Int
     var collection: String
     var route: RetrievalRoute
+    var reranked: Bool = false
 
     var statusLine: String {
         let next = nextOffset.map { "next offset \($0)" } ?? "end"
-        return "\(hits.count) results · limit \(limit) · offset \(offset) · \(next) · \(route.displayName) · \(embeddingBackend) \(embeddingModel) (\(embeddingDim)). Browse loads at most \(CollectionBrowse.pointLimit) points."
+        let rerankNote = reranked ? " · reranked" : ""
+        return "\(hits.count) results · limit \(limit) · offset \(offset) · \(next) · \(route.displayName) · \(embeddingBackend) \(embeddingModel) (\(embeddingDim))\(rerankNote). Browse loads at most \(CollectionBrowse.pointLimit) points."
+    }
+}
+
+struct RerankConfig: Equatable, Sendable {
+    var url: String
+    var model: String
+    var apiKey: String
+}
+
+struct RerankScore: Equatable, Sendable {
+    var index: Int
+    var score: Double
+}
+
+enum RerankRequest {
+    static func json(model: String, query: String, documents: [String], topN: Int) -> [String: Any] {
+        [
+            "model": model,
+            "query": query,
+            "documents": documents,
+            "top_n": topN,
+        ]
+    }
+
+    static func scores(from data: Data) throws -> [RerankScore] {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+            throw RetrievalError.unreadableResponse
+        }
+        guard let rows = object["results"] as? [[String: Any]] else {
+            throw RetrievalError.rerankFailed("Rerank response did not include a results array.")
+        }
+        guard !rows.isEmpty else {
+            throw RetrievalError.rerankFailed("Rerank response included no results.")
+        }
+        var scores: [RerankScore] = []
+        for row in rows {
+            guard let index = (row["index"] as? NSNumber)?.intValue else {
+                throw RetrievalError.rerankFailed("Rerank response included a result without an index.")
+            }
+            guard let score = (row["relevance_score"] as? NSNumber)?.doubleValue
+                ?? (row["score"] as? NSNumber)?.doubleValue
+            else {
+                throw RetrievalError.rerankFailed("Rerank response included a result without a score.")
+            }
+            scores.append(RerankScore(index: index, score: score))
+        }
+        return scores
+    }
+}
+
+protocol RerankTransport {
+    func post(url: URL, apiKey: String, body: Data) async throws -> (status: Int, body: Data)
+}
+
+protocol Reranker {
+    func rerank(config: RerankConfig, query: String, documents: [String], topN: Int) async throws -> [RerankScore]
+}
+
+struct URLSessionRerankTransport: RerankTransport {
+    var session: URLSession = .shared
+
+    func post(url: URL, apiKey: String, body: Data) async throws -> (status: Int, body: Data) {
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if !apiKey.isEmpty {
+            request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+        }
+        request.httpBody = body
+        let (data, response) = try await session.data(for: request)
+        let status = (response as? HTTPURLResponse)?.statusCode ?? 0
+        return (status, data)
+    }
+}
+
+struct LiveReranker: Reranker {
+    var transport: any RerankTransport = URLSessionRerankTransport()
+
+    func rerank(config: RerankConfig, query: String, documents: [String], topN: Int) async throws -> [RerankScore] {
+        guard let endpoint = URL(string: config.url), endpoint.host != nil else {
+            throw RetrievalError.rerankFailed("Rerank URL is not a valid http(s) address.")
+        }
+        let payload = try JSONSerialization.data(withJSONObject: RerankRequest.json(
+            model: config.model,
+            query: query,
+            documents: documents,
+            topN: topN
+        ))
+        let response = try await transport.post(url: endpoint, apiKey: config.apiKey, body: payload)
+        guard (200..<300).contains(response.status) else {
+            let detail = String(data: response.body, encoding: .utf8) ?? ""
+            throw RetrievalError.rerankFailed("Rerank endpoint returned HTTP \(response.status). \(detail)")
+        }
+        return try RerankRequest.scores(from: response.body)
     }
 }
 
@@ -294,6 +393,7 @@ enum RetrievalError: LocalizedError, Equatable {
     case dimensionMismatch(collection: String, existing: Int?, probed: Int?, detail: String)
     case worker(status: Int, detail: String)
     case unreadableResponse
+    case rerankFailed(String)
 
     var errorDescription: String? {
         switch self {
@@ -317,6 +417,8 @@ enum RetrievalError: LocalizedError, Equatable {
             return "Worker returned HTTP \(status). \(detail)"
         case .unreadableResponse:
             return "Search response was not a JSON object."
+        case .rerankFailed(let detail):
+            return detail
         }
     }
 }
@@ -585,13 +687,16 @@ struct LiveRetrievalWorker: RetrievalWorker {
 struct RetrievalService {
     var embedding: any RetrievalEmbedding
     var worker: any RetrievalWorker
+    var reranker: any Reranker
 
     init(
         embedding: any RetrievalEmbedding = LiveRetrievalEmbedding(),
-        worker: any RetrievalWorker = LiveRetrievalWorker()
+        worker: any RetrievalWorker = LiveRetrievalWorker(),
+        reranker: any Reranker = LiveReranker()
     ) {
         self.embedding = embedding
         self.worker = worker
+        self.reranker = reranker
     }
 
     func search(_ request: RetrievalRequest, index: (any RetrievalIndex)?) async throws -> RetrievalPage {
@@ -605,16 +710,47 @@ struct RetrievalService {
         }
         guard !request.collection.isEmpty else { throw RetrievalError.missingCollection(request.collection) }
 
+        let page: RetrievalPage
         switch request.route {
         case .localQdrant:
             guard let index else { throw RetrievalError.notConnected }
-            return try await searchLocal(request, index: index)
+            page = try await searchLocal(request, index: index)
         case .worker:
             guard !request.workerURL.isEmpty, !request.workerToken.isEmpty else {
                 throw RetrievalError.missingWorker
             }
-            return try await searchWorker(request)
+            page = try await searchWorker(request)
         }
+        return try await applyRerank(page, request: request)
+    }
+
+    private func applyRerank(_ page: RetrievalPage, request: RetrievalRequest) async throws -> RetrievalPage {
+        guard let config = request.rerank else { return page }
+        let trimmedURL = config.url.trimmingCharacters(in: .whitespacesAndNewlines)
+        let model = config.model.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmedURL.isEmpty, !model.isEmpty else {
+            throw RetrievalError.rerankFailed("Rerank needs a URL and a model.")
+        }
+        let scores = try await reranker.rerank(
+            config: RerankConfig(url: trimmedURL, model: model, apiKey: config.apiKey),
+            query: request.text,
+            documents: page.hits.map(\.text),
+            topN: request.limit
+        )
+        var ordered: [RetrievalHit] = []
+        for score in scores.sorted(by: { $0.score > $1.score }) {
+            guard page.hits.indices.contains(score.index) else { continue }
+            var hit = page.hits[score.index]
+            hit.score = score.score
+            ordered.append(hit)
+        }
+        guard !ordered.isEmpty else {
+            throw RetrievalError.rerankFailed("Rerank response did not match any retrieved hits.")
+        }
+        var updated = page
+        updated.hits = ordered
+        updated.reranked = true
+        return updated
     }
 
     private func searchLocal(_ request: RetrievalRequest, index: any RetrievalIndex) async throws -> RetrievalPage {
