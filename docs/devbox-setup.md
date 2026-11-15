@@ -41,6 +41,18 @@ vllm serve ibm-granite/granite-docling-258M \
 
 `0.6` is a starting point so Ollama can keep `qwen3-embedding` on the same 32 GB GPU. The 258M VLM and that embedding model both fit; raise utilization only if the embedding model is not resident. The worker calls `http://127.0.0.1:8000/v1/chat/completions` with `CHUNKY_VLM_ENGINE=vllm` (the default).
 
+Chart extraction does not use that server. Granite Vision 4.1 is a different model. Leave `CHUNKY_CHART_VLLM_URL` empty and charts run in-process with Transformers on CUDA. To serve charts separately:
+
+```bash
+vllm serve ibm-granite/granite-vision-4.1-4b \
+  --host 127.0.0.1 --port 8001 \
+  --max-num-seqs 64 \
+  --max-num-batched-tokens 8192 \
+  --gpu-memory-utilization 0.3
+```
+
+Then set `CHUNKY_CHART_VLLM_URL=http://127.0.0.1:8001`. `0.3` is a starting point beside the document server and the embedding model. If the GPU cannot hold all three, keep charts on Transformers and start that process only for a chart job, or lower the document server's utilization.
+
 Fallback, if vLLM is not running: `CHUNKY_VLM_ENGINE=transformers`. That loads `GRANITEDOCLING_TRANSFORMERS` through `VlmConvertOptions.from_preset("granite_docling", engine_options=TransformersVlmEngineOptions())` with `device="cuda"`. Same rule: do not enable Flash Attention 2.
 
 Ollama stays on `127.0.0.1:11434` for embeddings:

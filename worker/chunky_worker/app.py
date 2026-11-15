@@ -57,6 +57,7 @@ def create_app(
         settings.scripts_dir,
         vlm_engine=settings.vlm_engine,
         vllm_url=settings.vllm_url,
+        chart_vllm_url=settings.chart_vllm_url,
     )
     embeddings = embeddings or OllamaEmbeddingBackend(settings.ollama_url)
     store = store or JobStore()

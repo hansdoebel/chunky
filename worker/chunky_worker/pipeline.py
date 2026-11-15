@@ -36,10 +36,12 @@ class DoclingPipeline:
         scripts_dir: Path,
         vlm_engine: str = "vllm",
         vllm_url: str = "http://127.0.0.1:8000",
+        chart_vllm_url: str = "",
     ) -> None:
         self.scripts_dir = scripts_dir
         self.vlm_engine = vlm_engine
         self.vllm_url = vllm_url
+        self.chart_vllm_url = chart_vllm_url
 
     def _load_convert(self):
         scripts = str(self.scripts_dir)
@@ -95,6 +97,9 @@ class DoclingPipeline:
             ollama_url=settings.ollama_url or "http://127.0.0.1:11434",
             vlm_engine=vlm_engine,
             vllm_url=self.vllm_url,
+            chart_host="devbox",
+            chart_engine=self.vlm_engine,
+            chart_vllm_url=self.chart_vllm_url,
             generate_images=settings.generate_images,
             image_export_mode=settings.image_export_mode,
             do_formula_enrichment=settings.do_formula_enrichment,

@@ -55,3 +55,4 @@ def test_pipeline_rewrites_mlx_before_convert(tmp_path: Path):
     assert seen["accelerator"] == "cuda"
     assert seen["vlm_engine"] == "vllm"
     assert seen["vllm_url"] == "http://127.0.0.1:8000"
+    assert seen["chart_host"] == "devbox"

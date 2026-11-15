@@ -171,5 +171,7 @@ def test_non_granite_jobs_do_not_select_the_vllm_preset(tmp_path: Path):
     )
     assert seen["vlm_model"] == "smoldocling-transformers"
     assert seen["vlm_engine"] is None
+    assert seen["chart_engine"] == "vllm"
+    assert seen["chart_vllm_url"] == ""
     assert seen["accelerator"] == "cuda"
 
