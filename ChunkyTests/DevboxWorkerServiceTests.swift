@@ -17,9 +17,14 @@ struct DevboxWorkerServiceTests {
 
     @Test func settingsMapMLXAndChooseIngestTarget() {
         let settings = AppSettings()
+        let previousCollection = settings.defaultCollection
+        settings.defaultCollection = "documents"
+        UserDefaults.standard.removeObject(forKey: "chunky.collectionPlan.documents")
         defer {
             settings.qdrantAPIKey = ""
             settings.qdrantCloudURL = ""
+            settings.defaultCollection = previousCollection
+            UserDefaults.standard.removeObject(forKey: "chunky.collectionPlan.documents")
         }
         settings.doclingModel = "granite-docling-mlx"
         settings.doclingAccelerator = "mps"
