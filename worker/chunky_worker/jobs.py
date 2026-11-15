@@ -37,6 +37,7 @@ from chunky_worker.verification import (
     hash_file,
     note_store_failure,
     qdrant_readers,
+    resolve_chunks,
     verify_document,
     write_report,
 )
@@ -116,6 +117,12 @@ class JobStore:
                 setattr(job, key, value)
             self._changed[job_id].set()
             return job.model_copy(deep=True)
+
+    def set_verification_status(self, job_id: str, status: str) -> None:
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is not None and job.result is not None:
+                job.result.verification_status = status
 
     def events_since(self, job_id: str, index: int) -> tuple[list[dict[str, Any]], bool]:
         with self._lock:
@@ -447,13 +454,15 @@ class JobRunner:
         embeddings: EmbeddingBackend | None = None,
     ) -> dict[str, Any]:
         backend = embeddings or self.embeddings
+        digest = hash_file(pdf_path) if pdf_path.is_file() else ""
+        ready, _source = resolve_chunks(digest, chunks)
         points, search, failure = None, None, None
         if read_store:
             points, search, failure = qdrant_readers(
                 url=qdrant_url,
                 api_key=qdrant_api_key,
                 collection=collection,
-                ids=[str(chunk.get("id")) for chunk in chunks if chunk.get("id")],
+                ids=[str(chunk.get("id")) for chunk in ready if chunk.get("id")],
                 model=model,
                 embeddings=backend,
                 ingestor=self.ingestor,
@@ -468,11 +477,12 @@ class JobRunner:
 
         report = verify_document(
             pdf_path=pdf_path,
-            chunks=chunks,
+            chunks=ready,
             filename=filename,
             job_id=job_id,
+            pdf_hash=digest or None,
             model=model,
-            vectors=vectors,
+            vectors=None if points is not None else vectors,
             expected_dim=expected_dim,
             points=points,
             embed=embed,

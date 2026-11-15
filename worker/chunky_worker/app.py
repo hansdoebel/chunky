@@ -270,7 +270,8 @@ def create_app(
         secret = _optional_secret(overrides.get("qdrant_api_key"))
         chunks = overrides.get("chunks") if isinstance(overrides.get("chunks"), list) else job.result.chunks
         model = (overrides.get("embedding_model") or job.result.embedding_model or settings.embedding_model)
-        report = runner.produce_report(
+        report = await asyncio.to_thread(
+            runner.produce_report,
             pdf_path=source,
             chunks=chunks,
             filename=job.filename,
@@ -280,11 +281,13 @@ def create_app(
             expected_dim=job.result.embedding_dim,
             qdrant_url=overrides.get("qdrant_url") or job.settings.qdrant_url,
             qdrant_api_key=secret,
-            collection=overrides.get("qdrant_collection") or job.settings.qdrant_collection,
+            collection=overrides.get("qdrant_collection") or job.settings.qdrant_collection or "documents",
             read_store=bool(overrides.get("qdrant_url") or job.settings.ingest_target == "qdrant_cloud"),
+            embeddings=runner.backend_for(job.settings),
         )
         _reject_secret(report, secret)
         write_report(settings.work_dir / job_id / "verification.json", report)
+        store.set_verification_status(job_id, report["status"])
         return report
 
     @api.post("/v1/verify")
@@ -311,7 +314,16 @@ def create_app(
                     raise HTTPException(status_code=400, detail="No chunk records for this PDF")
                 chunks = cached
             model = payload.get("embedding_model") or settings.embedding_model
-            report = runner.produce_report(
+            from chunky_worker.models import JobSettings
+
+            embed_settings = JobSettings(
+                embedding_model=model,
+                embedding_backend=str(payload.get("embedding_backend") or ""),
+                embedding_url=str(payload.get("embedding_url") or ""),
+            )
+            collection = payload.get("qdrant_collection") or ("documents" if payload.get("qdrant_url") else None)
+            report = await asyncio.to_thread(
+                runner.produce_report,
                 pdf_path=dest,
                 chunks=chunks,
                 filename=safe_name,
@@ -321,8 +333,9 @@ def create_app(
                 expected_dim=payload.get("embedding_dim"),
                 qdrant_url=payload.get("qdrant_url"),
                 qdrant_api_key=secret,
-                collection=payload.get("qdrant_collection"),
+                collection=collection,
                 read_store=bool(payload.get("qdrant_url")),
+                embeddings=runner.backend_for(embed_settings),
             )
         finally:
             dest.unlink(missing_ok=True)

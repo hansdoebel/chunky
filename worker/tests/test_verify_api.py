@@ -95,6 +95,8 @@ def test_reverify_uses_the_store_and_hides_the_api_key(tmp_settings, pipeline, e
         assert again.status_code == 200
         assert SECRET not in again.text
         assert again.json()["store"]["status"] == "green"
+        refreshed = client.get(f"/v1/jobs/{job_id}").json()
+        assert refreshed["result"]["verification_status"] == again.json()["status"]
     assert ingestor.seen["api_key"] == SECRET
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert SECRET not in log_text
