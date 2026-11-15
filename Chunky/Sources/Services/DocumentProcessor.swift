@@ -513,6 +513,7 @@ class DocumentProcessor: ObservableObject {
         var allPoints: [ChunkPoint] = []
 
         if !chunksToEmbed.isEmpty {
+            let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
             let texts = chunksToEmbed.map { $0.embeddingText ?? $0.text }
 
             let embeddings = try await ollama.embedWithProgress(
@@ -527,7 +528,13 @@ class DocumentProcessor: ObservableObject {
                 }
             }
 
-            let vectorSize = embeddings.first?.count ?? settings.embeddingDimensions
+            if let actual = embeddings.first?.count, actual != vectorSize {
+                throw EmbeddingDimensionError.batchMismatch(
+                    model: settings.embeddingModel,
+                    probed: vectorSize,
+                    actual: actual
+                )
+            }
 
             let sparseVectors: [SparseVector?]
             if settings.hybridSearch {
@@ -601,9 +608,16 @@ class DocumentProcessor: ObservableObject {
         let batchSize = settings.embeddingBatchSize
         let totalBatches = (chunks.count + batchSize - 1) / batchSize
 
+        let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
         let firstBatchTexts = Array(chunks.prefix(batchSize)).map { $0.embeddingText ?? $0.text }
         let firstEmbeddings = try await ollama.embedBatch(texts: firstBatchTexts, model: settings.embeddingModel)
-        let vectorSize = firstEmbeddings.first?.count ?? settings.embeddingDimensions
+        if let actual = firstEmbeddings.first?.count, actual != vectorSize {
+            throw EmbeddingDimensionError.batchMismatch(
+                model: settings.embeddingModel,
+                probed: vectorSize,
+                actual: actual
+            )
+        }
 
         try await qdrant.createCollectionIfNeeded(
             name: settings.defaultCollection,
@@ -664,6 +678,25 @@ class DocumentProcessor: ObservableObject {
             if cancellationCheck() { break }
             await process(job: job, settings: settings, mode: .full)
         }
+    }
+
+    /// Probe the embedding model once and refuse a collection whose width differs.
+    @MainActor
+    private func probedVectorSize(settings: AppSettings, ollama: OllamaService) async throws -> Int {
+        let probed = try await ollama.probeDimension(model: settings.embeddingModel)
+        guard let appState else { return probed }
+        try await appState.ensureQdrantConnection()
+        guard let qdrant = appState.qdrantService else { return probed }
+        if try await qdrant.collectionExists(settings.defaultCollection) {
+            let info = try await qdrant.getCollectionInfo(settings.defaultCollection)
+            try EmbeddingDimensionError.validate(
+                existing: info.vectorSize,
+                probed: probed,
+                collection: settings.defaultCollection,
+                model: settings.embeddingModel
+            )
+        }
+        return probed
     }
 
     /// Upload embedded chunks to Qdrant

@@ -19,18 +19,23 @@ public struct CollectionInfo: Sendable {
 
     public let segmentsCount: UInt64?
 
+    /// Dense vector width, or the `dense` named vector when the collection is hybrid.
+    public let vectorSize: UInt64?
+
     public init(
         name: String,
         status: CollectionStatus,
         indexedVectorsCount: UInt64? = nil,
         pointsCount: UInt64? = nil,
-        segmentsCount: UInt64? = nil
+        segmentsCount: UInt64? = nil,
+        vectorSize: UInt64? = nil
     ) {
         self.name = name
         self.status = status
         self.indexedVectorsCount = indexedVectorsCount
         self.pointsCount = pointsCount
         self.segmentsCount = segmentsCount
+        self.vectorSize = vectorSize
     }
 }
 

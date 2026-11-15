@@ -8,9 +8,10 @@ import uuid
 from pathlib import Path
 from typing import Any
 
-from chunky_worker.embeddings import EmbeddingBackend
+from chunky_worker.embeddings import DimensionCache, EmbeddingBackend
 from chunky_worker.exceptions import JobCanceled
 from chunky_worker.qdrant_ingest import (
+    DimensionMismatch,
     IngestError,
     QdrantCloudIngestor,
     QdrantIngestor,
@@ -138,6 +139,7 @@ class JobRunner:
         self.pipeline = pipeline
         self.embeddings = embeddings
         self.ingestor = ingestor or QdrantCloudIngestor()
+        self.dimensions = DimensionCache()
 
     def start(self, job_id: str, input_path: Path) -> None:
         thread = threading.Thread(
@@ -283,14 +285,32 @@ class JobRunner:
                 if cancel_event.is_set():
                     raise JobCanceled()
                 model = job.settings.embedding_model or self.settings.embedding_model
+                probed = self.dimensions.dimension(self.embeddings, model)
+                if job.settings.ingest_target == IngestTarget.QDRANT_CLOUD:
+                    existing = self.ingestor.collection_vector_size(
+                        url=job.settings.qdrant_url or "",
+                        api_key=job.settings.qdrant_api_key or "",
+                        collection=job.settings.qdrant_collection,
+                    )
+                    if existing is not None and existing != probed:
+                        raise DimensionMismatch(
+                            f"Collection {job.settings.qdrant_collection!r} has vector size {existing}, "
+                            f"but {model} produces vectors of size {probed}. Refusing to upsert."
+                        )
                 self._emit(job_id, f"Embedding {len(chunks)} chunks with {model}", 94)
                 texts = [
                     chunk.get("embedding_text") or chunk.get("text") or ""
                     for chunk in chunks
                 ]
                 vectors = self.embeddings.embed(texts, model)
+                actual = len(vectors[0]) if vectors else 0
+                if vectors and actual != probed:
+                    raise DimensionMismatch(
+                        f"Embedding probe for {model} returned size {probed}, "
+                        f"but the batch returned size {actual}."
+                    )
                 result.embedding_model = model
-                result.embedding_dim = len(vectors[0]) if vectors else 0
+                result.embedding_dim = probed if vectors else 0
                 self._apply_ingest(
                     job_id,
                     job,

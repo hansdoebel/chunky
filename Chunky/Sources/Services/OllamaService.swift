@@ -71,6 +71,7 @@ actor OllamaService {
 
     private let baseURL: URL
     private let session: URLSession
+    private var dimensionCache = EmbeddingDimensionCache()
 
     // MARK: - Initialization
 
@@ -132,6 +133,15 @@ actor OllamaService {
             let name = model.name.lowercased()
             return embeddingKeywords.contains { name.contains($0) }
         }
+    }
+
+    /// Embed one probe string and remember the width for this model.
+    func probeDimension(model: String) async throws -> Int {
+        if let cached = dimensionCache.cached(model) {
+            return cached
+        }
+        let vector = try await embed(text: EmbeddingDimensionCache.probeText, model: model)
+        return try dimensionCache.store(model: model, vector: vector)
     }
 
     /// Generate embeddings for a single text

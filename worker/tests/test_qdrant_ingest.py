@@ -30,9 +30,15 @@ def _upload(client, settings):
 
 
 class RecordingIngestor:
-    def __init__(self, fail_message: str | None = None) -> None:
+    def __init__(self, fail_message: str | None = None, existing_size: int | None = None) -> None:
         self.fail_message = fail_message
+        self.existing_size = existing_size
         self.calls: list[dict] = []
+        self.size_calls = 0
+
+    def collection_vector_size(self, *, url: str, api_key: str, collection: str) -> int | None:
+        self.size_calls += 1
+        return self.existing_size
 
     def upsert_cloud(self, **kwargs):
         self.calls.append(kwargs)
@@ -173,6 +179,36 @@ def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, 
     assert call["points"][0].payload["doc_title"] == "Fixture Doc"
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
+
+
+def test_dimension_mismatch_fails_before_upsert(tmp_settings, pipeline, embeddings):
+    ingestor = RecordingIngestor(existing_size=1024)
+    app = create_app(
+        settings=tmp_settings,
+        pipeline=pipeline,
+        embeddings=embeddings,
+        store=JobStore(),
+        ingestor=ingestor,
+    )
+    with TestClient(app, headers=auth_headers()) as client:
+        response = _upload(
+            client,
+            {
+                "ingest_target": "qdrant_cloud",
+                "qdrant_url": "https://example.cloud.qdrant.io",
+                "qdrant_api_key": API_KEY,
+                "qdrant_collection": "documents",
+                "embedding_model": "qwen3-embedding",
+            },
+        )
+        body = wait_for_status(client, response.json()["id"], "failed")
+    assert body["error_type"] == "dimension_mismatch"
+    assert "vector size 1024" in body["error"]
+    assert "size 3" in body["error"]
+    assert API_KEY not in body["error"]
+    assert ingestor.calls == []
+    # Probe ran; the full chunk batch did not.
+    assert embeddings.embed_calls == [(["chunky"], "qwen3-embedding")]
 
 
 def test_cloud_failure_redacts_key(tmp_settings, pipeline, embeddings):
