@@ -247,6 +247,20 @@ enum PictureDescriptionPreset: String, CaseIterable, Identifiable {
     }
 }
 
+enum EmbeddingBackendKind: String, CaseIterable, Identifiable {
+    case ollama
+    case openai
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .ollama: return "Ollama"
+        case .openai: return "OpenAI-compatible"
+        }
+    }
+}
+
 enum QdrantProfile: String, CaseIterable, Identifiable {
     case standard
     case quality

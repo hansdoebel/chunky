@@ -21,6 +21,12 @@ class AppSettings: ObservableObject {
             objectWillChange.send()
         }
     }
+    @Published var embeddingBackend: String {
+        didSet { defaults.set(embeddingBackend, forKey: prefix + "embeddingBackend") }
+    }
+    @Published var embeddingAPIURL: String {
+        didSet { defaults.set(embeddingAPIURL, forKey: prefix + "embeddingAPIURL") }
+    }
     @Published var embeddingModel: String {
         didSet { defaults.set(embeddingModel, forKey: prefix + "embeddingModel") }
     }
@@ -283,6 +289,8 @@ class AppSettings: ObservableObject {
     init() {
         // Load saved values or use defaults
         // Note: ollamaURL and qdrantURL are stored in Keychain (computed properties)
+        self.embeddingBackend = defaults.string(forKey: prefix + "embeddingBackend") ?? EmbeddingBackendKind.ollama.rawValue
+        self.embeddingAPIURL = defaults.string(forKey: prefix + "embeddingAPIURL") ?? ""
         self.embeddingModel = defaults.string(forKey: prefix + "embeddingModel") ?? "qwen3-embedding"
         self.embeddingDimensions = defaults.object(forKey: prefix + "embeddingDimensions") as? Int ?? 1024
         self.embeddingBatchSize = defaults.object(forKey: prefix + "embeddingBatchSize") as? Int ?? 32

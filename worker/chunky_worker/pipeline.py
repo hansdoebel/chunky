@@ -124,6 +124,7 @@ class DoclingPipeline:
             chunk_max_tokens=settings.chunk_max_tokens,
             chunk_merge_peers=settings.chunk_merge_peers,
             chunk_tokenizer=settings.chunk_tokenizer,
+            embedding_model=settings.embedding_model or "",
             on_progress=hooked,
         )
 

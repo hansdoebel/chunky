@@ -77,6 +77,22 @@ struct PreferencesView: View {
     private var embeddingTab: some View {
         Form {
             Section {
+                Picker("Backend", selection: $appState.settings.embeddingBackend) {
+                    ForEach(EmbeddingBackendKind.allCases) { kind in
+                        Text(kind.displayName).tag(kind.rawValue)
+                    }
+                }
+                if appState.settings.embeddingBackend == EmbeddingBackendKind.openai.rawValue {
+                    TextField(
+                        "Embeddings URL",
+                        text: $appState.settings.embeddingAPIURL,
+                        prompt: Text("http://127.0.0.1:8002")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    Text("OpenAI-compatible /v1/embeddings. This is not the Ollama URL.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 HStack {
                     TextField(
                         "Server URL", text: $appState.settings.ollamaURL,

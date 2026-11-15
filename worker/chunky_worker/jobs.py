@@ -141,6 +141,18 @@ class JobRunner:
         self.ingestor = ingestor or QdrantCloudIngestor()
         self.dimensions = DimensionCache()
 
+    def backend_for(self, job_settings) -> EmbeddingBackend:
+        kind = (job_settings.embedding_backend or "").strip()
+        url = (job_settings.embedding_url or "").strip()
+        if not kind and not url:
+            return self.embeddings
+        from chunky_worker.embeddings import make_embedding_backend
+
+        resolved = kind or self.settings.embedding_backend
+        if not url:
+            url = self.settings.embedding_url or self.settings.ollama_url
+        return make_embedding_backend(resolved, url)
+
     def start(self, job_id: str, input_path: Path) -> None:
         thread = threading.Thread(
             target=self._run,
@@ -285,7 +297,8 @@ class JobRunner:
                 if cancel_event.is_set():
                     raise JobCanceled()
                 model = job.settings.embedding_model or self.settings.embedding_model
-                probed = self.dimensions.dimension(self.embeddings, model)
+                backend = self.backend_for(job.settings)
+                probed = self.dimensions.dimension(backend, model)
                 if job.settings.ingest_target == IngestTarget.QDRANT_CLOUD:
                     existing = self.ingestor.collection_vector_size(
                         url=job.settings.qdrant_url or "",
@@ -302,7 +315,7 @@ class JobRunner:
                     chunk.get("embedding_text") or chunk.get("text") or ""
                     for chunk in chunks
                 ]
-                vectors = self.embeddings.embed(texts, model)
+                vectors = backend.embed(texts, model)
                 actual = len(vectors[0]) if vectors else 0
                 if vectors and actual != probed:
                     raise DimensionMismatch(

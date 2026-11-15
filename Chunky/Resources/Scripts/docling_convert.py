@@ -489,7 +489,17 @@ def _write_output(doc, output_format, output_file, image_export_mode):
     return True, None
 
 
-def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, progress_callback):
+def _tokenizer_for_embedding(model: str | None) -> str:
+    name = (model or "").strip()
+    lowered = name.lower()
+    if lowered in {"qwen3-embedding", "qwen3-embedding:latest", "qwen3-embedding-0.6b"} or not name:
+        return "Qwen/Qwen3-Embedding-0.6B"
+    if "/" in name:
+        return name
+    return "Qwen/Qwen3-Embedding-0.6B"
+
+
+def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, progress_callback, embedding_model=""):
     try:
         from docling_core.transforms.chunker.hybrid_chunker import HybridChunker
     except ImportError:
@@ -502,7 +512,7 @@ def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, p
     # HybridChunker itself is the deprecated path.
     from docling_core.transforms.chunker.tokenizer.huggingface import HuggingFaceTokenizer
 
-    tokenizer_name = chunk_tokenizer or "sentence-transformers/all-MiniLM-L6-v2"
+    tokenizer_name = chunk_tokenizer or _tokenizer_for_embedding(embedding_model)
     try:
         tokenizer = HuggingFaceTokenizer.from_pretrained(
             model_name=tokenizer_name,
@@ -557,6 +567,7 @@ def convert_document(
     chunk_max_tokens: int = 512,
     chunk_merge_peers: bool = True,
     chunk_tokenizer: str = "",
+    embedding_model: str = "",
     on_progress=None,
     vlm_engine: str | None = None,
     vllm_url: str | None = None,
@@ -751,7 +762,7 @@ def convert_document(
 
         if chunk:
             chunk_result = _chunk_document(
-                doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, progress_callback
+                doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, progress_callback, embedding_model
             )
             if chunk_result is not None:
                 result_data["chunks"] = chunk_result

@@ -67,7 +67,18 @@ A 2B or 3B description model plus `qwen3-embedding` fits in 32 GB if the granite
 
 Fallback, if vLLM is not running: `CHUNKY_VLM_ENGINE=transformers`. That loads `GRANITEDOCLING_TRANSFORMERS` through `VlmConvertOptions.from_preset("granite_docling", engine_options=TransformersVlmEngineOptions())` with `device="cuda"`. Same rule: do not enable Flash Attention 2.
 
-Ollama stays on `127.0.0.1:11434` for embeddings:
+Ollama stays on `127.0.0.1:11434` for embeddings, or use a separate pooling server:
+
+```bash
+vllm serve Qwen/Qwen3-Embedding-0.6B \
+  --runner pooling \
+  --host 127.0.0.1 --port 8002 \
+  --gpu-memory-utilization 0.15
+```
+
+Set `CHUNKY_EMBEDDING_BACKEND=openai` and `CHUNKY_EMBEDDING_URL=http://127.0.0.1:8002`. This process is not the granite-docling server. `0.15` leaves room for that server on 32 GB. If both cannot stay resident, stop one before starting the other. The chunk tokenizer follows this model (`Qwen/Qwen3-Embedding-0.6B`), not MiniLM.
+
+Ollama remains available:
 
 ```bash
 ollama pull qwen3-embedding

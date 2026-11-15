@@ -97,6 +97,8 @@ class Settings:
     # vllm calls the granite_docling preset. transformers is the in-process fallback.
     vlm_engine: str = "vllm"
     embedding_model: str = "qwen3-embedding"
+    embedding_backend: str = "ollama"
+    embedding_url: str = ""
     # None means protected routes reject every request (fail closed).
     token: str | None = None
 
@@ -113,5 +115,7 @@ class Settings:
             chart_vllm_url=os.environ.get("CHUNKY_CHART_VLLM_URL", "").strip(),
             vlm_engine=normalize_vlm_engine(os.environ.get("CHUNKY_VLM_ENGINE", "vllm")),
             embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding"),
+            embedding_backend=os.environ.get("CHUNKY_EMBEDDING_BACKEND", "ollama").strip().lower() or "ollama",
+            embedding_url=os.environ.get("CHUNKY_EMBEDDING_URL", "").strip(),
             token=load_token(),
         )

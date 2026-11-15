@@ -135,6 +135,10 @@ enum DevboxJobPayload {
             "table_batch_size": settings.tableBatchSize,
             "chunk_merge_peers": settings.chunkMergePeers,
             "embedding_model": settings.embeddingModel,
+            "embedding_backend": settings.embeddingBackend,
+            "embedding_url": settings.embeddingBackend == EmbeddingBackendKind.openai.rawValue
+                ? settings.embeddingAPIURL
+                : settings.ollamaURL,
             "ollama_url": "http://127.0.0.1:11434",
             "do_picture_description": settings.doPictureDescription,
             "do_picture_classification": settings.doPictureClassification,
