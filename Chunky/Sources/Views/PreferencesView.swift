@@ -16,6 +16,10 @@ struct PreferencesView: View {
     @State private var qdrantStatus: ConnectionStatus = .unknown
     @State private var selectedTab = 0
     @State private var qdrantAPIKeyInput: String = ""
+    @State private var workerTokenInput: String = ""
+    @State private var qdrantCloudURLInput: String = ""
+    @State private var devboxStatusMessage: String = ""
+    @State private var devboxStatus: ConnectionStatus = .unknown
     @State private var doclingVersion: String = "Unknown"
     @State private var latestDoclingVersion: String?
     @State private var isCheckingDocling = false
@@ -61,6 +65,8 @@ struct PreferencesView: View {
         .frame(width: 500, height: 700)
         .onAppear {
             qdrantAPIKeyInput = appState.settings.qdrantAPIKey
+            workerTokenInput = appState.settings.workerToken
+            qdrantCloudURLInput = appState.settings.qdrantCloudURL
             Task { await loadModels() }
         }
         .onDisappear {
@@ -180,6 +186,37 @@ struct PreferencesView: View {
                         appState.settings.doclingModel = current.devboxModel.rawValue
                     }
                     appState.settings.doclingAccelerator = host.defaultAccelerator.rawValue
+                }
+                if appState.settings.processingHost == .devbox {
+                    TextField(
+                        "Worker URL",
+                        text: $appState.settings.devboxWorkerURL,
+                        prompt: Text("http://<10GbE-ip>:8080")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    SecureField("Worker token", text: $workerTokenInput, prompt: Text("Bearer token"))
+                        .textFieldStyle(.roundedBorder)
+                        .onChange(of: workerTokenInput) { _, newValue in
+                            appState.settings.workerToken = newValue
+                        }
+                    HStack {
+                        Button("Test connection") { Task { await testDevboxConnection() } }
+                            .disabled(devboxStatus == .checking)
+                        if devboxStatus == .connected {
+                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
+                        } else if devboxStatus == .failed {
+                            Image(systemName: "xmark.circle.fill").foregroundColor(.red)
+                        }
+                    }
+                    if !devboxStatusMessage.isEmpty {
+                        Text(devboxStatusMessage)
+                            .font(.caption)
+                            .foregroundColor(devboxStatus == .failed ? .red : .secondary)
+                            .textSelection(.enabled)
+                    }
+                    Text("Plain HTTP to a private 10GbE address is allowed by NSAllowsLocalNetworking. The token is stored in the Keychain.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
                 }
 
                 Picker("VLM Model", selection: $appState.settings.doclingModel) {
@@ -457,6 +494,28 @@ struct PreferencesView: View {
     private var qdrantTab: some View {
         Form {
             Section {
+                Picker("Devbox ingest", selection: $appState.settings.devboxIngestTarget) {
+                    ForEach(DevboxIngestTarget.allCases) { target in
+                        Text(target.rawValue).tag(target)
+                    }
+                }
+                TextField(
+                    "Qdrant Cloud URL",
+                    text: $qdrantCloudURLInput,
+                    prompt: Text("https://example.cloud.qdrant.io")
+                )
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: qdrantCloudURLInput) { _, newValue in
+                    appState.settings.qdrantCloudURL = newValue
+                }
+                Text("Used when Processing host is Devbox and ingest is Qdrant Cloud. The API key below is sent with the job and is not stored on the worker. Local Mac keeps using Server URL.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
+            } header: {
+                Text("Devbox ingest target")
+            }
+
+            Section {
                 LabeledContent("Server URL") {
                     HStack {
                         TextField(
@@ -639,6 +698,17 @@ struct PreferencesView: View {
         } catch {
             appState.settings.embeddingDimensions = dimensionsForModel(model)
         }
+    }
+
+    private func testDevboxConnection() async {
+        devboxStatus = .checking
+        devboxStatusMessage = "Contacting \(appState.settings.devboxWorkerURL)..."
+        let message = await DevboxWorkerService().testConnection(
+            baseURL: appState.settings.devboxWorkerURL,
+            token: appState.settings.workerToken
+        )
+        devboxStatusMessage = message
+        devboxStatus = message.hasPrefix("Connected") ? .connected : .failed
     }
 
     private func checkOllama() async {

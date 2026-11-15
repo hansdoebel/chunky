@@ -15,12 +15,22 @@ class DocumentProcessor: ObservableObject {
     private var ollamaService: OllamaService?
     private var ollamaServiceURL: String?
     private var currentTask: Task<Void, Never>?
+    private var devboxService = DevboxWorkerService()
+    private var activeDevboxJobID: String?
+    private var devboxBaseURL = ""
+    private var devboxToken = ""
 
     func cancel() {
         currentTask?.cancel()
         currentTask = nil
+        let jobID = activeDevboxJobID
+        let baseURL = devboxBaseURL
+        let token = devboxToken
         Task {
             await doclingService.cancel()
+            if let jobID, !baseURL.isEmpty {
+                await devboxService.cancel(jobID: jobID, baseURL: baseURL, token: token)
+            }
         }
     }
 
@@ -38,6 +48,10 @@ class DocumentProcessor: ObservableObject {
 
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+        if settings.processingHost == .devbox {
+            await processOnDevbox(job: job, settings: settings, mode: mode)
+            return
+        }
         job.status = .chunking
         job.statusMessage = "Converting document with docling..."
         job.error = nil
@@ -677,11 +691,146 @@ class DocumentProcessor: ObservableObject {
         job.embeddedCount = embeddedSoFar
     }
 
-    func processBatch(jobs: [ProcessingJob], settings: AppSettings, cancellationCheck: () -> Bool) async {
+    func processBatch(
+        jobs: [ProcessingJob],
+        settings: AppSettings,
+        mode: ProcessingMode,
+        cancellationCheck: () -> Bool
+    ) async {
         for job in jobs {
             if cancellationCheck() { break }
-            await process(job: job, settings: settings, mode: .full)
+            await process(job: job, settings: settings, mode: mode)
         }
+    }
+
+    @MainActor
+    private func processOnDevbox(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+        job.status = .chunking
+        job.statusMessage = "Uploading to devbox..."
+        job.error = nil
+        job.startTime = Date()
+        let started = CFAbsoluteTimeGetCurrent()
+        devboxBaseURL = settings.devboxWorkerURL
+        devboxToken = settings.workerToken
+        devboxService = DevboxWorkerService()
+        let payload = DevboxJobPayload.settings(from: settings, mode: mode)
+        do {
+            let parsed = try await devboxService.run(
+                fileURL: job.sourceURL,
+                settings: payload,
+                baseURL: settings.devboxWorkerURL,
+                token: settings.workerToken,
+                onCreated: { [weak self] id in
+                    Task { @MainActor in self?.activeDevboxJobID = id }
+                },
+                onEvent: { [weak job] event in
+                    Task { @MainActor in
+                        if let message = event.message { job?.statusMessage = message }
+                        if let percent = event.percent { job?.progress = min(1, max(0, percent / 100)) }
+                    }
+                }
+            )
+            if parsed.status == "failed" {
+                if parsed.errorType == "dimension_mismatch" {
+                    throw DevboxClientError.dimensionMismatch(
+                        url: settings.devboxWorkerURL,
+                        detail: parsed.error ?? "The embedding width does not match the collection."
+                    )
+                }
+                throw DevboxClientError.http(url: settings.devboxWorkerURL, status: 200, detail: parsed.error ?? "Job failed")
+            }
+            if parsed.status == "canceled" {
+                job.status = .failed
+                job.error = "Cancelled"
+                job.statusMessage = "Cancelled"
+                return
+            }
+            job.chunksCount = parsed.chunks.count
+            switch payload["ingest_target"] as? String {
+            case "qdrant_cloud":
+                let count = parsed.ingestUpserted ?? parsed.chunks.count
+                job.embeddedCount = count
+                job.statusMessage = "Upserted \(count) points to \(parsed.ingestCollection ?? settings.defaultCollection)"
+            case "return_vectors":
+                try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed)
+            default:
+                job.statusMessage = "\(parsed.chunks.count) chunks from devbox"
+            }
+            job.totalTime = CFAbsoluteTimeGetCurrent() - started
+            job.status = .completed
+        } catch is CancellationError {
+            job.status = .failed
+            job.error = "Cancelled"
+            job.statusMessage = "Cancelled"
+        } catch {
+            job.status = .failed
+            job.error = error.localizedDescription
+            job.statusMessage = "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    @MainActor
+    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob) async throws {
+        guard parsed.embeddings.count == parsed.chunks.count, !parsed.embeddings.isEmpty else {
+            throw DevboxClientError.http(
+                url: settings.devboxWorkerURL,
+                status: 200,
+                detail: "Worker did not return one vector per chunk."
+            )
+        }
+        let vectorSize = parsed.embeddingDim ?? parsed.embeddings[0].count
+        guard let appState else { throw QdrantError.notConnected }
+        try await appState.ensureQdrantConnection()
+        guard let qdrant = appState.qdrantService else { throw QdrantError.notConnected }
+        if try await qdrant.collectionExists(settings.defaultCollection) {
+            let info = try await qdrant.getCollectionInfo(settings.defaultCollection)
+            try EmbeddingDimensionError.validate(
+                existing: info.vectorSize,
+                probed: vectorSize,
+                collection: settings.defaultCollection,
+                model: settings.embeddingModel
+            )
+        }
+        let documentChunks: [ChunkingService.DocumentChunk] = parsed.chunks.enumerated().map { index, raw in
+            ChunkingService.DocumentChunk(
+                text: raw["text"] as? String ?? "",
+                source: raw["source"] as? String ?? job.fileName,
+                page: (raw["page"] as? NSNumber)?.intValue,
+                headings: (raw["headings"] as? [Any])?.compactMap { $0 as? String } ?? [],
+                chunkIndex: (raw["chunk_index"] as? NSNumber)?.intValue ?? index,
+                contentType: raw["content_type"] as? String ?? "text",
+                embeddingText: raw["embedding_text"] as? String
+            )
+        }
+        let points = buildPoints(
+            chunks: documentChunks,
+            embeddings: parsed.embeddings,
+            sparseVectors: Array(repeating: nil, count: documentChunks.count),
+            settings: settings,
+            ingestedAt: ISO8601DateFormatter().string(from: Date())
+        )
+        let distance: Distance
+        switch settings.qdrantDistanceMetric {
+        case "Dot": distance = .dot
+        case "Euclid": distance = .euclid
+        default: distance = .cosine
+        }
+        try await uploadToQdrant(
+            points: points,
+            collectionName: settings.defaultCollection,
+            vectorSize: vectorSize,
+            batchSize: settings.qdrantBatchSize,
+            hybrid: false,
+            distance: distance,
+            dedupSource: job.fileName
+        ) { progress in
+            Task { @MainActor in
+                job.progress = progress.fraction
+                job.statusMessage = "Uploading batch \(progress.currentBatch)/\(progress.totalBatches)..."
+            }
+        }
+        job.embeddedCount = points.count
+        job.statusMessage = "\(points.count) chunks written to local Qdrant"
     }
 
     /// Probe the embedding model once and refuse a collection whose width differs.
