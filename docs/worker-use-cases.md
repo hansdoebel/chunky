@@ -48,7 +48,7 @@ Every non-loopback bind requires a bearer token. `GET /v1/health` stays open. Ev
 
 **Topology.** Search always has a Qdrant. It can be Docker on the app machine, or Qdrant Cloud.
 
-**Bind and token.** This is not the worker token. Local Docker uses **Server URL** (`http://localhost:6334` after `make qdrant`). Qdrant Cloud uses **Qdrant Cloud URL** and the API key. Devbox ingest **Qdrant Cloud** sends that URL and key with the job. The worker does not store the key. Devbox ingest **Local Docker** returns vectors for the app to upsert into Server URL.
+**Bind and token.** This is not the worker token. With Processing host **Local Mac**, ingest and search use **Server URL**. Put a local Docker address there (`http://localhost:6334` after `make qdrant`), or put a Qdrant Cloud address there when the app itself should talk to Cloud. **Qdrant Cloud URL** and the API key are used when Processing host is **Devbox** and Worker ingest is **Qdrant Cloud**. That job sends the Cloud URL and key to the worker. The worker does not store the key. Worker ingest **Local Docker** returns vectors for the app to upsert into Server URL.
 
 **Models.** The collection width must match the embedding model. `qwen3-embedding:0.6b` is 1024. A 4B or 8B model needs a new collection.
 
@@ -58,7 +58,7 @@ Every non-loopback bind requires a bearer token. `GET /v1/health` stays open. Ev
 
 **Topology.** No cloud account and no VPN. Either everything is on the app machine, or the app and the worker are on a LAN that does not route to the internet.
 
-**Bind and token.** Loopback needs no token. A LAN worker still needs a token if it is not bound to loopback. Pull models before you disconnect: `qwen3-embedding:0.6b`, and the granite-docling weights the host will use.
+**Bind and token.** A worker bound to loopback may start without a token, but jobs, models, and search still require one. A LAN worker also requires a token to start. Pull models before you disconnect: `qwen3-embedding:0.6b`, and the granite-docling weights the host will use.
 
 **Models.** Same defaults. Do not point embeddings or the VLM at a URL that leaves the machine.
 
