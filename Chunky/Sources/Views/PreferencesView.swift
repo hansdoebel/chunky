@@ -130,7 +130,7 @@ struct PreferencesView: View {
                         }
                     }
                     .onChange(of: appState.settings.embeddingModel) { _, newModel in
-                        appState.settings.embeddingDimensions = dimensionsForModel(newModel)
+                        Task { await applyProbedDimensions(for: newModel) }
                     }
                 }
 
@@ -566,6 +566,7 @@ struct PreferencesView: View {
         }
     }
 
+    /// Display fallback used only when Ollama cannot be probed. Ingest does not use this guess.
     private func dimensionsForModel(_ modelName: String) -> Int {
         let name = modelName.lowercased()
 
@@ -607,19 +608,24 @@ struct PreferencesView: View {
             {
                 if let firstEmbedding = embeddingModels.first {
                     appState.settings.embeddingModel = firstEmbedding.name
-                    appState.settings.embeddingDimensions = dimensionsForModel(firstEmbedding.name)
                 }
-            } else {
-                // Update dimensions for current model
-                appState.settings.embeddingDimensions = dimensionsForModel(
-                    appState.settings.embeddingModel)
             }
+            await applyProbedDimensions(for: appState.settings.embeddingModel)
 
         } catch {
             availableModels = []
             ollamaStatus = .failed
         }
         isLoadingModels = false
+    }
+
+    private func applyProbedDimensions(for model: String) async {
+        do {
+            let service = try OllamaService(baseURL: appState.settings.ollamaURL)
+            appState.settings.embeddingDimensions = try await service.probeDimension(model: model)
+        } catch {
+            appState.settings.embeddingDimensions = dimensionsForModel(model)
+        }
     }
 
     private func checkOllama() async {

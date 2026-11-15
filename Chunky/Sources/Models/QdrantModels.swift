@@ -98,6 +98,22 @@ struct CollectionInfo: Sendable {
     let vectorsCount: UInt64
     let pointsCount: UInt64
     let status: CollectionStatus
+    /// Probed or stored dense vector width. Nil when the server did not report one.
+    let vectorSize: Int?
+
+    init(
+        name: String,
+        vectorsCount: UInt64,
+        pointsCount: UInt64,
+        status: CollectionStatus,
+        vectorSize: Int? = nil
+    ) {
+        self.name = name
+        self.vectorsCount = vectorsCount
+        self.pointsCount = pointsCount
+        self.status = status
+        self.vectorSize = vectorSize
+    }
 
     enum CollectionStatus: String, Sendable {
         case green

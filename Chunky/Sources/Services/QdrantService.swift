@@ -116,7 +116,8 @@ class QdrantService: ObservableObject {
             name: name,
             vectorsCount: info.indexedVectorsCount ?? 0,
             pointsCount: info.pointsCount ?? 0,
-            status: status
+            status: status,
+            vectorSize: info.vectorSize.map { Int($0) }
         )
     }
 

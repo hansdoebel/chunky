@@ -2,9 +2,13 @@
 
 from __future__ import annotations
 
+import threading
 from typing import Protocol
 
 import httpx
+
+# Stable probe text. The dimension is cached per model name for the process.
+PROBE_TEXT = "chunky"
 
 
 class EmbeddingBackend(Protocol):
@@ -58,3 +62,24 @@ class OllamaEmbeddingBackend:
         if not isinstance(embeddings, list):
             raise RuntimeError("Ollama /api/embed response missing embeddings")
         return embeddings
+
+
+class DimensionCache:
+    """One probe embedding per model name. Later calls reuse the cached width."""
+
+    def __init__(self) -> None:
+        self._sizes: dict[str, int] = {}
+        self._lock = threading.Lock()
+
+    def dimension(self, backend: EmbeddingBackend, model: str) -> int:
+        with self._lock:
+            cached = self._sizes.get(model)
+        if cached is not None:
+            return cached
+        vectors = backend.embed([PROBE_TEXT], model)
+        if not vectors or not vectors[0]:
+            raise RuntimeError(f"Embedding probe for {model!r} returned no vector")
+        size = len(vectors[0])
+        with self._lock:
+            self._sizes.setdefault(model, size)
+            return self._sizes[model]

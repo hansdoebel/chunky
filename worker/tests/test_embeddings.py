@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import httpx
 
-from chunky_worker.embeddings import OllamaEmbeddingBackend
+from chunky_worker.embeddings import DimensionCache, OllamaEmbeddingBackend, PROBE_TEXT
 
 
 def test_ollama_health_and_models(monkeypatch):
@@ -44,6 +44,30 @@ def test_ollama_embed_posts_input(monkeypatch):
     assert vectors == [[0.1, 0.2], [0.3, 0.4]]
     assert captured["url"].endswith("/api/embed")
     assert captured["json"] == {"model": "qwen3-embedding", "input": ["a", "b"]}
+
+
+def test_dimension_cache_probes_once_per_model():
+    class Counting:
+        def __init__(self):
+            self.calls = []
+
+        def health(self):
+            return True, None
+
+        def list_models(self):
+            return [], None
+
+        def embed(self, texts, model):
+            self.calls.append((texts, model))
+            width = 4 if model == "wide" else 2
+            return [[0.0] * width for _ in texts]
+
+    backend = Counting()
+    cache = DimensionCache()
+    assert cache.dimension(backend, "qwen3-embedding") == 2
+    assert cache.dimension(backend, "qwen3-embedding") == 2
+    assert cache.dimension(backend, "wide") == 4
+    assert backend.calls == [([PROBE_TEXT], "qwen3-embedding"), ([PROBE_TEXT], "wide")]
 
 
 def test_ollama_health_false_when_down(monkeypatch):

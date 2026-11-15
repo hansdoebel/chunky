@@ -35,6 +35,9 @@ class PreparedPoint:
 
 
 class QdrantIngestor(Protocol):
+    def collection_vector_size(self, *, url: str, api_key: str, collection: str) -> int | None:
+        """Return the existing dense vector size, or None when the collection is missing."""
+
     def upsert_cloud(
         self,
         *,
@@ -206,6 +209,32 @@ def _collection_vector_size(info: Any) -> int | None:
 class QdrantCloudIngestor:
     """Upserts with ``qdrant_client``. The API key is a function argument only."""
 
+    def collection_vector_size(self, *, url: str, api_key: str, collection: str) -> int | None:
+        client = self._client(url, api_key)
+        try:
+            if not client.collection_exists(collection_name=collection):
+                return None
+            info = client.get_collection(collection_name=collection)
+            return _collection_vector_size(info)
+        except Exception as exc:
+            message = redact(str(exc), api_key)
+            raise IngestError(message) from None
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
+    def _client(self, url: str, api_key: str):
+        if not url:
+            raise IngestError("qdrant_url is required for qdrant_cloud")
+        if not api_key:
+            raise IngestError("qdrant_api_key is required for qdrant_cloud")
+        try:
+            from qdrant_client import QdrantClient
+        except ImportError as exc:
+            raise IngestError("qdrant-client is not installed") from exc
+        return QdrantClient(url=url, api_key=api_key)
+
     def upsert_cloud(
         self,
         *,
@@ -229,7 +258,6 @@ class QdrantCloudIngestor:
 
         distance_name = normalize_distance(distance)
         try:
-            from qdrant_client import QdrantClient
             from qdrant_client.models import Distance, PointStruct, VectorParams
         except ImportError as exc:
             raise IngestError("qdrant-client is not installed") from exc
@@ -240,7 +268,7 @@ class QdrantCloudIngestor:
             "euclid": Distance.EUCLID,
         }[distance_name]
 
-        client = QdrantClient(url=url, api_key=api_key)
+        client = self._client(url, api_key)
         try:
             if client.collection_exists(collection_name=collection):
                 info = client.get_collection(collection_name=collection)
