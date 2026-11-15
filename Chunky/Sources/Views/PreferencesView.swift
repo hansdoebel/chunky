@@ -17,6 +17,10 @@ struct PreferencesView: View {
     @State private var selectedTab = 0
     @State private var qdrantAPIKeyInput: String = ""
     @State private var workerTokenInput: String = ""
+    @State private var workerEndpoints: [WorkerEndpoint] = []
+    @State private var selectedWorkerEndpointID: UUID?
+    @State private var workerEndpointName = ""
+    @State private var workerProbe: WorkerProbeReport?
     @State private var qdrantCloudURLInput: String = ""
     @State private var devboxStatusMessage: String = ""
     @State private var devboxStatus: ConnectionStatus = .unknown
@@ -326,33 +330,23 @@ struct PreferencesView: View {
                     appState.settings.doclingAccelerator = host.defaultAccelerator.rawValue
                 }
                 if appState.settings.processingHost == .devbox {
-                    TextField(
-                        "Worker URL",
-                        text: $appState.settings.devboxWorkerURL,
-                        prompt: Text("http://<10GbE-ip>:8080")
+                    WorkerEndpointsPane(
+                        endpoints: workerEndpoints,
+                        selectedID: selectedWorkerEndpointID,
+                        name: workerEndpointName,
+                        url: appState.settings.devboxWorkerURL,
+                        token: workerTokenInput,
+                        report: workerProbe,
+                        onSelect: { selectWorkerEndpoint($0) },
+                        onName: { workerEndpointName = $0 },
+                        onURL: { appState.settings.devboxWorkerURL = $0 },
+                        onToken: { workerTokenInput = $0 },
+                        onSave: { saveWorkerEndpoint() },
+                        onUse: { useSelectedWorkerEndpoint() },
+                        onCheck: { Task { await testDevboxConnection() } }
                     )
-                    .textFieldStyle(.roundedBorder)
-                    SecureField("Worker token", text: $workerTokenInput, prompt: Text("Bearer token"))
-                        .textFieldStyle(.roundedBorder)
-                        .onChange(of: workerTokenInput) { _, newValue in
-                            appState.settings.workerToken = newValue
-                        }
-                    HStack {
-                        Button("Test connection") { Task { await testDevboxConnection() } }
-                            .disabled(devboxStatus == .checking)
-                        if devboxStatus == .connected {
-                            Image(systemName: "checkmark.circle.fill").foregroundColor(.green)
-                        } else if devboxStatus == .failed {
-                            Image(systemName: "xmark.circle.fill").foregroundColor(.red)
-                        }
-                    }
-                    if !devboxStatusMessage.isEmpty {
-                        Text(devboxStatusMessage)
-                            .font(.caption)
-                            .foregroundColor(devboxStatus == .failed ? .red : .secondary)
-                            .textSelection(.enabled)
-                    }
-                    Text("Plain HTTP to a private 10GbE address is allowed by NSAllowsLocalNetworking. The token is stored in the Keychain.")
+                    .onAppear { loadWorkerEndpoints() }
+                    Text("Plain HTTP to a private LAN address is allowed by NSAllowsLocalNetworking. MagicDNS HTTP uses the ts.net exception. The token is stored in the Keychain.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
@@ -893,15 +887,57 @@ struct PreferencesView: View {
         }
     }
 
+    private func loadWorkerEndpoints() {
+        workerEndpoints = appState.settings.workerEndpoints()
+        let active = appState.settings.activeWorkerEndpointID() ?? workerEndpoints.first?.id
+        if let active {
+            selectWorkerEndpoint(active)
+        }
+    }
+
+    private func selectWorkerEndpoint(_ id: UUID) {
+        selectedWorkerEndpointID = id
+        guard let endpoint = workerEndpoints.first(where: { $0.id == id }) else { return }
+        workerEndpointName = endpoint.name
+        appState.settings.devboxWorkerURL = endpoint.url
+        workerTokenInput = appState.settings.workerEndpointToken(id: id)
+        appState.settings.workerToken = workerTokenInput
+    }
+
+    private func saveWorkerEndpoint() {
+        var endpoints = workerEndpoints
+        if let id = selectedWorkerEndpointID, let index = endpoints.firstIndex(where: { $0.id == id }) {
+            endpoints[index].name = workerEndpointName.isEmpty ? endpoints[index].name : workerEndpointName
+            endpoints[index].url = appState.settings.devboxWorkerURL
+            appState.settings.setWorkerEndpointToken(id: id, workerTokenInput)
+        } else {
+            let created = WorkerEndpoint(id: UUID(), name: workerEndpointName.isEmpty ? "Worker" : workerEndpointName, url: appState.settings.devboxWorkerURL)
+            endpoints.append(created)
+            selectedWorkerEndpointID = created.id
+            appState.settings.setWorkerEndpointToken(id: created.id, workerTokenInput)
+        }
+        appState.settings.replaceWorkerEndpoints(endpoints)
+        workerEndpoints = endpoints
+        appState.settings.workerToken = workerTokenInput
+    }
+
+    private func useSelectedWorkerEndpoint() {
+        saveWorkerEndpoint()
+        guard let id = selectedWorkerEndpointID, let endpoint = workerEndpoints.first(where: { $0.id == id }) else { return }
+        appState.settings.useWorkerEndpoint(endpoint)
+        workerTokenInput = appState.settings.workerToken
+    }
+
     private func testDevboxConnection() async {
         devboxStatus = .checking
-        devboxStatusMessage = "Contacting \(appState.settings.devboxWorkerURL)..."
-        let message = await DevboxWorkerService().testConnection(
+        appState.settings.workerToken = workerTokenInput
+        let report = await DevboxWorkerService().probe(
             baseURL: appState.settings.devboxWorkerURL,
-            token: appState.settings.workerToken
+            token: workerTokenInput
         )
-        devboxStatusMessage = message
-        devboxStatus = message.hasPrefix("Connected") ? .connected : .failed
+        workerProbe = report
+        devboxStatusMessage = report.message
+        devboxStatus = report.kind == .connected ? .connected : .failed
     }
 
     private func checkOllama() async {

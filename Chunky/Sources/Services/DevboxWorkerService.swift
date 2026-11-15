@@ -235,6 +235,71 @@ final class DevboxWorkerService {
         self.session = session
     }
 
+    func probe(baseURL: String, token: String) async -> WorkerProbeReport {
+        let started = Date()
+        func finish(
+            healthStatus: Int?,
+            healthFailedSecure: Bool,
+            healthUnreachable: Bool,
+            modelsStatus: Int?,
+            modelsFailedSecure: Bool,
+            modelsUnreachable: Bool
+        ) -> WorkerProbeReport {
+            WorkerProbe.classify(
+                url: baseURL,
+                healthStatus: healthStatus,
+                healthFailedSecure: healthFailedSecure,
+                healthUnreachable: healthUnreachable,
+                modelsStatus: modelsStatus,
+                modelsFailedSecure: modelsFailedSecure,
+                modelsUnreachable: modelsUnreachable,
+                elapsed: Date().timeIntervalSince(started)
+            )
+        }
+        guard WorkerProbe.accepts(url: baseURL), let root = URL(string: baseURL) else {
+            return finish(healthStatus: nil, healthFailedSecure: false, healthUnreachable: true, modelsStatus: nil, modelsFailedSecure: false, modelsUnreachable: false)
+        }
+        let health = root.appendingPathComponent("v1").appendingPathComponent("health")
+        var healthStatus: Int?
+        var healthSecure = false
+        var healthDown = false
+        do {
+            let (data, response) = try await session.data(from: health)
+            if let http = response as? HTTPURLResponse {
+                healthStatus = http.statusCode
+                if http.statusCode != 200 {
+                    _ = data
+                }
+            } else {
+                healthDown = true
+            }
+        } catch let error as URLError {
+            if error.code == .appTransportSecurityRequiresSecureConnection {
+                healthSecure = true
+            } else {
+                healthDown = true
+            }
+        } catch {
+            healthDown = true
+        }
+        if healthSecure || healthDown || healthStatus != 200 {
+            return finish(healthStatus: healthStatus, healthFailedSecure: healthSecure, healthUnreachable: healthDown, modelsStatus: nil, modelsFailedSecure: false, modelsUnreachable: false)
+        }
+        let models = root.appendingPathComponent("v1").appendingPathComponent("models")
+        var request = URLRequest(url: models)
+        request.setValue(DevboxJobPayload.authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
+        do {
+            let (_, response) = try await session.data(for: request)
+            let status = (response as? HTTPURLResponse)?.statusCode
+            return finish(healthStatus: healthStatus, healthFailedSecure: false, healthUnreachable: false, modelsStatus: status, modelsFailedSecure: false, modelsUnreachable: status == nil)
+        } catch let error as URLError {
+            let secure = error.code == .appTransportSecurityRequiresSecureConnection
+            return finish(healthStatus: healthStatus, healthFailedSecure: false, healthUnreachable: false, modelsStatus: nil, modelsFailedSecure: secure, modelsUnreachable: !secure)
+        } catch {
+            return finish(healthStatus: healthStatus, healthFailedSecure: false, healthUnreachable: false, modelsStatus: nil, modelsFailedSecure: false, modelsUnreachable: true)
+        }
+    }
+
     func testConnection(baseURL: String, token: String) async -> String {
         guard let root = URL(string: baseURL), let scheme = root.scheme, scheme == "http" || scheme == "https", root.host != nil else {
             return DevboxClientError.invalidURL(baseURL).errorDescription ?? "Invalid worker URL"
