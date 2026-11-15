@@ -39,6 +39,11 @@ struct SidebarView: View {
             )
             .onTapGesture { appState.viewMode = .collections }
             NavigationRow(
+                icon: "magnifyingglass", title: "Retrieval",
+                isSelected: appState.viewMode == .retrieval
+            )
+            .onTapGesture { appState.viewMode = .retrieval }
+            NavigationRow(
                 icon: "chart.bar", title: "Analytics",
                 isSelected: appState.viewMode == .analytics
             )
@@ -180,6 +185,8 @@ struct MainContentView: View {
                 }
             } else if appState.viewMode == .collections {
                 CollectionBrowserView()
+            } else if appState.viewMode == .retrieval {
+                RetrievalScreen()
             } else if appState.viewMode == .analytics {
                 AnalyticsView(runs: appState.finishedRuns, warning: appState.historyWarning)
             } else {

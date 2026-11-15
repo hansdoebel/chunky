@@ -248,15 +248,19 @@ class QdrantService: ObservableObject {
         collectionName: String,
         vector: [Float],
         limit: Int = 10,
-        sourceFilter: String? = nil
+        sourceFilter: String? = nil,
+        filter: Filter? = nil,
+        offset: Int? = nil
     ) async throws -> [SearchResult] {
         guard let client = client else {
             throw QdrantServiceError.notConnected
         }
 
-        var filter: Filter?
-        if let sourceFilter = sourceFilter, !sourceFilter.isEmpty {
-            filter = Filter(
+        let resolved: Filter?
+        if let filter {
+            resolved = filter
+        } else if let sourceFilter, !sourceFilter.isEmpty {
+            resolved = Filter(
                 must: [
                     .field(
                         FieldCondition(
@@ -265,15 +269,17 @@ class QdrantService: ObservableObject {
                         ))
                 ]
             )
+        } else {
+            resolved = nil
         }
 
         let results = try await client.points.search(
             collection: collectionName,
             vector: vector,
             limit: UInt64(limit),
-            filter: filter,
+            filter: resolved,
             scoreThreshold: nil,
-            offset: nil,
+            offset: offset.map { UInt64($0) },
             withPayload: true,
             withVectors: false,
             vectorName: nil

@@ -175,7 +175,7 @@ class AppState: ObservableObject {
             }
 
             // Load points
-            let points = try await service.loadPoints(collectionName: collectionName, limit: 1000)
+            let points = try await service.loadPoints(collectionName: collectionName, limit: CollectionBrowse.pointLimit)
             browserPoints = points
             browserPointCount = points.count
 
