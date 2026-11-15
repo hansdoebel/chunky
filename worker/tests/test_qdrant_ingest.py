@@ -305,7 +305,7 @@ def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
             created["upsert"] = kwargs
 
         def create_payload_index(self, **kwargs):
-            return None
+            created.setdefault("indexes", []).append(kwargs)
 
         def close(self):
             pass
@@ -327,12 +327,13 @@ def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
     create = created["create"]
     assert create["vectors_config"]["dense"].size == 2
     assert create["vectors_config"]["dense"].on_disk is True
-    assert create["sparse_vectors_config"]["sparse"].modifier.value == "idf"
+    assert "sparse_vectors_config" not in create
     assert create["on_disk_payload"] is True
     assert create["quantization_config"] is not None
     point = created["upsert"]["points"][0]
-    assert point.vector["dense"] == [0.1, 0.2]
-    assert point.vector["sparse"].indices
+    assert point.vector == {"dense": [0.1, 0.2]}
+    bm25 = next(item for item in created["indexes"] if item["field_name"] == "text")
+    assert bm25["field_schema"].scoring.type.value == "bm25"
 
 
 def test_cloud_client_creates_collection_and_batches(monkeypatch):

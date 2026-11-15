@@ -10,9 +10,11 @@ struct RetrievalPlayground: View {
     @Binding var source: String
     @Binding var page: String
     @Binding var contentType: String
+    @Binding var mode: String
+    @Binding var denseWeight: String
+    @Binding var lexicalWeight: String
     var collections: [String]
     var routeLabel: String
-    var modeLabel: String
     var statusLine: String
     var error: String?
     var hits: [RetrievalHit]
@@ -42,9 +44,20 @@ struct RetrievalPlayground: View {
                 .padding(.horizontal, 8)
                 .padding(.vertical, 3)
                 .background(AppTheme.badgeBackgroundActive, in: Capsule())
-            Text(modeLabel)
-                .font(.caption)
-                .foregroundStyle(.secondary)
+            Picker("Mode", selection: $mode) {
+                ForEach(RetrievalMode.allCases) { item in
+                    Text(item.displayName).tag(item.rawValue)
+                }
+            }
+            if mode == RetrievalMode.hybrid.rawValue {
+                TextField("Dense weight", text: $denseWeight, prompt: Text("Dense weight"))
+                    .textFieldStyle(.roundedBorder)
+                TextField("BM25 weight", text: $lexicalWeight, prompt: Text("BM25 weight"))
+                    .textFieldStyle(.roundedBorder)
+                Text("Empty weights use equal RRF. BM25 reads the text field.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
             TextField("Query", text: $query, axis: .vertical)
                 .lineLimit(2...4)
                 .textFieldStyle(.roundedBorder)
@@ -193,6 +206,9 @@ struct RetrievalScreen: View {
     @State private var source = ""
     @State private var page = ""
     @State private var contentType = ""
+    @State private var mode = RetrievalMode.dense.rawValue
+    @State private var denseWeight = ""
+    @State private var lexicalWeight = ""
     @State private var hits: [RetrievalHit] = []
     @State private var error: String?
     @State private var statusLine = RetrievalScreen.idleStatus
@@ -215,9 +231,11 @@ struct RetrievalScreen: View {
             source: $source,
             page: $page,
             contentType: $contentType,
+            mode: $mode,
+            denseWeight: $denseWeight,
+            lexicalWeight: $lexicalWeight,
             collections: appState.availableCollections,
             routeLabel: route.displayName,
-            modeLabel: RetrievalMode.dense.displayName,
             statusLine: statusLine,
             error: error,
             hits: hits,
@@ -242,15 +260,17 @@ struct RetrievalScreen: View {
         isSearching = true
         error = nil
         defer { isSearching = false }
+        let selected = RetrievalMode(rawValue: mode) ?? .dense
         let request = RetrievalRequest.make(
             text: query,
             collection: collection,
-            mode: .dense,
+            mode: selected,
             limit: limit,
             offset: offset,
             backend: backend,
             model: model,
             filters: RetrievalFilter.playground(source: source, page: page, contentType: contentType),
+            rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
             settings: appState.settings
         )
         do {
@@ -274,5 +294,13 @@ struct RetrievalScreen: View {
         }
     }
 
-    static let idleStatus = "Dense search. Limit is explicit (maximum \(RetrievalLimits.maximum)). Browse loads at most \(CollectionBrowse.pointLimit) points."
+    static let idleStatus = "Dense or hybrid search. Limit is explicit (maximum \(RetrievalLimits.maximum)). Browse loads at most \(CollectionBrowse.pointLimit) points."
+
+    static func weights(dense: String, lexical: String) -> [Double]? {
+        let left = dense.trimmingCharacters(in: .whitespacesAndNewlines)
+        let right = lexical.trimmingCharacters(in: .whitespacesAndNewlines)
+        if left.isEmpty && right.isEmpty { return nil }
+        guard let denseValue = Double(left), let lexicalValue = Double(right) else { return [-1] }
+        return [denseValue, lexicalValue]
+    }
 }

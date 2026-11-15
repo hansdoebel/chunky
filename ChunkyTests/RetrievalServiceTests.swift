@@ -29,7 +29,7 @@ struct RetrievalServiceTests {
         #expect(request.route == .localQdrant)
         #expect(request.text == "revenue")
         #expect(request.qdrantURL == "http://127.0.0.1:6334")
-        #expect(request.qdrantAPIKey.isEmpty)
+        #expect(request.qdrantAPIKey == "local-secret")
         #expect(request.embeddingBackend == "ollama")
         #expect(request.filters.count == 3)
         let json = request.workerJSON()
@@ -198,6 +198,50 @@ struct RetrievalServiceTests {
         let service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]), worker: FakeWorker())
         _ = try await service.search(localRequest(), index: index)
         #expect(index.lastSeenName == "dense")
+    }
+
+    @Test func hybridBodyUsesTextQueryAndOptionalRRFWeights() throws {
+        let weighted = HybridQuery.body(
+            vector: [0.1, 0.2],
+            text: "revenue by year",
+            denseUsing: "dense",
+            limit: 8,
+            offset: 2,
+            weights: [0.7, 0.3]
+        )
+        let prefetch = try #require(weighted["prefetch"] as? [[String: Any]])
+        #expect(prefetch[0]["using"] as? String == "dense")
+        #expect(prefetch[0]["query"] as? [Float] == [0.1, 0.2])
+        let lexical = try #require(prefetch[1]["query"] as? [String: String])
+        #expect(lexical["text"] == "revenue by year")
+        #expect(prefetch[1]["using"] as? String == "text")
+        #expect(prefetch[0]["limit"] as? Int == 10)
+        #expect(prefetch[1]["limit"] as? Int == 10)
+        let query = try #require(weighted["query"] as? [String: Any])
+        let rrf = try #require(query["rrf"] as? [String: Any])
+        #expect(rrf["weights"] as? [Double] == [0.7, 0.3])
+        let filtered = HybridQuery.body(
+            vector: [0.1],
+            text: "revenue",
+            denseUsing: "dense",
+            limit: 4,
+            offset: 0,
+            weights: nil,
+            filters: RetrievalFilter.playground(source: "paper.pdf", page: "2", contentType: "text")
+        )
+        let filteredPrefetch = try #require(filtered["prefetch"] as? [[String: Any]])
+        let must = try #require((filteredPrefetch[0]["filter"] as? [String: Any])?["must"] as? [[String: Any]])
+        #expect(must.count == 3)
+        let plain = HybridQuery.body(vector: [0.1], text: "revenue", denseUsing: nil, limit: 4, offset: 0, weights: nil)
+        let plainQuery = try #require(plain["query"] as? [String: Any])
+        let plainRRF = try #require(plainQuery["rrf"] as? [String: Any])
+        #expect(plainRRF["weights"] == nil)
+        let data = Data("{\"result\":{\"points\":[{\"id\":\"p1\",\"score\":0.5,\"payload\":{\"text\":\"Revenue\",\"source\":\"a.pdf\",\"page\":3}}]}}".utf8)
+        let hits = try HybridQuery.hits(from: data)
+        #expect(hits[0].text == "Revenue")
+        #expect(hits[0].page == 3)
+        #expect(RetrievalScreen.weights(dense: "", lexical: "") == nil)
+        #expect(RetrievalScreen.weights(dense: "0.7", lexical: "0.3") == [0.7, 0.3] as [Double]?)
     }
 
     @Test func invalidLimitIsRejected() async {
@@ -379,6 +423,10 @@ private final class FakeIndex: RetrievalIndex {
         _ = filter
         return hits
     }
+
+    func hybridRRF(collection: String, url: String, apiKey: String, body: [String: Any]) async throws -> [SearchResult] {
+        hits
+    }
 }
 
 private final class FakeWorker: RetrievalWorker {
@@ -412,6 +460,9 @@ private struct RetrievalScreenshotHost: View {
     @State private var source = "paper.pdf"
     @State private var page = "2"
     @State private var contentType = "text"
+    @State private var mode = RetrievalMode.hybrid.rawValue
+    @State private var denseWeight = "0.7"
+    @State private var lexicalWeight = "0.3"
 
     var body: some View {
         RetrievalPlayground(
@@ -424,9 +475,11 @@ private struct RetrievalScreenshotHost: View {
             source: $source,
             page: $page,
             contentType: $contentType,
+            mode: $mode,
+            denseWeight: $denseWeight,
+            lexicalWeight: $lexicalWeight,
             collections: ["documents", "notes"],
             routeLabel: RetrievalRoute.localQdrant.displayName,
-            modeLabel: RetrievalMode.dense.displayName,
             statusLine: "2 results · limit 8 · offset 0 · end · Local Qdrant · ollama qwen3-embedding (1024). Browse loads at most 1000 points.",
             error: nil,
             hits: hits,
