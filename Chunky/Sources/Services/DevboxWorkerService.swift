@@ -178,6 +178,7 @@ enum DevboxJobPayload {
         if let venue = bibliography.venue, !venue.isEmpty { body["bibliography_venue"] = venue }
         if let abstract = bibliography.abstract, !abstract.isEmpty { body["bibliography_abstract"] = abstract }
         if !bibliography.citeKey.isEmpty { body["bibliography_cite_key"] = bibliography.citeKey }
+        if !bibliography.source.isEmpty { body["bibliography_source"] = bibliography.source }
         return body
     }
 

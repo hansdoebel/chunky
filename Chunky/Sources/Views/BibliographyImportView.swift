@@ -5,12 +5,25 @@ import UniformTypeIdentifiers
 struct BibliographyImportScreen: View {
     var matches: [BibliographyMatch]
     var status: String
+    var lookupText: String
+    var onLookupChange: (String) -> Void
+    var onFetch: () -> Void
     var onImport: ([BibliographyMatch]) -> Void
     @State private var selected: Set<String>
 
-    init(matches: [BibliographyMatch], status: String = "", onImport: @escaping ([BibliographyMatch]) -> Void = { _ in }) {
+    init(
+        matches: [BibliographyMatch],
+        status: String = "",
+        lookupText: String = "",
+        onLookupChange: @escaping (String) -> Void = { _ in },
+        onFetch: @escaping () -> Void = {},
+        onImport: @escaping ([BibliographyMatch]) -> Void = { _ in }
+    ) {
         self.matches = matches
         self.status = status
+        self.lookupText = lookupText
+        self.onLookupChange = onLookupChange
+        self.onFetch = onFetch
         self.onImport = onImport
         _selected = State(initialValue: Set(matches.filter { $0.pdf != nil }.map(\.id)))
     }
@@ -23,9 +36,15 @@ struct BibliographyImportScreen: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Import library")
                 .font(.title2)
-            Text("Zotero local API or a BibTeX file plus PDFs. The API key stays in the Keychain.")
+            Text("Zotero local API, a BibTeX file, or one DOI or arXiv id. The API key stays in the Keychain.")
                 .font(.callout)
                 .foregroundStyle(.secondary)
+            HStack {
+                TextField("DOI or arXiv", text: Binding(get: { lookupText }, set: onLookupChange))
+                    .textFieldStyle(.roundedBorder)
+                Button("Fetch") { onFetch() }
+                    .disabled(lookupText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            }
             if matches.isEmpty {
                 Text(status.isEmpty ? "Load a library to see papers." : status)
                     .foregroundStyle(.secondary)
@@ -101,6 +120,7 @@ struct BibliographyImportSheet: View {
     @State private var matches: [BibliographyMatch] = []
     @State private var status = "The Zotero key is saved in the Keychain."
     @State private var apiKey = ""
+    @State private var lookupText = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -112,10 +132,19 @@ struct BibliographyImportSheet: View {
             HStack {
                 Button("BibTeX…") { pickBibliography() }
                 Button("Load Zotero") { Task { await loadZotero() } }
+                if matches.contains(where: { $0.pdf == nil }) {
+                    Button("Attach PDF…") { attachPDF() }
+                }
                 Spacer()
                 Button("Close") { dismiss() }
             }
-            BibliographyImportScreen(matches: matches, status: status) { chosen in
+            BibliographyImportScreen(
+                matches: matches,
+                status: status,
+                lookupText: lookupText,
+                onLookupChange: { lookupText = $0 },
+                onFetch: { Task { await fetchPaper() } }
+            ) { chosen in
                 appState.importBibliography(chosen)
                 dismiss()
             }
@@ -143,6 +172,45 @@ struct BibliographyImportSheet: View {
         matches = BibliographyFiles.match(BibTeXParser.parse(text), pdfs: pdfs)
         let missing = matches.filter { $0.pdf == nil }.count
         status = missing == 0 ? "Matched \(matches.count) PDFs." : "\(missing) items have no PDF."
+    }
+
+    private func attachPDF() {
+        let panel = NSOpenPanel()
+        panel.allowedContentTypes = [.pdf]
+        panel.allowsMultipleSelection = false
+        guard panel.runModal() == .OK, let url = panel.url, !matches.isEmpty else { return }
+        matches[0].pdf = url
+        matches[0].warning = nil
+        status = "Ready to import \(matches[0].record.title)."
+    }
+
+    private func fetchPaper() async {
+        let text = lookupText.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard PaperIdentifierParser.parse(text) != nil else {
+            status = "Enter a DOI or an arXiv id."
+            return
+        }
+        do {
+            let client = PaperLookupClient()
+            let found = try await client.fetch(text)
+            var pdf: URL?
+            if let remote = found.pdfURL {
+                let data = try await client.download(remote)
+                pdf = try writePDF(data, name: found.record.citeKey)
+            }
+            let warning = pdf == nil ? PaperLookup.needsPDF : nil
+            matches = [BibliographyMatch(record: found.record, pdf: pdf, warning: warning)]
+            status = warning ?? "Ready to import \(found.record.title)."
+        } catch {
+            status = "The paper could not be fetched."
+        }
+    }
+
+    private func writePDF(_ data: Data, name: String) throws -> URL {
+        let safe = name.replacingOccurrences(of: "/", with: "_").replacingOccurrences(of: ":", with: "-")
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("\(safe).pdf")
+        try data.write(to: url, options: .atomic)
+        return url
     }
 
     private func loadZotero() async {

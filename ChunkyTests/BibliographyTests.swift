@@ -102,6 +102,7 @@ struct BibliographyTests {
         #expect(applied.metadata["venue"] == "Nature")
         #expect(applied.metadata["abstract"] == "A short abstract.")
         #expect(applied.metadata["cite_key"] == "lovelace2020")
+        #expect(applied.metadata["metadata_source"] == "bibtex")
         let settings = IsolatedSettings.make()
         let points = DocumentProcessor().buildPoints(
             chunks: [applied],
@@ -115,6 +116,84 @@ struct BibliographyTests {
         #expect(points[0].metadata["doi"] == "10.1000/xyz")
         #expect(points[0].metadata["venue"] == "Nature")
         #expect(points[0].metadata["cite_key"] == "lovelace2020")
+        #expect(points[0].metadata["metadata_source"] == "bibtex")
+    }
+
+    @Test func parsesDOIAndArXivIdentifiers() {
+        #expect(PaperIdentifierParser.parse("10.1000/xyz.") == .doi("10.1000/xyz"))
+        #expect(PaperIdentifierParser.parse("https://doi.org/10.5555/abc") == .doi("10.5555/abc"))
+        #expect(PaperIdentifierParser.parse("https://dx.doi.org/10.5555/abc") == .doi("10.5555/abc"))
+        #expect(PaperIdentifierParser.parse("arXiv:2101.00001v2") == .arxiv("2101.00001"))
+        #expect(PaperIdentifierParser.parse("https://arxiv.org/abs/2101.00001") == .arxiv("2101.00001"))
+        #expect(PaperIdentifierParser.parse("https://arxiv.org/pdf/2101.00001.pdf") == .arxiv("2101.00001"))
+        #expect(PaperIdentifierParser.parse("https://export.arxiv.org/abs/hep-th/9901001") == .arxiv("hep-th/9901001"))
+        #expect(PaperIdentifierParser.parse("not a paper") == nil)
+    }
+
+    @Test func doiFillsMetadataAndDownloadsOnlyAnOpenPDF() throws {
+        let closed = try json("""
+        {"message":{"title":["Confirmed"],"author":[{"given":"Ada","family":"Lovelace"}],"issued":{"date-parts":[[2021]]},"container-title":["Real Journal"],"DOI":"10.1000/xyz","abstract":"A short abstract.","link":[{"URL":"https://publisher.example/article","content-type":"text/html"}]}}
+        """)
+        let hidden = PaperLookup.result(identifier: .doi("10.1000/xyz"), payload: closed)
+        #expect(hidden.record.source == "crossref")
+        #expect(hidden.record.title == "Confirmed")
+        #expect(hidden.record.authors == ["Ada Lovelace"])
+        #expect(hidden.record.year == 2021)
+        #expect(hidden.record.venue == "Real Journal")
+        #expect(hidden.record.doi == "10.1000/xyz")
+        #expect(hidden.pdfURL == nil)
+        #expect(hidden.notice == PaperLookup.needsPDF)
+        let open = try json("""
+        {"message":{"title":["Confirmed"],"author":[{"given":"Ada","family":"Lovelace"}],"issued":{"date-parts":[[2021]]},"container-title":["Real Journal"],"DOI":"10.1000/xyz","link":[{"URL":"https://publisher.example/article","content-type":"text/html"},{"URL":"https://publisher.example/paper.pdf","content-type":"application/pdf"}]}}
+        """)
+        let downloaded = PaperLookup.result(identifier: .doi("10.1000/xyz"), payload: open)
+        #expect(downloaded.pdfURL?.absoluteString == "https://publisher.example/paper.pdf")
+        #expect(downloaded.notice == nil)
+        let request = CrossrefPaper.request(doi: "10.1000/xyz")
+        #expect(request.url?.absoluteString == "https://api.crossref.org/works/10.1000/xyz")
+    }
+
+    @Test func arxivCreatesMetadataAndAPDFLink() throws {
+        let atom = """
+        <feed><title>ArXiv Query</title>
+        <entry>
+          <title>Measured  effect</title>
+          <author><name>Ada Lovelace</name></author>
+          <author><name>Alan Turing</name></author>
+          <published>2021-03-04T00:00:00Z</published>
+          <summary>A short abstract.</summary>
+          <arxiv:doi>10.1000/xyz</arxiv:doi>
+          <arxiv:journal_ref>Real Journal</arxiv:journal_ref>
+        </entry>
+        </feed>
+        """
+        let found = try #require(PaperLookup.result(identifier: .arxiv("2101.00001"), atom: atom))
+        #expect(found.record.source == "arxiv")
+        #expect(found.record.citeKey == "arxiv:2101.00001")
+        #expect(found.record.title == "Measured effect")
+        #expect(found.record.authors == ["Ada Lovelace", "Alan Turing"])
+        #expect(found.record.year == 2021)
+        #expect(found.record.doi == "10.1000/xyz")
+        #expect(found.record.venue == "Real Journal")
+        #expect(found.record.abstract == "A short abstract.")
+        #expect(found.pdfURL == ArXivPaper.pdfURL(id: "2101.00001"))
+        #expect(found.notice == nil)
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString, isDirectory: true)
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let pdf = folder.appendingPathComponent("arxiv-2101.00001.pdf")
+        try Data("%PDF-1.1".utf8).write(to: pdf)
+        let match = BibliographyMatch(record: found.record, pdf: pdf, warning: nil)
+        let state = AppState()
+        state.importBibliography([match])
+        #expect(state.jobs.count == 1)
+        #expect(state.jobs[0].bibliography?.source == "arxiv")
+        #expect(state.jobs[0].bibliography?.title == "Measured effect")
+        state.importBibliography([BibliographyMatch(record: found.record, pdf: nil, warning: PaperLookup.needsPDF)])
+        #expect(state.jobs.count == 1)
+    }
+
+    private func json(_ text: String) throws -> [String: Any] {
+        try #require(JSONSerialization.jsonObject(with: Data(text.utf8)) as? [String: Any])
     }
 
     @MainActor
@@ -154,14 +233,39 @@ struct BibliographyTests {
         let directory = URL(fileURLWithPath: "/tmp/chunky-bibliography-screenshots", isDirectory: true)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         try data.write(to: directory.appendingPathComponent("bibliography-import.png"))
+        let doi = BibliographyMatch(
+            record: BibliographicMetadata(
+                citeKey: "10.1000/xyz",
+                title: "Confirmed",
+                authors: ["Ada Lovelace"],
+                year: 2021,
+                doi: "10.1000/xyz",
+                venue: "Real Journal",
+                abstract: nil,
+                source: "crossref",
+                pdfPath: nil
+            ),
+            pdf: nil,
+            warning: PaperLookup.needsPDF
+        )
+        let lookup = try BibliographyRenderer.png(
+            matches: [doi],
+            status: PaperLookup.needsPDF,
+            lookupText: "https://doi.org/10.1000/xyz"
+        )
+        try lookup.write(to: directory.appendingPathComponent("doi-arxiv-import.png"))
     }
 }
 
 @MainActor
 private enum BibliographyRenderer {
-    static func png(matches: [BibliographyMatch]) throws -> Data {
+    static func png(
+        matches: [BibliographyMatch],
+        status: String = "Zotero key is stored in the Keychain.",
+        lookupText: String = ""
+    ) throws -> Data {
         let size = NSSize(width: 640, height: 420)
-        let view = BibliographyImportScreen(matches: matches, status: "Zotero key is stored in the Keychain.")
+        let view = BibliographyImportScreen(matches: matches, status: status, lookupText: lookupText)
             .frame(width: size.width, height: size.height, alignment: .top)
             .background(Color(nsColor: .windowBackgroundColor))
             .environment(\.colorScheme, .light)

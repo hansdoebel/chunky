@@ -111,6 +111,7 @@ class JobSettings(BaseModel):
     bibliography_venue: str | None = None
     bibliography_abstract: str | None = None
     bibliography_cite_key: str | None = None
+    bibliography_source: str | None = None
 
     def public_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json", exclude={"qdrant_api_key"})

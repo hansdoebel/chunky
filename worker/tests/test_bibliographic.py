@@ -12,6 +12,7 @@ from bibliographic import (  # noqa: E402
     crossref_fields,
     enrich_chunks,
     extract_doi,
+    open_pdf_url,
     parse_metadata_json,
 )
 
@@ -143,3 +144,21 @@ def test_chat_payload_without_a_message_is_empty():
     assert _message_text([]) == ""
     assert _message_text({"choices": [None]}) == ""
     assert _message_text({"choices": [{"message": {"content": "ok"}}]}) == "ok"
+
+
+def test_open_pdf_url_requires_an_explicit_pdf_link():
+    html_only = {
+        "message": {
+            "link": [{"URL": "https://publisher.example/article", "content-type": "text/html"}]
+        }
+    }
+    pdf = {
+        "message": {
+            "link": [
+                {"URL": "https://publisher.example/article", "content-type": "text/html"},
+                {"URL": "https://publisher.example/paper.pdf", "content-type": "application/pdf"},
+            ]
+        }
+    }
+    assert open_pdf_url(html_only) is None
+    assert open_pdf_url(pdf) == "https://publisher.example/paper.pdf"

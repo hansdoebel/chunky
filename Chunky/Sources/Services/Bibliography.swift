@@ -339,6 +339,7 @@ extension ChunkingService.DocumentChunk {
         if let venue = record.venue, !venue.isEmpty { meta["venue"] = venue }
         if let abstract = record.abstract, !abstract.isEmpty { meta["abstract"] = abstract }
         if !record.citeKey.isEmpty { meta["cite_key"] = record.citeKey }
+        if !record.source.isEmpty { meta["metadata_source"] = record.source }
         return ChunkingService.DocumentChunk(
             id: id,
             text: text,

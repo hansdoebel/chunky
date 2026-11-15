@@ -370,6 +370,8 @@ def _payload(
         payload["abstract"] = settings.bibliography_abstract
     if settings.bibliography_cite_key:
         payload["cite_key"] = settings.bibliography_cite_key
+    if settings.bibliography_source:
+        payload["metadata_source"] = settings.bibliography_source
     return payload
 
 def dense_vector_name(info: Any) -> str | None:
