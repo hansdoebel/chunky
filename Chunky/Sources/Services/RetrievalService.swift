@@ -208,10 +208,10 @@ struct RetrievalRequest: Equatable, Sendable {
             "embedding_url": embeddingURL,
             "filters": filters.map { $0.jsonObject() },
         ]
-        if !qdrantURL.isEmpty {
+        if route == .worker && !qdrantURL.isEmpty {
             body["qdrant_url"] = qdrantURL
         }
-        if !qdrantAPIKey.isEmpty {
+        if route == .worker && !qdrantAPIKey.isEmpty {
             body["qdrant_api_key"] = qdrantAPIKey
         }
         return body
