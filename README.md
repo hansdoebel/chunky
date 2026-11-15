@@ -96,4 +96,6 @@ LocalPackages/    -- qdrant-swift (local gRPC client package)
 
 ## Resources
 
+- [Devbox over 10GbE](docs/devbox-setup.md)
+- [MacBook over Wi-Fi or Tailscale](docs/macbook-wifi-tailscale.md)
 - [Docling](https://www.docling.ai/)
