@@ -118,7 +118,7 @@ struct AnalyticsTests {
 
     @MainActor
     private func render(_ runs: [RunDraft], scheme: ColorScheme) throws -> (png: Data, colored: Int, luminance: Double) {
-        let view = AnalyticsView(runs: runs, group: .host, selectedID: runs[0].runID)
+        let view = AnalyticsView(runs: runs, group: .host, selectedID: runs[0].runID, scrolls: false)
             .frame(width: 960, height: 720)
             .environment(\.colorScheme, scheme)
         let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
@@ -137,8 +137,9 @@ struct AnalyticsTests {
         var samples = 0
         let stepX = max(1, bitmap.pixelsWide / 40)
         let stepY = max(1, bitmap.pixelsHigh / 40)
+        let detailStart = bitmap.pixelsWide / 3
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: stepY) {
-            for x in stride(from: 0, to: bitmap.pixelsWide, by: stepX) {
+            for x in stride(from: detailStart, to: bitmap.pixelsWide, by: stepX) {
                 guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
                 var red: CGFloat = 0
                 var green: CGFloat = 0

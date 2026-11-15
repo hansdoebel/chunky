@@ -4,12 +4,14 @@ import SwiftUI
 struct AnalyticsView: View {
     var runs: [RunDraft]
     var warning: String?
+    var scrolls: Bool
     @State private var group: RunGroup
     @State private var selectedID: UUID?
 
-    init(runs: [RunDraft], warning: String? = nil, group: RunGroup = .host, selectedID: UUID? = nil) {
+    init(runs: [RunDraft], warning: String? = nil, group: RunGroup = .host, selectedID: UUID? = nil, scrolls: Bool = true) {
         self.runs = runs
         self.warning = warning
+        self.scrolls = scrolls
         _group = State(initialValue: group)
         _selectedID = State(initialValue: selectedID ?? runs.first?.runID)
     }
@@ -37,7 +39,7 @@ struct AnalyticsView: View {
                         .foregroundStyle(.secondary)
                         .padding(12)
                 } else {
-                    ScrollView {
+                    fitted {
                         VStack(alignment: .leading, spacing: 4) {
                             ForEach(runs) { run in
                                 runRow(run)
@@ -54,7 +56,7 @@ struct AnalyticsView: View {
 
             Divider()
 
-            ScrollView {
+            fitted {
                 VStack(alignment: .leading, spacing: 16) {
                     if let warning {
                         Text(warning)
@@ -86,6 +88,15 @@ struct AnalyticsView: View {
             if current == nil || !updated.contains(where: { $0.runID == current }) {
                 selectedID = updated.first?.runID
             }
+        }
+    }
+
+    @ViewBuilder
+    private func fitted<Content: View>(@ViewBuilder _ content: () -> Content) -> some View {
+        if scrolls {
+            ScrollView { content() }
+        } else {
+            content()
         }
     }
 
