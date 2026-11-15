@@ -29,6 +29,8 @@ struct RetrievalEvalTests {
         #expect(RetrievalEvalMetrics.hit(relevant: second.relevant, retrieved: second.retrieved, k: 3) == 0)
         #expect(RetrievalEvalMetrics.recall(relevant: [], retrieved: first.retrieved, k: 3) == 0)
         #expect(RetrievalEvalMetrics.ndcg(relevant: [], retrieved: first.retrieved, k: 3) == 0)
+        let repeated = RetrievalEvalMetrics.ndcg(relevant: ["doc-9"], retrieved: ["doc-9", "doc-9"], k: 2)
+        #expect(abs(repeated - 1) < 0.0001)
 
         let score = RetrievalEvalMetrics.summarize([first, second], k: 3)
         #expect(abs(score.recallAtK - 0.5) < 0.0001)
@@ -135,6 +137,8 @@ struct RetrievalEvalTests {
         #expect(draft.score.latencyMs >= 0)
         #expect(draft.label.contains("hybrid"))
         #expect(draft.label.contains("rerank"))
+        #expect(draft.label.contains("k3"))
+        #expect(draft.setIdentity == RetrievalEvalSets.identity(name: set.name, queries: set.queries))
     }
 
     @Test func memoryStorePersistsEvalRunsAndComparesSetups() throws {
@@ -143,21 +147,27 @@ struct RetrievalEvalTests {
         let hybrid = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: true, reranker: false, recall: 0.6, latency: 50)
         let again = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: true, reranker: false, recall: 0.8, latency: 70)
         let reranked = sample(model: "qwen3-embedding", chunking: "256/32", hybrid: true, reranker: true, recall: 0.9, latency: 90)
+        let tighter = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: true, reranker: false, recall: 0.2, latency: 10, k: 1)
+        let otherSet = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: true, reranker: false, recall: 0.2, latency: 10, setIdentity: "other#ffff")
         try store.insert(dense)
         try store.insert(hybrid)
         try store.insert(again)
         try store.insert(reranked)
+        try store.insert(tighter)
+        try store.insert(otherSet)
 
         let loaded = try store.evalDrafts()
-        #expect(loaded.count == 4)
+        #expect(loaded.count == 6)
         #expect(loaded.map(\.score.recallAtK).contains(0.9))
         let compared = RetrievalEvalHistory.compare(loaded)
-        let fused = try #require(compared.first { $0.label.contains("hybrid") && $0.label.contains("no rerank") })
+        let fused = try #require(compared.first { $0.label.contains("· k10 ·") && $0.label.contains("hybrid") && $0.label.contains("no rerank") && $0.label.contains("finance#ab") })
         #expect(fused.runs == 2)
         #expect(abs(fused.recallAtK - 0.7) < 0.0001)
         #expect(abs(fused.latencyMs - 60) < 0.0001)
         #expect(compared.contains { $0.label.contains("256/32") && $0.label.contains("rerank") && !$0.label.contains("no rerank") })
         #expect(compared.contains { $0.label.contains("dense") })
+        #expect(compared.contains { $0.label.contains("· k1 ·") && $0.runs == 1 })
+        #expect(compared.contains { $0.label.contains("other#ffff") && $0.runs == 1 })
         #expect(try store.allDrafts().isEmpty)
     }
 
@@ -249,7 +259,9 @@ struct RetrievalEvalTests {
         hybrid: Bool,
         reranker: Bool,
         recall: Double,
-        latency: Double
+        latency: Double,
+        k: Int = 10,
+        setIdentity: String = "finance#ab"
     ) -> RetrievalEvalDraft {
         RetrievalEvalDraft(
             setName: "finance",
@@ -257,13 +269,14 @@ struct RetrievalEvalTests {
             chunking: chunking,
             hybrid: hybrid,
             reranker: reranker,
+            setIdentity: setIdentity,
             score: RetrievalEvalScore(
                 recallAtK: recall,
                 mrr: recall - 0.05,
                 ndcgAtK: recall - 0.02,
                 hitRate: min(1, recall + 0.1),
                 latencyMs: latency,
-                k: 10,
+                k: k,
                 queries: 4
             )
         )

@@ -282,9 +282,19 @@ struct RetrievalEvalScreen: View {
         defer { running = false }
         let config = currentConfig
         let set = RetrievalEvalSet(name: setName, queries: queries)
-        let index = appState.qdrantService.map { QdrantRetrievalIndex(service: $0) }
+        let usesWorker = appState.settings.processingHost == .devbox && appState.settings.devboxIngestTarget == .qdrantCloud
+        let index: (any RetrievalIndex)?
         do {
-            let draft = try await RetrievalEvalRunner().run(
+            if usesWorker {
+                index = nil
+            } else {
+                try await appState.ensureQdrantConnection()
+                guard let qdrant = appState.qdrantService else {
+                    throw RetrievalError.notConnected
+                }
+                index = QdrantRetrievalIndex(service: qdrant)
+            }
+            let draft = try await RetrievalEvalRunner(service: RetrievalService()).run(
                 set: set,
                 config: config,
                 settings: appState.settings,

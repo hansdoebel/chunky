@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import SwiftData
 
@@ -11,6 +12,7 @@ final class RetrievalEvalRecord {
     var hybrid: Bool
     var reranker: Bool
     var k: Int
+    var setIdentity: String
     var recallAtK: Double
     var mrr: Double
     var ndcgAtK: Double
@@ -27,6 +29,7 @@ final class RetrievalEvalRecord {
         hybrid = draft.hybrid
         reranker = draft.reranker
         k = draft.score.k
+        setIdentity = draft.setIdentity
         recallAtK = draft.score.recallAtK
         mrr = draft.score.mrr
         ndcgAtK = draft.score.ndcgAtK
@@ -117,22 +120,15 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
     var chunking: String
     var hybrid: Bool
     var reranker: Bool
+    var setIdentity: String
     var score: RetrievalEvalScore
 
     var id: UUID { runID }
 
     var label: String {
-        RetrievalEvalConfig(
-            collection: "",
-            embeddingBackend: "",
-            embeddingModel: embeddingModel,
-            chunking: chunking,
-            hybrid: hybrid,
-            reranker: reranker,
-            k: score.k,
-            rrfWeights: nil,
-            rerank: nil
-        ).label
+        let fusion = hybrid ? "hybrid" : "dense"
+        let rank = reranker ? "rerank" : "no rerank"
+        return "\(setIdentity) · k\(score.k) · \(embeddingModel) · \(chunking) · \(fusion) · \(rank)"
     }
 
     init(record: RetrievalEvalRecord) {
@@ -143,6 +139,7 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
         chunking = record.chunking
         hybrid = record.hybrid
         reranker = record.reranker
+        setIdentity = record.setIdentity
         score = RetrievalEvalScore(
             recallAtK: record.recallAtK,
             mrr: record.mrr,
@@ -162,6 +159,7 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
         chunking: String,
         hybrid: Bool,
         reranker: Bool,
+        setIdentity: String,
         score: RetrievalEvalScore
     ) {
         self.runID = runID
@@ -171,6 +169,7 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
         self.chunking = chunking
         self.hybrid = hybrid
         self.reranker = reranker
+        self.setIdentity = setIdentity
         self.score = score
     }
 }
@@ -237,7 +236,10 @@ enum RetrievalEvalMetrics {
     static func ndcg(relevant: [String], retrieved: [String], k: Int) -> Double {
         let gold = Set(relevant)
         guard !gold.isEmpty, k > 0 else { return 0 }
-        let gains = retrieved.prefix(k).map { gold.contains($0) ? 1.0 : 0.0 }
+        var seen: Set<String> = []
+        let gains = retrieved.prefix(k).map { id in
+            gold.contains(id) && seen.insert(id).inserted ? 1.0 : 0.0
+        }
         let ideal = Array(repeating: 1.0, count: min(k, gold.count))
         let idealScore = discounted(ideal)
         guard idealScore > 0 else { return 0 }
@@ -313,6 +315,16 @@ enum RetrievalEvalSets {
     static func decode(_ data: Data) throws -> RetrievalEvalSet {
         try JSONDecoder().decode(RetrievalEvalSet.self, from: data)
     }
+
+    static func identity(name: String, queries: [RetrievalEvalQuery]) -> String {
+        let body = queries.map { query in
+            let ids = query.relevantIDs.joined(separator: ",")
+            return "\(query.question)|\(ids)|\(query.sourceChunkID ?? "")"
+        }.joined(separator: "\n")
+        let digest = SHA256.hash(data: Data(body.utf8))
+        let hex = digest.prefix(4).map { String(format: "%02x", $0) }.joined()
+        return "\(name)#\(hex)"
+    }
 }
 
 struct TokenOverlapJudge: Sendable {
@@ -360,7 +372,7 @@ enum RetrievalEvalHistory {
 }
 
 struct RetrievalEvalRunner {
-    var service: RetrievalService
+    var service: RetrievalService = RetrievalService()
     var judge: TokenOverlapJudge = TokenOverlapJudge()
 
     func run(
@@ -403,6 +415,7 @@ struct RetrievalEvalRunner {
             chunking: config.chunking,
             hybrid: config.hybrid,
             reranker: config.reranker,
+            setIdentity: RetrievalEvalSets.identity(name: set.name, queries: set.queries),
             score: RetrievalEvalMetrics.summarize(rows, k: config.k)
         )
     }
