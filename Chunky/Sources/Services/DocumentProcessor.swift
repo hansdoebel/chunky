@@ -775,6 +775,7 @@ class DocumentProcessor: ObservableObject {
             if let venue = chunk.metadata["venue"], !venue.isEmpty { metadata["venue"] = venue }
             if let abstract = chunk.metadata["abstract"], !abstract.isEmpty { metadata["abstract"] = abstract }
             if let citeKey = chunk.metadata["cite_key"], !citeKey.isEmpty { metadata["cite_key"] = citeKey }
+            if let source = chunk.metadata["metadata_source"], !source.isEmpty { metadata["metadata_source"] = source }
             if settings.metadataIncludeDocumentId, let d = chunk.documentId { metadata["document_id"] = d }
             if settings.metadataIncludeURL, let u = chunk.url { metadata["url"] = u }
             if settings.metadataIncludeLanguage, let l = chunk.language { metadata["language"] = l }

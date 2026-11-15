@@ -92,6 +92,18 @@ def crossref_fields(payload: dict[str, Any]) -> dict[str, Any]:
     )
 
 
+def open_pdf_url(payload: dict[str, Any]) -> str | None:
+    message = payload.get("message") if isinstance(payload.get("message"), dict) else payload
+    for link in message.get("link") or []:
+        if not isinstance(link, dict):
+            continue
+        content = str(link.get("content-type") or "").split(";", 1)[0].strip().lower()
+        url = str(link.get("URL") or "").strip()
+        if content == "application/pdf" and url.lower().startswith("http"):
+            return url
+    return None
+
+
 def missing_required(fields: dict[str, Any]) -> bool:
     if not fields.get("doc_title"):
         return True

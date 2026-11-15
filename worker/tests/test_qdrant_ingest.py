@@ -120,6 +120,7 @@ def test_bibliography_metadata_wins_over_docling_fields():
         bibliography_venue="Nature",
         bibliography_abstract="A short abstract.",
         bibliography_cite_key="lovelace2020",
+        bibliography_source="bibtex",
     )
     points = build_points(
         [{"text": "Hello", "embedding_text": "Hello", "page": 1}],
@@ -139,6 +140,7 @@ def test_bibliography_metadata_wins_over_docling_fields():
     assert payload["venue"] == "Nature"
     assert payload["abstract"] == "A short abstract."
     assert payload["cite_key"] == "lovelace2020"
+    assert payload["metadata_source"] == "bibtex"
 
 
 def test_picture_and_table_payloads_keep_serialized_text():
