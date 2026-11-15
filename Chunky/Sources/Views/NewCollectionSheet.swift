@@ -48,7 +48,7 @@ struct NewCollectionSheet: View {
             LabeledContent("Vector size", value: vectorVerified ? "\(plan.vectorSize)" : "unverified")
             Text(probeMessage)
                 .font(.caption)
-                .foregroundStyle(vectorVerified ? .secondary : .orange)
+                .foregroundStyle(vectorVerified ? Color.secondary : Color.orange)
             Text(plan.vectorSizeHint)
                 .font(.caption)
                 .foregroundStyle(.secondary)
