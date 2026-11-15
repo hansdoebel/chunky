@@ -350,6 +350,8 @@ struct RetrievalRequest: Equatable, Sendable {
     var filters: [RetrievalFilter]
     var papersFirst: Bool = false
     var expandPapers: Bool = false
+    var expandSection: Bool = false
+    var sectionRatio: Double = SectionExpansion.defaultThreshold
     var rrfWeights: [Double]?
     var rerank: RerankConfig?
 
@@ -364,6 +366,8 @@ struct RetrievalRequest: Equatable, Sendable {
         filters: [RetrievalFilter] = [],
         papersFirst: Bool = false,
         expandPapers: Bool = false,
+        expandSection: Bool = false,
+        sectionRatio: Double = SectionExpansion.defaultThreshold,
         rrfWeights: [Double]? = nil,
         rerank: RerankConfig? = nil,
         settings: AppSettings
@@ -394,6 +398,8 @@ struct RetrievalRequest: Equatable, Sendable {
             filters: filters,
             papersFirst: papersFirst,
             expandPapers: expandPapers,
+            expandSection: expandSection,
+            sectionRatio: sectionRatio,
             rrfWeights: rrfWeights,
             rerank: rerank
         )
@@ -929,6 +935,11 @@ struct RetrievalService {
     var embedding: any RetrievalEmbedding
     var worker: any RetrievalWorker
     var reranker: any Reranker
+    var sectionSiblings: @Sendable ([RetrievalHit]) -> [SectionSibling] = { hits in
+        hits.map {
+            SectionSibling(id: $0.id, source: $0.source, headings: $0.headings, page: $0.page, pageEnd: $0.pageEnd, text: $0.text)
+        }
+    }
 
     init(
         embedding: any RetrievalEmbedding = LiveRetrievalEmbedding(),
@@ -966,7 +977,15 @@ struct RetrievalService {
             }
             page = try await searchWorker(request)
         }
-        return try await applyRerank(page, request: request)
+        var expanded = page
+        if request.expandSection {
+            expanded.hits = SectionExpansion.merge(
+                hits: expanded.hits,
+                siblings: sectionSiblings(expanded.hits),
+                threshold: request.sectionRatio
+            )
+        }
+        return try await applyRerank(expanded, request: request)
     }
 
     private func applyRerank(_ page: RetrievalPage, request: RetrievalRequest) async throws -> RetrievalPage {

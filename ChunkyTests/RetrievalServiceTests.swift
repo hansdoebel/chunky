@@ -132,6 +132,35 @@ struct RetrievalServiceTests {
         #expect((must?[1]["match"] as? [String: Any])?["text"] as? String == "Ada")
     }
 
+    @Test func expandSectionUsesTheSiblingRatio() async throws {
+        let index = FakeIndex(
+            vectorSize: 3,
+            hits: [SearchResult(id: "a", score: 0.8, text: "First.", source: "paper.pdf", page: 2, headings: ["Methods"], metadata: [:])]
+        )
+        var service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]), worker: FakeWorker())
+        service.sectionSiblings = { _ in
+            [
+                SectionSibling(id: "a", source: "paper.pdf", headings: ["Methods"], page: 2, pageEnd: 2, text: "First."),
+                SectionSibling(id: "b", source: "paper.pdf", headings: ["Methods"], page: 3, pageEnd: 3, text: "Second."),
+                SectionSibling(id: "c", source: "paper.pdf", headings: ["Methods"], page: 4, pageEnd: 4, text: "Third."),
+                SectionSibling(id: "d", source: "paper.pdf", headings: ["Methods"], page: 5, pageEnd: 5, text: "Fourth."),
+            ]
+        }
+        var request = localRequest()
+        request.expandSection = true
+        request.sectionRatio = 0.5
+        let kept = try await service.search(request, index: index)
+        #expect(kept.hits[0].text == "First.")
+        request.sectionRatio = 0.2
+        let merged = try await service.search(request, index: index)
+        #expect(merged.hits.count == 1)
+        #expect(merged.hits[0].source == "paper.pdf")
+        #expect(merged.hits[0].page == 2)
+        #expect(merged.hits[0].pageEnd == 5)
+        #expect(merged.hits[0].text.contains("Fourth."))
+        #expect(merged.hits[0].payload["chunk_ids"] == "a")
+    }
+
     @Test func papersFirstThenLoadsChunksFromThoseSources() async throws {
         let paper = SearchResult(id: "doc", score: 0.9, text: "Abstract", source: "paper.pdf", page: 1, headings: ["Abstract"], metadata: ["record_type": "document"])
         let chunk = SearchResult(id: "chunk", score: 0.4, text: "Body", source: "paper.pdf", page: 2, headings: ["Methods"], metadata: [:])
@@ -599,6 +628,8 @@ struct RetrievalScreenshotHost: View {
     @State private var heading = "Results"
     @State private var papersFirst = true
     @State private var expandPapers = true
+    @State private var expandSection = true
+    @State private var sectionRatio = "0.5"
     @State private var mode = RetrievalMode.hybrid.rawValue
     @State private var denseWeight = "0.7"
     @State private var lexicalWeight = "0.3"
@@ -630,6 +661,8 @@ struct RetrievalScreenshotHost: View {
             heading: $heading,
             papersFirst: $papersFirst,
             expandPapers: $expandPapers,
+            expandSection: $expandSection,
+            sectionRatio: $sectionRatio,
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,
