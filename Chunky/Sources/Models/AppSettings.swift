@@ -128,6 +128,9 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(maxParallelJobs, forKey: prefix + "maxParallelJobs") }
     }
 
+    @Published var processingHost: ProcessingHost {
+        didSet { defaults.set(processingHost.rawValue, forKey: prefix + "processingHost") }
+    }
     @Published var doclingModel: String {
         didSet { defaults.set(doclingModel, forKey: prefix + "doclingModel") }
     }
@@ -251,10 +254,14 @@ class AppSettings: ObservableObject {
         self.metadataIncludeYear = defaults.object(forKey: prefix + "metadataIncludeYear") as? Bool ?? true
         self.metadataIncludeLanguage = defaults.object(forKey: prefix + "metadataIncludeLanguage") as? Bool ?? true
 
+        self.processingHost = ProcessingHost(
+            rawValue: defaults.string(forKey: prefix + "processingHost") ?? ""
+        ) ?? .localMac
         self.doclingModel = defaults.string(forKey: prefix + "doclingModel") ?? DoclingModel.graniteDoclingMLX.rawValue
         self.layoutModel = defaults.string(forKey: prefix + "layoutModel") ?? LayoutModel.standard.rawValue
         self.doclingWorkers = defaults.object(forKey: prefix + "doclingWorkers") as? Int ?? 2
-        self.doclingAccelerator = defaults.string(forKey: prefix + "doclingAccelerator") ?? Accelerator.cpu.rawValue
+        self.doclingAccelerator = defaults.string(forKey: prefix + "doclingAccelerator")
+            ?? ProcessingHost.localMac.defaultAccelerator.rawValue
         self.doclingTimeout = defaults.object(forKey: prefix + "doclingTimeout") as? Int ?? 120
         self.doclingMaxPages = defaults.object(forKey: prefix + "doclingMaxPages") as? Int ?? 0
         self.maxTokensPerChunk = defaults.object(forKey: prefix + "maxTokensPerChunk") as? Int ?? 512

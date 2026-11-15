@@ -128,21 +128,27 @@ def _build_vlm_format_options(vlm_model, ollama_url):
 
     is_local_vlm = vlm_model in LOCAL_VLM_MODELS
     if is_local_vlm:
-        from docling.datamodel.vlm_model_specs import (
-            GRANITEDOCLING_MLX,
-            GRANITEDOCLING_TRANSFORMERS,
-            SMOLDOCLING_MLX,
-            SMOLDOCLING_TRANSFORMERS,
-        )
+        # Import only the requested spec so the worker never loads MLX.
+        if vlm_model == "granite-docling-transformers":
+            from docling.datamodel.vlm_model_specs import GRANITEDOCLING_TRANSFORMERS
 
-        local_vlm_specs = {
-            "smoldocling-mlx": SMOLDOCLING_MLX,
-            "smoldocling-transformers": SMOLDOCLING_TRANSFORMERS,
-            "granite-docling-mlx": GRANITEDOCLING_MLX,
-            "granite-docling-transformers": GRANITEDOCLING_TRANSFORMERS,
-        }
+            spec = GRANITEDOCLING_TRANSFORMERS
+        elif vlm_model == "smoldocling-transformers":
+            from docling.datamodel.vlm_model_specs import SMOLDOCLING_TRANSFORMERS
+
+            spec = SMOLDOCLING_TRANSFORMERS
+        elif vlm_model == "granite-docling-mlx":
+            from docling.datamodel.vlm_model_specs import GRANITEDOCLING_MLX
+
+            spec = GRANITEDOCLING_MLX
+        elif vlm_model == "smoldocling-mlx":
+            from docling.datamodel.vlm_model_specs import SMOLDOCLING_MLX
+
+            spec = SMOLDOCLING_MLX
+        else:
+            raise ValueError(f"Unknown local VLM model: {vlm_model}")
         pipeline_options = VlmPipelineOptions(
-            vlm_options=local_vlm_specs[vlm_model],
+            vlm_options=spec,
         )
     else:
         from docling.datamodel.pipeline_options_vlm_model import (
