@@ -1,6 +1,6 @@
 import Foundation
 
-enum MCPFraming {
+nonisolated enum MCPFraming {
     static func encode(_ object: [String: Any]) throws -> Data {
         let body = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
         let header = Data("Content-Length: \(body.count)\r\n\r\n".utf8)
@@ -51,7 +51,7 @@ enum MCPFraming {
     }
 }
 
-enum ChunkyMCPDispatch {
+nonisolated enum ChunkyMCPDispatch {
     static func handle(
         _ message: [String: Any],
         search: any ChunkySearchProviding,
@@ -244,7 +244,7 @@ enum ChunkyMCPDispatch {
     }
 }
 
-enum PiMCPConfig {
+nonisolated enum PiMCPConfig {
     static func json(command: String) -> [String: Any] {
         [
             "mcpServers": [
@@ -267,7 +267,7 @@ enum PiMCPConfig {
     }
 }
 
-enum ChunkyMCPMain {
+nonisolated enum ChunkyMCPMain {
     static func run() {
         let context = ChunkyMCPContext.load(defaults: .standard, secrets: KeychainSecretStore())
         let search = ChunkySearchBackend.make(context: context)

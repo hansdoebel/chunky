@@ -1,11 +1,11 @@
 import Foundation
 
-protocol ChunkySearchProviding: Sendable {
+nonisolated protocol ChunkySearchProviding: Sendable {
     func listCollections() async throws -> [String]
     func search(_ request: ChunkySearchRequest) async throws -> ChunkySearchPage
 }
 
-struct ChunkySearchFilter: Equatable, Sendable {
+nonisolated struct ChunkySearchFilter: Equatable, Sendable {
     var key: String
     var match: String?
     var gt: Double?
@@ -14,25 +14,25 @@ struct ChunkySearchFilter: Equatable, Sendable {
     var lte: Double?
 }
 
-struct ChunkySearchRequest: Equatable, Sendable {
+nonisolated struct ChunkySearchRequest: Equatable, Sendable {
     var query: String
     var collection: String
     var topK: Int
     var filters: [ChunkySearchFilter]
 }
 
-struct ChunkySearchHit: Equatable, Sendable {
+nonisolated struct ChunkySearchHit: Equatable, Sendable {
     var id: String
     var score: Double
     var payload: [String: String]
 }
 
-struct ChunkySearchPage: Equatable, Sendable {
+nonisolated struct ChunkySearchPage: Equatable, Sendable {
     var results: [ChunkySearchHit]
     var collection: String
 }
 
-enum ChunkySearchError: LocalizedError, Equatable {
+nonisolated enum ChunkySearchError: LocalizedError, Equatable {
     case unavailable
     case invalidArguments(String)
 
@@ -46,7 +46,7 @@ enum ChunkySearchError: LocalizedError, Equatable {
     }
 }
 
-struct ChunkyMCPContext: Equatable, Sendable {
+nonisolated struct ChunkyMCPContext: Equatable, Sendable {
     var qdrantURL: String
     var qdrantAPIKey: String
     var qdrantCloudURL: String
@@ -85,14 +85,14 @@ struct ChunkyMCPContext: Equatable, Sendable {
     }
 }
 
-enum ChunkySearchBackend {
+nonisolated enum ChunkySearchBackend {
     static func make(context: ChunkyMCPContext) -> any ChunkySearchProviding {
         _ = context
         return UnavailableChunkySearch()
     }
 }
 
-struct UnavailableChunkySearch: ChunkySearchProviding {
+nonisolated struct UnavailableChunkySearch: ChunkySearchProviding {
     func listCollections() async throws -> [String] {
         throw ChunkySearchError.unavailable
     }
