@@ -66,7 +66,7 @@ struct WatchedFoldersPane: View {
     }
 }
 
-enum WatchedFolderFiles {
+nonisolated enum WatchedFolderFiles {
     static func list(directory: URL) -> [URL] {
         guard let names = try? FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: [.contentModificationDateKey], options: [.skipsHiddenFiles]) else {
             return []

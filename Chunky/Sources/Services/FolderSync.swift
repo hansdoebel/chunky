@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-struct WatchedFolder: Codable, Equatable, Identifiable, Sendable {
+nonisolated struct WatchedFolder: Codable, Equatable, Identifiable, Sendable {
     var id: UUID
     var path: String
     var collection: String
@@ -17,7 +17,7 @@ struct WatchedFolder: Codable, Equatable, Identifiable, Sendable {
     }
 }
 
-struct WatchedFile: Equatable, Sendable {
+nonisolated struct WatchedFile: Equatable, Sendable {
     var path: String
     var contentHash: String
     var modified: Date
@@ -26,7 +26,7 @@ struct WatchedFile: Equatable, Sendable {
     var docID: String { doi.isEmpty ? contentHash : doi }
 }
 
-struct WatchedRecord: Codable, Equatable, Sendable {
+nonisolated struct WatchedRecord: Codable, Equatable, Sendable {
     var path: String
     var contentHash: String
     var settingsHash: String
@@ -35,14 +35,14 @@ struct WatchedRecord: Codable, Equatable, Sendable {
     var modified: Date
 }
 
-enum FolderSyncAction: Equatable, Sendable {
+nonisolated enum FolderSyncAction: Equatable, Sendable {
     case ingest(WatchedFile)
     case replace(WatchedFile, previousPointIDs: [String])
     case skip(WatchedFile)
     case delete(path: String, pointIDs: [String])
 }
 
-enum FolderSync {
+nonisolated enum FolderSync {
     static let documentExtensions: Set<String> = [
         "pdf", "docx", "pptx", "html", "htm", "md", "markdown", "txt", "json", "png", "jpg", "jpeg", "tif", "tiff",
     ]
@@ -130,7 +130,7 @@ enum FolderSync {
     }
 }
 
-enum FolderSyncApply {
+nonisolated enum FolderSyncApply {
     static func apply(
         _ actions: [FolderSyncAction],
         enqueue: (WatchedFile) -> Void,
@@ -152,7 +152,7 @@ enum FolderSyncApply {
     }
 }
 
-struct WatchedFolderIndex: Codable, Equatable, Sendable {
+nonisolated struct WatchedFolderIndex: Codable, Equatable, Sendable {
     var folders: [WatchedFolder]
     var records: [WatchedRecord]
 
