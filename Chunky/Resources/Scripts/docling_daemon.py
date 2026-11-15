@@ -73,6 +73,9 @@ def _get_converter(cmd):
         cmd.get("generate_images", False),
         cmd.get("picture_description_preset") or "",
         cmd.get("vlm_server_url") or "",
+        cmd.get("ocr_batch_size") or 0,
+        cmd.get("layout_batch_size") or 0,
+        cmd.get("table_batch_size") or 0,
     )
 
     if cache_key in _converter_cache:
@@ -108,6 +111,9 @@ def _get_converter(cmd):
             workers=cmd.get("workers", 2),
             picture_description_preset=cmd.get("picture_description_preset"),
             vlm_server_url=cmd.get("vlm_server_url"),
+            ocr_batch_size=cmd.get("ocr_batch_size") or 0,
+            layout_batch_size=cmd.get("layout_batch_size") or 0,
+            table_batch_size=cmd.get("table_batch_size") or 0,
         )
 
     input_format = cmd.get("input_format")

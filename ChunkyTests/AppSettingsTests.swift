@@ -44,7 +44,7 @@ struct AppSettingsTests {
 
         // Model should be a valid value
         #expect(!settings.doclingModel.isEmpty)
-        #expect(settings.doclingWorkers >= 1 && settings.doclingWorkers <= 6)
+        #expect(settings.doclingWorkers >= 1 && settings.doclingWorkers <= 16)
         #expect(settings.doclingTimeout >= 60 && settings.doclingTimeout <= 600)
         #expect(settings.doclingMaxPages >= 0)  // 0 means unlimited
         #expect(settings.maxTokensPerChunk >= 128 && settings.maxTokensPerChunk <= 2048)
@@ -110,10 +110,20 @@ struct AppSettingsTests {
     }
 
     @Test func doclingSettingsCanBeChanged() {
+        let defaults = UserDefaults.standard
+        let workersKey = "chunky.doclingWorkers"
+        let savedWorkers = defaults.object(forKey: workersKey)
+        defer {
+            if let savedWorkers {
+                defaults.set(savedWorkers, forKey: workersKey)
+            } else {
+                defaults.removeObject(forKey: workersKey)
+            }
+        }
         let settings = AppSettings()
 
-        settings.doclingWorkers = 4
-        #expect(settings.doclingWorkers == 4)
+        settings.doclingWorkers = 16
+        #expect(settings.doclingWorkers == 16)
 
         settings.doclingTimeout = 300
         #expect(settings.doclingTimeout == 300)

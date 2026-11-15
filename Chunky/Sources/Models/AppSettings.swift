@@ -140,6 +140,15 @@ class AppSettings: ObservableObject {
     @Published var doclingWorkers: Int {
         didSet { defaults.set(doclingWorkers, forKey: prefix + "doclingWorkers") }
     }
+    @Published var ocrBatchSize: Int {
+        didSet { defaults.set(ocrBatchSize, forKey: prefix + "ocrBatchSize") }
+    }
+    @Published var layoutBatchSize: Int {
+        didSet { defaults.set(layoutBatchSize, forKey: prefix + "layoutBatchSize") }
+    }
+    @Published var tableBatchSize: Int {
+        didSet { defaults.set(tableBatchSize, forKey: prefix + "tableBatchSize") }
+    }
     @Published var doclingAccelerator: String {
         didSet { defaults.set(doclingAccelerator, forKey: prefix + "doclingAccelerator") }
     }
@@ -307,7 +316,10 @@ class AppSettings: ObservableObject {
         ) ?? .localMac
         self.doclingModel = defaults.string(forKey: prefix + "doclingModel") ?? DoclingModel.graniteDoclingMLX.rawValue
         self.layoutModel = defaults.string(forKey: prefix + "layoutModel") ?? LayoutModel.standard.rawValue
-        self.doclingWorkers = defaults.object(forKey: prefix + "doclingWorkers") as? Int ?? 2
+        self.doclingWorkers = defaults.object(forKey: prefix + "doclingWorkers") as? Int ?? 8
+        self.ocrBatchSize = defaults.object(forKey: prefix + "ocrBatchSize") as? Int ?? 0
+        self.layoutBatchSize = defaults.object(forKey: prefix + "layoutBatchSize") as? Int ?? 0
+        self.tableBatchSize = defaults.object(forKey: prefix + "tableBatchSize") as? Int ?? 0
         self.doclingAccelerator = defaults.string(forKey: prefix + "doclingAccelerator")
             ?? ProcessingHost.localMac.defaultAccelerator.rawValue
         self.doclingTimeout = defaults.object(forKey: prefix + "doclingTimeout") as? Int ?? 120

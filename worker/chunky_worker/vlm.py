@@ -45,7 +45,7 @@ GRANITE_REPO_ID = "ibm-granite/granite-docling-258M"
 GRANITE_PRESET = "granite_docling"
 # Kept equal so Docling's page batch is never smaller than the API concurrency.
 # Raising both together is PER-77.
-GRANITE_CONCURRENCY = 4
+GRANITE_CONCURRENCY = 8
 VLM_ENGINES = {"vllm", "transformers"}
 
 

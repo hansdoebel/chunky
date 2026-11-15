@@ -59,7 +59,10 @@ class JobSettings(BaseModel):
     vlm_server_url: str = ""
     input_format: str | None = None
     layout_model: str = "default"
-    workers: int = 2
+    workers: int = 8
+    ocr_batch_size: int = 0
+    layout_batch_size: int = 0
+    table_batch_size: int = 0
     chunk: bool = True
     chunk_max_tokens: int = 512
     chunk_merge_peers: bool = True

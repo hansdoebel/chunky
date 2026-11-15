@@ -256,7 +256,18 @@ struct PreferencesView: View {
             Section {
                 Toggle("Daemon Mode", isOn: $appState.settings.useDaemonMode)
                 StepperRow(label: "Parallel Jobs", value: $appState.settings.maxParallelJobs, range: 1...4)
-                StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...12)
+                StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...16)
+                if appState.settings.processingHost == .localMac {
+                    Text("TableFormer stays on the CPU. Keep table batches small on this Mac.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
+                StepperRow(label: "OCR batch", value: $appState.settings.ocrBatchSize, range: 0...64)
+                StepperRow(label: "Layout batch", value: $appState.settings.layoutBatchSize, range: 0...64)
+                StepperRow(label: "Table batch", value: $appState.settings.tableBatchSize, range: 0...16)
+                Text("Zero uses the host default. The devbox uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
 
                 Picker("Accelerator", selection: $appState.settings.doclingAccelerator) {
                     ForEach(Accelerator.allCases, id: \.rawValue) { accel in

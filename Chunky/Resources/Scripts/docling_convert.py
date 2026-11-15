@@ -325,6 +325,10 @@ def _build_standard_format_options(
     chart_vllm_url=None,
     picture_description_preset=None,
     vlm_server_url=None,
+    vlm_resident=False,
+    ocr_batch_size=0,
+    layout_batch_size=0,
+    table_batch_size=0,
 ):
     from docling.datamodel.accelerator_options import AcceleratorOptions
     from docling.datamodel.base_models import InputFormat
@@ -340,10 +344,29 @@ def _build_standard_format_options(
         num_threads=workers,
     )
 
-    pipeline_options = PdfPipelineOptions(
+    from presets import batch_plan
+
+    batches = batch_plan(
+        host=chart_host,
+        vlm_resident=vlm_resident,
+        workers=workers,
+        ocr_batch_size=ocr_batch_size,
+        layout_batch_size=layout_batch_size,
+        table_batch_size=table_batch_size,
+    )
+    if batches["pipeline"] == "threaded":
+        from docling.datamodel.pipeline_options import ThreadedPdfPipelineOptions
+
+        options_cls = ThreadedPdfPipelineOptions
+    else:
+        options_cls = PdfPipelineOptions
+    pipeline_options = options_cls(
         accelerator_options=accel_options,
         generate_picture_images=generate_images,
     )
+    for name in ("ocr_batch_size", "layout_batch_size", "table_batch_size"):
+        if hasattr(pipeline_options, name):
+            setattr(pipeline_options, name, batches[name])
     pipeline_options.do_ocr = enable_ocr
 
     if enable_ocr and ocr_language:
@@ -542,6 +565,10 @@ def convert_document(
     chart_vllm_url: str | None = None,
     picture_description_preset: str | None = None,
     vlm_server_url: str | None = None,
+    vlm_resident: bool = False,
+    ocr_batch_size: int = 0,
+    layout_batch_size: int = 0,
+    table_batch_size: int = 0,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -625,6 +652,10 @@ def convert_document(
                 chart_vllm_url=chart_vllm_url,
                 picture_description_preset=picture_description_preset,
                 vlm_server_url=vlm_server_url,
+                vlm_resident=vlm_resident,
+                ocr_batch_size=ocr_batch_size,
+                layout_batch_size=layout_batch_size,
+                table_batch_size=table_batch_size,
             )
 
         if input_format:
@@ -929,6 +960,9 @@ def main():
         default=2,
         help="Number of worker threads (default: 2)",
     )
+    parser.add_argument("--ocr-batch-size", type=int, default=0, help="Override the OCR batch. 0 keeps the host default.")
+    parser.add_argument("--layout-batch-size", type=int, default=0, help="Override the layout batch. 0 keeps the host default.")
+    parser.add_argument("--table-batch-size", type=int, default=0, help="Override the table batch. 0 keeps the host default.")
 
     args = parser.parse_args()
 
@@ -958,6 +992,9 @@ def main():
         extract_schema=args.extract_schema,
         layout_model=args.layout_model,
         workers=args.workers,
+        ocr_batch_size=args.ocr_batch_size,
+        layout_batch_size=args.layout_batch_size,
+        table_batch_size=args.table_batch_size,
         chunk=args.chunk,
         chunk_max_tokens=args.chunk_max_tokens,
         chunk_merge_peers=args.chunk_merge_peers,
