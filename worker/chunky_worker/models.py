@@ -55,6 +55,8 @@ class JobSettings(BaseModel):
     do_chart_extraction: bool = False
     do_picture_description: bool = False
     do_picture_classification: bool = False
+    picture_description_preset: str = ""
+    vlm_server_url: str = ""
     input_format: str | None = None
     layout_model: str = "default"
     workers: int = 2

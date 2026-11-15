@@ -126,6 +126,8 @@ actor DoclingService {
         var doChartExtraction: Bool = false
         var doPictureDescription: Bool = false
         var doPictureClassification: Bool = false
+        var pictureDescriptionPreset: String = ""
+        var vlmServerURL: String = ""
         var inputFormat: String?
         var extractionSchemaPath: String?
         var layoutModel: String = "default"
@@ -383,6 +385,12 @@ actor DoclingService {
         if options.doChartExtraction { cmd["do_chart_extraction"] = true }
         if options.doPictureDescription { cmd["do_picture_description"] = true }
         if options.doPictureClassification { cmd["do_picture_classification"] = true }
+        if !options.pictureDescriptionPreset.isEmpty {
+            cmd["picture_description_preset"] = options.pictureDescriptionPreset
+        }
+        if !options.vlmServerURL.isEmpty {
+            cmd["vlm_server_url"] = options.vlmServerURL
+        }
         if let inputFormat = options.inputFormat { cmd["input_format"] = inputFormat }
         if options.layoutModel != "default" { cmd["layout_model"] = options.layoutModel }
         if let schemaPath = options.extractionSchemaPath { cmd["extract_schema"] = schemaPath }
@@ -544,6 +552,12 @@ actor DoclingService {
         if options.doChartExtraction { arguments.append("--do-chart-extraction") }
         if options.doPictureDescription { arguments.append("--do-picture-description") }
         if options.doPictureClassification { arguments.append("--do-picture-classification") }
+        if !options.pictureDescriptionPreset.isEmpty {
+            arguments.append(contentsOf: ["--picture-description-preset", options.pictureDescriptionPreset])
+        }
+        if !options.vlmServerURL.isEmpty {
+            arguments.append(contentsOf: ["--vlm-server-url", options.vlmServerURL])
+        }
 
         if let inputFormat = options.inputFormat {
             arguments.append(contentsOf: ["--input-format", inputFormat])

@@ -71,6 +71,8 @@ def _get_converter(cmd):
         cmd.get("do_picture_description", False),
         cmd.get("do_picture_classification", False),
         cmd.get("generate_images", False),
+        cmd.get("picture_description_preset") or "",
+        cmd.get("vlm_server_url") or "",
     )
 
     if cache_key in _converter_cache:
@@ -86,6 +88,8 @@ def _get_converter(cmd):
             do_picture_description=cmd.get("do_picture_description", False),
             do_picture_classification=cmd.get("do_picture_classification", False),
             generate_images=cmd.get("generate_images", False),
+            picture_description_preset=cmd.get("picture_description_preset"),
+            vlm_server_url=cmd.get("vlm_server_url"),
         )
     else:
         format_options = _build_standard_format_options(
@@ -102,6 +106,8 @@ def _get_converter(cmd):
             do_picture_classification=cmd.get("do_picture_classification", False),
             layout_model=cmd.get("layout_model", "default"),
             workers=cmd.get("workers", 2),
+            picture_description_preset=cmd.get("picture_description_preset"),
+            vlm_server_url=cmd.get("vlm_server_url"),
         )
 
     input_format = cmd.get("input_format")

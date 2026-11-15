@@ -193,6 +193,22 @@ class AppSettings: ObservableObject {
     @Published var doPictureClassification: Bool {
         didSet { defaults.set(doPictureClassification, forKey: prefix + "doPictureClassification") }
     }
+    @Published var pictureDescriptionPreset: String {
+        didSet { defaults.set(pictureDescriptionPreset, forKey: prefix + "pictureDescriptionPreset") }
+    }
+    @Published var vlmServerURL: String {
+        didSet { defaults.set(vlmServerURL, forKey: prefix + "vlmServerURL") }
+    }
+    @Published var qdrantProfile: QdrantProfile {
+        didSet { defaults.set(qdrantProfile.rawValue, forKey: prefix + "qdrantProfile") }
+    }
+
+    var resolvedPictureDescriptionPreset: String {
+        if pictureDescriptionPreset.isEmpty {
+            return PictureDescriptionPreset.hostDefault(processingHost).rawValue
+        }
+        return pictureDescriptionPreset
+    }
 
     @Published var doStructuredExtraction: Bool {
         didSet { defaults.set(doStructuredExtraction, forKey: prefix + "doStructuredExtraction") }
@@ -312,6 +328,11 @@ class AppSettings: ObservableObject {
         self.doChartExtraction = defaults.object(forKey: prefix + "doChartExtraction") as? Bool ?? false
         self.doPictureDescription = defaults.object(forKey: prefix + "doPictureDescription") as? Bool ?? false
         self.doPictureClassification = defaults.object(forKey: prefix + "doPictureClassification") as? Bool ?? false
+        self.pictureDescriptionPreset = defaults.string(forKey: prefix + "pictureDescriptionPreset") ?? ""
+        self.vlmServerURL = defaults.string(forKey: prefix + "vlmServerURL") ?? ""
+        self.qdrantProfile = QdrantProfile(
+            rawValue: defaults.string(forKey: prefix + "qdrantProfile") ?? ""
+        ) ?? .standard
 
         self.doStructuredExtraction = defaults.object(forKey: prefix + "doStructuredExtraction") as? Bool ?? false
         self.extractionSchemaPath = defaults.string(forKey: prefix + "extractionSchemaPath") ?? ""

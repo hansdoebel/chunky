@@ -332,6 +332,23 @@ struct PreferencesView: View {
                 Toggle("Code Enrichment", isOn: $appState.settings.doCodeEnrichment)
                 Toggle("Chart Extraction", isOn: $appState.settings.doChartExtraction)
                 Toggle("Picture Description", isOn: $appState.settings.doPictureDescription)
+                if appState.settings.doPictureDescription {
+                    Picker("Description model", selection: $appState.settings.pictureDescriptionPreset) {
+                        Text("Host default").tag("")
+                        ForEach(PictureDescriptionPreset.allCases) { preset in
+                            Text(preset.displayName).tag(preset.rawValue)
+                        }
+                    }
+                    TextField(
+                        "VLM server URL",
+                        text: $appState.settings.vlmServerURL,
+                        prompt: Text("http://127.0.0.1:8001")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    Text("Used by the API preset. This is not the embedding Ollama URL.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                }
                 Toggle("Picture Classification", isOn: $appState.settings.doPictureClassification)
                 Toggle("Text Cleanup", isOn: $appState.settings.doTextCleanup)
             } header: {
@@ -494,6 +511,20 @@ struct PreferencesView: View {
     private var qdrantTab: some View {
         Form {
             Section {
+                Picker("Profile", selection: $appState.settings.qdrantProfile) {
+                    ForEach(QdrantProfile.allCases) { profile in
+                        Text(profile.displayName).tag(profile)
+                    }
+                }
+                .onChange(of: appState.settings.qdrantProfile) { _, profile in
+                    if profile == .quality {
+                        appState.settings.doPictureDescription = true
+                        appState.settings.doPictureClassification = true
+                    }
+                }
+                Text("Quality turns on picture description and classification.")
+                    .font(.caption)
+                    .foregroundColor(.secondary)
                 Picker("Devbox ingest", selection: $appState.settings.devboxIngestTarget) {
                     ForEach(DevboxIngestTarget.allCases) { target in
                         Text(target.rawValue).tag(target)
