@@ -140,31 +140,38 @@ nonisolated struct LiveChunkyRetrieval: ChunkyRetrievalCalling {
     func search(_ request: RetrievalRequest) async throws -> RetrievalPage {
         let index: (any RetrievalIndex)?
         if request.route == .localQdrant {
-            let service = QdrantService()
             let key = request.qdrantAPIKey.isEmpty ? apiKey : request.qdrantAPIKey
-            try await service.configure(url: request.qdrantURL, apiKey: key.isEmpty ? nil : key)
-            try await service.connect(timeout: 30)
-            index = QdrantRetrievalIndex(service: service)
+            index = try await Self.localIndex(url: request.qdrantURL, apiKey: key)
         } else {
             index = nil
         }
-        return try await RetrievalService().search(request, index: index)
+        let service = await MainActor.run { RetrievalService() }
+        return try await service.search(request, index: index)
     }
 
     func listCollections(url: String, apiKey: String) async throws -> [String] {
-        let service = QdrantService()
+        let service = await MainActor.run { QdrantService() }
         try await service.configure(url: url, apiKey: apiKey.isEmpty ? nil : apiKey)
         try await service.connect(timeout: 30)
         return try await service.listCollections()
     }
+
+    private static func localIndex(url: String, apiKey: String) async throws -> any RetrievalIndex {
+        let service = await MainActor.run { QdrantService() }
+        try await service.configure(url: url, apiKey: apiKey.isEmpty ? nil : apiKey)
+        try await service.connect(timeout: 30)
+        return await MainActor.run { QdrantRetrievalIndex(service: service) }
+    }
 }
 
 nonisolated enum ChunkySearchBackend {
-    static func make(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) -> any ChunkySearchProviding {
-        let settings = AppSettings(defaults: defaults, secrets: secrets)
-        return RetrievalServiceSearch(
-            settings: settings,
-            retrieval: LiveChunkyRetrieval(apiKey: settings.qdrantAPIKey)
-        )
+    static func make(defaults: UserDefaults = .standard, secrets: SettingsSecretStore) async -> any ChunkySearchProviding {
+        await MainActor.run {
+            let settings = AppSettings(defaults: defaults, secrets: secrets)
+            return RetrievalServiceSearch(
+                settings: settings,
+                retrieval: LiveChunkyRetrieval(apiKey: settings.qdrantAPIKey)
+            )
+        }
     }
 }
