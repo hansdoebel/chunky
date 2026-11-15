@@ -83,6 +83,8 @@ def test_cached_model_is_available_and_download_stays_local(tmp_settings):
             [{"repo_id": "ibm-granite/granite-docling-258M", "revision": "rev1", "size": 9}],
             None,
         ),
+        model_server=lambda: ["ds4sd/SmolDocling-256M-preview"],
+        ollama_tags=lambda: ([{"name": "qwen3-embedding:latest", "size": 4096, "digest": "abc", "parameter_size": "0.6B", "quantization": "Q8_0"}], None),
         downloader=fake_download,
     )
     with TestClient(app) as open_client:
@@ -92,8 +94,16 @@ def test_cached_model_is_available_and_download_stays_local(tmp_settings):
         granite = next(item for item in client.get("/v1/models").json()["vlm"] if item["name"] == "granite-docling-transformers")
         assert granite["available"] is True
         assert granite["revision"] == "rev1"
+        assert granite["engine"] == "vllm"
+        names = {item["name"] for item in client.get("/v1/models").json()["installed"]}
+        assert "qwen3-embedding:latest" in names
+        assert "ibm-granite/granite-docling-258M" in names
         started = client.post("/v1/models/download", json={"repo_id": "ibm-granite/granite-docling-258M"})
         assert started.status_code == 202
+        assert started.json()["kind"] == "huggingface"
+        ollama = client.post("/v1/models/download", json={"repo_id": "qwen3-embedding"})
+        assert ollama.status_code == 202
+        assert ollama.json()["kind"] == "ollama"
         job_id = started.json()["id"]
         record = None
         for _ in range(50):

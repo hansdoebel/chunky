@@ -2,13 +2,14 @@ import SwiftUI
 
 struct RecommendedModelsSection: View {
     var host: ProcessingHost
+    var installed: [ManagedModel]
     var downloading: Set<String>
     var statusMessage: String
     var onDownload: (String) -> Void
 
     private var models: [ManagedModel] {
         let listed = ModelCatalog.visible(ModelCatalog.recommended(host: host), host: host)
-        return ModelCatalog.marking(listed, installed: [], downloading: downloading)
+        return ModelCatalog.marking(listed, inventory: installed, downloading: downloading)
     }
 
     var body: some View {

@@ -14,7 +14,15 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from chunky_worker.auth import require_bearer
 from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
 from chunky_worker.jobs import TERMINAL, JobRunner, JobStore
-from chunky_worker.model_catalog import DownloadManager, recommended, scan_hf_cache, vlm_report
+from chunky_worker.model_catalog import (
+    DownloadBusy,
+    DownloadManager,
+    fetch_ollama_tags,
+    fetch_vllm_models,
+    recommended,
+    scan_hf_cache,
+    vlm_report,
+)
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
@@ -49,6 +57,8 @@ def create_app(
     store: JobStore | None = None,
     ingestor=None,
     model_cache=None,
+    model_server=None,
+    ollama_tags=None,
     downloader=None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
@@ -69,7 +79,7 @@ def create_app(
     )
     store = store or JobStore()
     runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
-    downloads = DownloadManager(downloader)
+    downloads = DownloadManager(downloader, ollama_url=settings.ollama_url)
 
     app = FastAPI(title="Chunky worker", version="0.1.0")
     app.state.settings = settings
@@ -119,11 +129,31 @@ def create_app(
             cache_rows, cache_error = scan_hf_cache()
         else:
             cache_rows, cache_error = model_cache()
+        if model_server is None:
+            server_models = fetch_vllm_models(settings.vllm_url) if settings.vlm_engine == "vllm" else []
+        else:
+            server_models = model_server()
+        if ollama_tags is None:
+            ollama_rows, ollama_error = fetch_ollama_tags(settings.ollama_url)
+        else:
+            ollama_rows, ollama_error = ollama_tags()
+        vlm = vlm_report(cache_rows, server_models, granite_engine=settings.vlm_engine)
+        installed = [
+            {"name": row["name"], "size": row["size"], "source": "ollama"}
+            for row in ollama_rows
+        ]
+        for item in vlm:
+            if item["available"] and item["repo_id"]:
+                installed.append(
+                    {"name": item["repo_id"], "size": item["size"], "source": "huggingface"}
+                )
         return {
             "embeddings": embedding_models,
-            "vlm": vlm_report(cache_rows),
+            "vlm": vlm,
             "embeddings_error": error,
             "cache_error": cache_error,
+            "ollama_error": ollama_error,
+            "installed": installed,
             "recommended": {
                 "devbox": recommended("devbox"),
                 "mac": recommended("mac"),
@@ -135,9 +165,18 @@ def create_app(
         repo_id = (body.get("repo_id") or "").strip()
         if not repo_id:
             raise HTTPException(status_code=400, detail="repo_id is required")
+        kind = (body.get("kind") or "").strip().lower()
+        if not kind:
+            kind = "ollama" if "/" not in repo_id else "huggingface"
+        if kind not in {"ollama", "huggingface"}:
+            raise HTTPException(status_code=400, detail="kind must be ollama or huggingface")
         revision = body.get("revision")
-        job_id = downloads.start(repo_id, revision)
-        return {"id": job_id, "status": "running", "repo_id": repo_id}
+        try:
+            job_id = downloads.start(repo_id, revision, kind=kind)
+        except DownloadBusy as exc:
+            raise HTTPException(status_code=429, detail=str(exc)) from exc
+        record = downloads.get(job_id) or {}
+        return {"id": job_id, "status": record.get("status", "running"), "repo_id": repo_id, "kind": kind}
 
     @api.get("/v1/models/download/{job_id}")
     def download_status(job_id: str) -> dict:

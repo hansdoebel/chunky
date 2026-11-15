@@ -143,6 +143,8 @@ def client(tmp_settings, pipeline, embeddings):
         embeddings=embeddings,
         store=JobStore(),
         model_cache=lambda: ([], None),
+        model_server=lambda: [],
+        ollama_tags=lambda: ([], None),
     )
     with TestClient(app, headers=auth_headers(tmp_settings.token or "")) as test_client:
         yield test_client

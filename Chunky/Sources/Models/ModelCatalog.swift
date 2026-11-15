@@ -13,7 +13,10 @@ struct ManagedModel: Equatable, Identifiable {
     var digest: String
     var quantization: String
     var parameterSize: String
+    var source: String
     var mlx: Bool
+
+    var downloadKind: String { source == "ollama" ? "ollama" : "huggingface" }
 
     var id: String { name }
 
@@ -47,6 +50,7 @@ enum ModelCatalog {
                 digest: item["digest"] as? String ?? "",
                 quantization: details["quantization_level"] as? String ?? "",
                 parameterSize: details["parameter_size"] as? String ?? "",
+                source: "ollama",
                 mlx: name.hasSuffix("-mlx")
             )
         }
@@ -86,22 +90,52 @@ enum ModelCatalog {
                 digest: "",
                 quantization: "",
                 parameterSize: "",
+                source: name.contains("/") ? "huggingface" : "ollama",
                 mlx: name.hasSuffix("-mlx")
             )
         }
     }
 
-    static func marking(_ models: [ManagedModel], installed: Set<String>, downloading: Set<String> = []) -> [ManagedModel] {
+    static func marking(_ models: [ManagedModel], inventory: [ManagedModel] = [], downloading: Set<String> = []) -> [ManagedModel] {
         models.map { model in
             var copy = model
             if downloading.contains(model.name) {
                 copy.state = .downloading
-            } else if installed.contains(model.name) {
+            } else if let found = inventory.first(where: { matches($0, model) }) {
                 copy.state = .installed
+                copy.size = found.size ?? copy.size
+                copy.digest = found.digest
+                copy.quantization = found.quantization
+                copy.parameterSize = found.parameterSize
             } else {
                 copy.state = .missing
             }
             return copy
+        }
+    }
+
+    static func matches(_ installed: ManagedModel, _ wanted: ManagedModel) -> Bool {
+        if installed.name == wanted.name { return true }
+        let base = installed.name.split(separator: ":").first.map(String.init) ?? installed.name
+        return base == wanted.name
+    }
+
+    static func installedModels(fromWorker data: Data) throws -> [ManagedModel] {
+        guard let object = try JSONSerialization.jsonObject(with: data) as? [String: Any] else { return [] }
+        let rows = object["installed"] as? [[String: Any]] ?? []
+        return rows.compactMap { row in
+            let name = row["name"] as? String ?? ""
+            guard !name.isEmpty else { return nil }
+            return ManagedModel(
+                name: name,
+                state: .installed,
+                size: (row["size"] as? NSNumber)?.int64Value,
+                digest: "",
+                quantization: "",
+                parameterSize: "",
+                source: row["source"] as? String ?? "huggingface",
+                mlx: name.hasSuffix("-mlx")
+            )
         }
     }
 

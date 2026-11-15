@@ -16,6 +16,9 @@ def _app(settings):
         pipeline=FakePipeline(),
         embeddings=FakeEmbeddings(),
         store=JobStore(),
+        model_cache=lambda: ([], None),
+        model_server=lambda: [],
+        ollama_tags=lambda: ([], None),
     )
 
 

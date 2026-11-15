@@ -21,6 +21,7 @@ struct PreferencesView: View {
     @State private var devboxStatusMessage: String = ""
     @State private var devboxStatus: ConnectionStatus = .unknown
     @State private var downloadingModels: Set<String> = []
+    @State private var installedModels: [ManagedModel] = []
     @State private var modelStatusMessage = ""
     @State private var doclingVersion: String = "Unknown"
     @State private var latestDoclingVersion: String?
@@ -207,15 +208,45 @@ struct PreferencesView: View {
         .padding()
     }
 
+    private func refreshInstalledModels() async {
+        if appState.settings.processingHost == .devbox {
+            do {
+                installedModels = try await DevboxWorkerService().fetchInstalledModels(
+                    baseURL: appState.settings.devboxWorkerURL,
+                    token: appState.settings.workerToken
+                )
+            } catch {
+                modelStatusMessage = error.localizedDescription
+            }
+            return
+        }
+        do {
+            let service = try OllamaService(baseURL: appState.settings.ollamaURL)
+            let data = try await service.tagsData()
+            installedModels = try ModelCatalog.ollamaModels(from: data)
+        } catch {
+            installedModels = []
+        }
+    }
+
     private func downloadModel(_ repoID: String) async {
         downloadingModels.insert(repoID)
+        let kind = repoID.contains("/") ? "huggingface" : "ollama"
         do {
             let id = try await DevboxWorkerService().startModelDownload(
                 baseURL: appState.settings.devboxWorkerURL,
                 token: appState.settings.workerToken,
-                repoID: repoID
+                repoID: repoID,
+                kind: kind
             )
-            modelStatusMessage = id.isEmpty ? "Download started for \(repoID)." : "Download \(id) started for \(repoID)."
+            let status = try await DevboxWorkerService().waitForModelDownload(
+                baseURL: appState.settings.devboxWorkerURL,
+                token: appState.settings.workerToken,
+                jobID: id
+            )
+            downloadingModels.remove(repoID)
+            modelStatusMessage = "Download \(status) for \(repoID)."
+            await refreshInstalledModels()
         } catch {
             downloadingModels.remove(repoID)
             modelStatusMessage = error.localizedDescription
@@ -271,6 +302,7 @@ struct PreferencesView: View {
 
                 RecommendedModelsSection(
                     host: appState.settings.processingHost,
+                    installed: installedModels,
                     downloading: downloadingModels,
                     statusMessage: modelStatusMessage,
                     onDownload: { repo in Task { await downloadModel(repo) } }
@@ -482,6 +514,9 @@ struct PreferencesView: View {
             } header: {
                 Text("Metadata to Include")
             }
+        }
+        .task(id: appState.settings.processingHost) {
+            await refreshInstalledModels()
         }
         .formStyle(.grouped)
         .padding()

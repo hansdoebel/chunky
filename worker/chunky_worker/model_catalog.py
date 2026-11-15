@@ -126,6 +126,7 @@ def scan_hf_cache() -> tuple[list[dict[str, Any]], str | None]:
 def vlm_report(
     cache_rows: list[dict[str, Any]],
     server_models: list[str] | None = None,
+    granite_engine: str = "transformers",
 ) -> list[dict[str, Any]]:
     cached = {row["repo_id"]: row for row in cache_rows}
     served = set(server_models or [])
@@ -147,11 +148,14 @@ def vlm_report(
         row = cached.get(spec["repo_id"])
         served_here = name in served or spec["repo_id"] in served
         available = row is not None or served_here
+        engine = spec["engine"]
+        if name == "granite-docling-transformers" and granite_engine:
+            engine = granite_engine
         report.append(
             {
                 "name": name,
                 "available": available,
-                "engine": spec["engine"],
+                "engine": engine,
                 "repo_id": spec["repo_id"],
                 "revision": (row or {}).get("revision") or None,
                 "size": (row or {}).get("size"),
@@ -170,44 +174,134 @@ def recommended(host: str) -> list[str]:
 ProgressCallback = Callable[[float | None, str], None]
 
 
-def snapshot_download_runner(repo_id: str, revision: str | None, on_progress: ProgressCallback, cancel_event) -> None:
-    if cancel_event.is_set():
-        return
-    on_progress(0, "starting")
+def fetch_vllm_models(url: str) -> list[str]:
+    if not url:
+        return []
     try:
-        from huggingface_hub import snapshot_download
+        import httpx
+    except ImportError:
+        return []
+    try:
+        response = httpx.get(f"{url.rstrip('/')}/v1/models", timeout=0.5)
+        response.raise_for_status()
+        return parse_openai_models(response.json())
+    except Exception:
+        return []
+
+
+def fetch_ollama_tags(url: str) -> tuple[list[dict[str, Any]], str | None]:
+    if not url:
+        return [], "ollama url is empty"
+    try:
+        import httpx
     except ImportError as exc:
-        raise RuntimeError("huggingface_hub is not installed") from exc
+        return [], str(exc)
+    try:
+        response = httpx.get(f"{url.rstrip('/')}/api/tags", timeout=0.5)
+        response.raise_for_status()
+        return parse_ollama_tags(response.json()), None
+    except Exception as exc:
+        return [], str(exc)
+
+
+def ollama_pull_runner(base_url: str, model: str, on_progress: ProgressCallback, cancel_event) -> None:
+    import httpx
+
+    on_progress(None, "pulling")
+    with httpx.stream(
+        "POST",
+        f"{base_url.rstrip('/')}/api/pull",
+        json={"name": model, "stream": True},
+        timeout=None,
+    ) as response:
+        response.raise_for_status()
+        for line in response.iter_lines():
+            if cancel_event.is_set():
+                return
+            event = parse_pull_event(line)
+            if event is None:
+                continue
+            on_progress(event["percent"], event["status"] or "pulling")
+
+
+def snapshot_download_runner(repo_id: str, revision: str | None, on_progress: ProgressCallback, cancel_event) -> None:
+    import subprocess
+    import sys
+    import time
+
     if cancel_event.is_set():
         return
-    snapshot_download(repo_id, revision=revision)
+    on_progress(None, "downloading")
+    script = (
+        "from huggingface_hub import snapshot_download\n"
+        "import sys\n"
+        "revision = sys.argv[2] or None\n"
+        "snapshot_download(sys.argv[1], revision=revision)\n"
+    )
+    process = subprocess.Popen(
+        [sys.executable, "-c", script, repo_id, revision or ""],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.PIPE,
+    )
+    while process.poll() is None:
+        if cancel_event.is_set():
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                process.wait(timeout=5)
+            return
+        time.sleep(0.2)
+    if process.returncode != 0:
+        error = ""
+        if process.stderr is not None:
+            error = process.stderr.read().decode("utf-8", errors="replace")[:500]
+        raise RuntimeError(error or f"snapshot_download exited {process.returncode}")
     on_progress(100, "done")
 
 
+class DownloadBusy(Exception):
+    pass
+
+
 class DownloadManager:
-    def __init__(self, download: Callable[..., None] | None = None) -> None:
+    def __init__(self, download: Callable[..., None] | None = None, ollama_url: str = "http://127.0.0.1:11434") -> None:
         import threading
 
-        self._download = download or snapshot_download_runner
+        self._download = download
+        self._ollama_url = ollama_url
         self._jobs: dict[str, dict[str, Any]] = {}
         self._lock = threading.Lock()
 
-    def start(self, repo_id: str, revision: str | None = None) -> str:
+    def start(self, repo_id: str, revision: str | None = None, kind: str = "huggingface") -> str:
         import threading
+        import time
         import uuid
 
-        job_id = uuid.uuid4().hex
-        cancel = threading.Event()
-        record: dict[str, Any] = {
-            "id": job_id,
-            "repo_id": repo_id,
-            "revision": revision,
-            "status": "running",
-            "percent": None,
-            "message": "starting",
-            "cancel": cancel,
-        }
+        target = (kind, repo_id, revision or "")
         with self._lock:
+            self._expire_locked()
+            for record in self._jobs.values():
+                if record["target"] == target and record["status"] in {"running", "canceling"}:
+                    return record["id"]
+            active = sum(1 for record in self._jobs.values() if record["status"] in {"running", "canceling"})
+            if active >= 2:
+                raise DownloadBusy("Two downloads are already running")
+            job_id = uuid.uuid4().hex
+            cancel = threading.Event()
+            record = {
+                "id": job_id,
+                "repo_id": repo_id,
+                "revision": revision,
+                "kind": kind,
+                "target": target,
+                "status": "running",
+                "percent": None,
+                "message": "starting",
+                "cancel": cancel,
+                "updated": time.time(),
+            }
             self._jobs[job_id] = record
 
         def run() -> None:
@@ -215,27 +309,43 @@ class DownloadManager:
                 def on_progress(percent: float | None, message: str) -> None:
                     record["percent"] = percent
                     record["message"] = message
+                    record["updated"] = time.time()
 
-                self._download(repo_id, revision, on_progress, cancel)
+                self._run_one(repo_id, revision, on_progress, cancel, kind)
                 if cancel.is_set():
                     record["status"] = "canceled"
+                    record["message"] = "canceled"
                 else:
                     record["status"] = "succeeded"
                     record["percent"] = 100
                     record["message"] = "done"
             except Exception as exc:
-                record["status"] = "failed"
-                record["message"] = str(exc)
+                if cancel.is_set():
+                    record["status"] = "canceled"
+                    record["message"] = "canceled"
+                else:
+                    record["status"] = "failed"
+                    record["message"] = str(exc)
+            record["updated"] = time.time()
 
         threading.Thread(target=run, name=f"chunky-download-{job_id[:8]}", daemon=True).start()
         return job_id
+
+    def _run_one(self, repo_id: str, revision: str | None, on_progress: ProgressCallback, cancel_event, kind: str) -> None:
+        if self._download is not None:
+            self._download(repo_id, revision, on_progress, cancel_event)
+            return
+        if kind == "ollama":
+            ollama_pull_runner(self._ollama_url, repo_id, on_progress, cancel_event)
+            return
+        snapshot_download_runner(repo_id, revision, on_progress, cancel_event)
 
     def get(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
             record = self._jobs.get(job_id)
         if record is None:
             return None
-        return {key: value for key, value in record.items() if key != "cancel"}
+        return {key: value for key, value in record.items() if key not in {"cancel", "target"}}
 
     def cancel(self, job_id: str) -> dict[str, Any] | None:
         with self._lock:
@@ -243,6 +353,28 @@ class DownloadManager:
         if record is None:
             return None
         record["cancel"].set()
-        record["status"] = "canceled"
-        record["message"] = "canceled"
+        if record["status"] == "running":
+            record["status"] = "canceling"
+            record["message"] = "canceling"
         return self.get(job_id)
+
+    def _expire_locked(self) -> None:
+        import time
+
+        now = time.time()
+        finished = [
+            (record["updated"], job_id)
+            for job_id, record in self._jobs.items()
+            if record["status"] in {"succeeded", "failed", "canceled"}
+        ]
+        for updated, job_id in finished:
+            if now - updated > 3600:
+                self._jobs.pop(job_id, None)
+        finished = [
+            (record["updated"], job_id)
+            for job_id, record in self._jobs.items()
+            if record["status"] in {"succeeded", "failed", "canceled"}
+        ]
+        if len(finished) > 20:
+            for _, job_id in sorted(finished)[: len(finished) - 20]:
+                self._jobs.pop(job_id, None)

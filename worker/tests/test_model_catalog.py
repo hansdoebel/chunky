@@ -63,6 +63,37 @@ def test_pull_event_decoder():
     ]
 
 
+def test_granite_engine_follows_the_worker_setting():
+    report = {item["name"]: item for item in vlm_report([], granite_engine="vllm")}
+    assert report["granite-docling-transformers"]["engine"] == "vllm"
+    assert report["smoldocling-transformers"]["engine"] == "transformers"
+
+
+def test_same_target_reuses_the_running_download_and_cancel_waits():
+    import threading
+    import time
+
+    started = threading.Event()
+
+    def fake_download(repo_id, revision, on_progress, cancel_event):
+        started.set()
+        while not cancel_event.is_set():
+            time.sleep(0.01)
+        on_progress(None, "stopping")
+
+    manager = DownloadManager(fake_download)
+    first = manager.start("ibm-granite/granite-docling-258M")
+    assert started.wait(1)
+    second = manager.start("ibm-granite/granite-docling-258M")
+    assert second == first
+    assert manager.cancel(first)["status"] == "canceling"
+    for _ in range(50):
+        if manager.get(first)["status"] == "canceled":
+            break
+        time.sleep(0.02)
+    assert manager.get(first)["status"] == "canceled"
+
+
 def test_download_manager_reports_progress_without_a_network_call():
     seen = {}
 
