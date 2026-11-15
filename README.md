@@ -13,6 +13,10 @@ A native macOS application for processing documents into semantic chunks and sto
 - Vector storage in local Docker Qdrant or Qdrant Cloud
 - Named worker profiles (wired LAN, Wi-Fi, Tailscale) with a reachability and latency check
 - Retrieval over dense search or hybrid dense plus BM25 with RRF, plus an optional reranker
+- Filters by year, author, DOI, title, heading, and element type
+- Document summaries with an optional papers-first search, and expansion back to the parent section
+- Named paper libraries stored as a Qdrant tenant field, with search limited to the active library
+- Qdrant snapshot create, download, and restore from Collections
 - Eval sets with recall@k, MRR, nDCG, and hit rate
 - RAG chat with numbered citations, using pi or an OpenAI-compatible chat API
 - Typst citations for APA 7 as adapted by the IU Zitierleitfaden: Hayagriva `.yml`, BibLaTeX `.bib`, and `#cite(<key>, supplement: [S. 12])`. See [docs/typst-citations.md](docs/typst-citations.md)
@@ -87,7 +91,9 @@ The default embedding tag is `qwen3-embedding:0.6b` (1024 dimensions). Ollama's 
 
 Preferences, Documents, Processing host **Devbox** sends the file to a worker and polls progress. Save a profile per path and press Use before a job. Check reachability reports unreachable, HTTP 401, App Transport Security, success, and latency. The token stays in the Keychain. See [worker host](docs/worker-host.md), [reaching a worker](docs/remote-workers.md), and [use cases](docs/worker-use-cases.md).
 
-The Retrieval tab searches the active collection. With Processing host Devbox and Devbox ingest set to Qdrant Cloud, that search is `POST /v1/search` on the worker profile that Use applied. Otherwise it searches the Qdrant URL on the app machine. Hybrid search fuses the dense vector with a Qdrant BM25 text query using RRF. Rerank is optional and runs on the app machine against a Cohere-style `/v1/rerank` URL. Eval stores recall@k, MRR, nDCG, and hit rate for a JSON query set. Ask in that tab to answer from the hits with citations. Chat uses a local pi install (`npm install -g @earendil-works/pi-coding-agent`) or an OpenAI-compatible chat API. `Chunky --mcp` serves the same search to pi and other MCP clients. See [MCP](docs/mcp.md).
+The Retrieval tab searches the active collection and the active paper library. With Processing host Devbox and Devbox ingest set to Qdrant Cloud, that search is `POST /v1/search` on the worker profile that Use applied. Otherwise it searches the Qdrant URL on the app machine. Hybrid search fuses the dense vector with a Qdrant BM25 text query using RRF. Rerank is optional and runs on the app machine against a Cohere-style `/v1/rerank` URL. Filters narrow by year, author, DOI, title, heading, or element type. Papers first returns the stored document summary, then can open the chunks from those documents. Expand to section joins sibling chunks that share the heading path. A library is a name and a stable id on each point. Search stays in the active library unless you pick a set or all libraries. Points that have no library remain in the default library. Eval stores recall@k, MRR, nDCG, and hit rate for a JSON query set. Ask in that tab to answer from the hits with citations. Chat uses a local pi install (`npm install -g @earendil-works/pi-coding-agent`) or an OpenAI-compatible chat API. `Chunky --mcp` serves the same search to pi and other MCP clients. See [MCP](docs/mcp.md).
+
+Collections can create a Qdrant snapshot, download it, and restore it onto the server the browser is using. Restoring asks before it overwrites that collection.
 
 ## Architecture
 
