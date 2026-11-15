@@ -226,6 +226,10 @@ class DocumentProcessor: ObservableObject {
                 )
             }
 
+            if let bibliography = job.bibliography {
+                chunks = chunks.map { $0.applyingBibliography(bibliography) }
+            }
+
             if settings.doTextCleanup {
                 let cleanupService = CleanupService()
                 chunks = cleanupService.cleanup(chunks)
@@ -764,6 +768,9 @@ class DocumentProcessor: ObservableObject {
             if settings.metadataIncludeDocTitle, let t = chunk.docTitle { metadata["doc_title"] = t }
             if settings.metadataIncludeAuthors, let a = chunk.authors, !a.isEmpty { metadata["authors"] = a.joined(separator: "; ") }
             if settings.metadataIncludeDOI, let d = chunk.doi { metadata["doi"] = d }
+            if let venue = chunk.metadata["venue"], !venue.isEmpty { metadata["venue"] = venue }
+            if let abstract = chunk.metadata["abstract"], !abstract.isEmpty { metadata["abstract"] = abstract }
+            if let citeKey = chunk.metadata["cite_key"], !citeKey.isEmpty { metadata["cite_key"] = citeKey }
             if settings.metadataIncludeDocumentId, let d = chunk.documentId { metadata["document_id"] = d }
             if settings.metadataIncludeURL, let u = chunk.url { metadata["url"] = u }
             if settings.metadataIncludeLanguage, let l = chunk.language { metadata["language"] = l }
@@ -1144,7 +1151,7 @@ class DocumentProcessor: ObservableObject {
                 return
             }
         }
-        let payload = DevboxJobPayload.settings(from: settings, mode: mode)
+        let payload = DevboxJobPayload.settings(from: settings, mode: mode, bibliography: job.bibliography)
         do {
             await refreshDoclingVersion(settings: settings)
             let digest = RunHistory.contentHash(ofFile: job.sourceURL)
@@ -1358,10 +1365,13 @@ class DocumentProcessor: ObservableObject {
                 pageOffset: (raw["page_offset"] as? NSNumber)?.intValue
             )
         }
+        let annotated = job.bibliography.map { record in
+            documentChunks.map { $0.applyingBibliography(record) }
+        } ?? documentChunks
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
         let ingestedAt = ISO8601DateFormatter().string(from: Date())
         let built = buildPoints(
-            chunks: documentChunks,
+            chunks: annotated,
             embeddings: parsed.embeddings,
             sparseVectors: sparseVectors(for: documentChunks, hybrid: createOptions.hybrid),
             settings: settings,

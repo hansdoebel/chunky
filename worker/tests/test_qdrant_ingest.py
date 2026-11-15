@@ -109,6 +109,37 @@ def test_payload_matches_mac_field_names():
     assert "doi" in KEYWORD_PAYLOAD_INDEXES
     assert isinstance(payload["chunk_index"], str)
 
+
+def test_bibliography_metadata_wins_over_docling_fields():
+    settings = JobSettings(
+        bibliography_title="Ground Truth",
+        bibliography_authors=["Ada Lovelace"],
+        bibliography_year=2020,
+        bibliography_doi="10.1000/xyz",
+        bibliography_venue="Nature",
+        bibliography_abstract="A short abstract.",
+        bibliography_cite_key="lovelace2020",
+    )
+    points = build_points(
+        [{"text": "Hello", "embedding_text": "Hello", "page": 1}],
+        [[0.1, 0.2]],
+        source="paper.pdf",
+        settings=settings,
+        embedding_model="qwen3-embedding",
+        doc_title="Weak PDF Title",
+        authors=["Nobody"],
+        year=1999,
+    )
+    payload = points[0].payload
+    assert payload["doc_title"] == "Ground Truth"
+    assert payload["authors"] == "Ada Lovelace"
+    assert payload["year"] == 2020
+    assert payload["doi"] == "10.1000/xyz"
+    assert payload["venue"] == "Nature"
+    assert payload["abstract"] == "A short abstract."
+    assert payload["cite_key"] == "lovelace2020"
+
+
 def test_picture_and_table_payloads_keep_serialized_text():
     settings = JobSettings()
     picture = {

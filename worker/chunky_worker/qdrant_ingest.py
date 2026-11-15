@@ -321,6 +321,20 @@ def _payload(
     if settings.metadata_include_content_hash:
         embed_text = chunk.get("embedding_text") or chunk.get("text") or ""
         payload["content_hash"] = content_hash(str(embed_text), embedding_model)
+    if settings.bibliography_title and settings.metadata_include_doc_title:
+        payload["doc_title"] = settings.bibliography_title
+    if settings.bibliography_authors and settings.metadata_include_authors:
+        payload["authors"] = "; ".join(settings.bibliography_authors)
+    if settings.bibliography_year is not None and settings.metadata_include_year:
+        payload["year"] = int(settings.bibliography_year)
+    if settings.bibliography_doi and settings.metadata_include_doi:
+        payload["doi"] = settings.bibliography_doi
+    if settings.bibliography_venue:
+        payload["venue"] = settings.bibliography_venue
+    if settings.bibliography_abstract:
+        payload["abstract"] = settings.bibliography_abstract
+    if settings.bibliography_cite_key:
+        payload["cite_key"] = settings.bibliography_cite_key
     return payload
 
 def dense_vector_name(info: Any) -> str | None:

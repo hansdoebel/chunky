@@ -44,6 +44,17 @@ class AppState: ObservableObject {
         }
     }
 
+    func importBibliography(_ matches: [BibliographyMatch]) {
+        for match in matches {
+            guard let pdf = match.pdf else { continue }
+            guard FileManager.default.isReadableFile(atPath: pdf.path) else { continue }
+            if jobs.contains(where: { $0.sourceURL == pdf }) { continue }
+            let job = ProcessingJob(url: pdf)
+            job.bibliography = match.record
+            jobs.append(job)
+        }
+    }
+
     func addFiles(_ urls: [URL]) {
         for url in urls {
 

@@ -112,8 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
-          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots
-          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots
+          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots
+          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -168,4 +168,19 @@ jobs:
         with:
           name: verification-screenshots
           path: verification-screenshots/*.png
+          if-no-files-found: error
+
+      - name: Stage bibliography screenshots
+        if: always()
+        run: |
+          mkdir -p bibliography-screenshots
+          cp -f /tmp/chunky-bibliography-screenshots/*.png bibliography-screenshots/ || true
+          ls -la bibliography-screenshots
+
+      - name: Upload bibliography screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bibliography-screenshots
+          path: bibliography-screenshots/*.png
           if-no-files-found: error

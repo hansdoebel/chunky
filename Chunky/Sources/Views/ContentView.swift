@@ -243,6 +243,7 @@ struct DropZoneEmptyView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
     @Binding var isTargeted: Bool
+    @State private var showImport = false
 
     var body: some View {
         VStack(spacing: 24) {
@@ -275,6 +276,15 @@ struct DropZoneEmptyView: View {
             .buttonStyle(.bordered)
             .tint(AppTheme.accentFallback)
             .controlSize(.large)
+
+            Button("Import Library") {
+                showImport = true
+            }
+            .buttonStyle(.bordered)
+            .sheet(isPresented: $showImport) {
+                BibliographyImportSheet()
+                    .environmentObject(appState)
+            }
 
             Spacer()
         }
@@ -320,6 +330,7 @@ struct FileListView: View {
     @ObservedObject var processor: DocumentProcessor
     @State private var isTargeted = false
     @State private var selectedJobID: UUID?
+    @State private var showImport = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -347,6 +358,15 @@ struct FileListView: View {
                     appState.clearAll()
                 }
                 .buttonStyle(.bordered)
+
+                Button("Import Library") {
+                    showImport = true
+                }
+                .buttonStyle(.bordered)
+            }
+            .sheet(isPresented: $showImport) {
+                BibliographyImportSheet()
+                    .environmentObject(appState)
             }
             .padding()
 
