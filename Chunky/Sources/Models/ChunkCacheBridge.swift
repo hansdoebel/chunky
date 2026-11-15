@@ -123,7 +123,9 @@ extension ChunkCacheChunk {
             tokenCount: chunk.tokenCount,
             pictureDescription: chunk.pictureDescription,
             pictureClass: chunk.pictureClass,
-            tableMarkdown: chunk.tableMarkdown
+            tableMarkdown: chunk.tableMarkdown,
+            contentTypes: chunk.contentTypes ?? [],
+            formulaLatex: chunk.formulaLatex
         )
     }
 
@@ -147,7 +149,9 @@ extension ChunkCacheChunk {
             bboxes: boxes.isEmpty ? nil : boxes,
             pageLabels: pageLabels.isEmpty ? nil : pageLabels,
             printedPage: nil,
-            pageOffset: nil
+            pageOffset: nil,
+            contentTypes: contentTypes.isEmpty ? nil : contentTypes,
+            formulaLatex: formulaLatex
         )
     }
 }

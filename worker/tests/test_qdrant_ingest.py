@@ -106,6 +106,7 @@ def test_payload_matches_mac_field_names():
     assert "authors" in TEXT_PAYLOAD_INDEXES
     assert "doc_title" not in KEYWORD_PAYLOAD_INDEXES
     assert "content_type" in KEYWORD_PAYLOAD_INDEXES
+    assert "content_types" in KEYWORD_PAYLOAD_INDEXES
     assert "doi" in KEYWORD_PAYLOAD_INDEXES
     assert isinstance(payload["chunk_index"], str)
 
@@ -134,7 +135,8 @@ def test_picture_and_table_payloads_keep_serialized_text():
     picture_payload, table_payload = (point.payload for point in points)
     assert picture_payload["text"] == "Figure 1\nA bar chart of revenue."
     assert picture_payload["embedding_text"] == picture_payload["text"]
-    assert picture_payload["content_type"] == "picture"
+    assert picture_payload["content_type"] == "figure"
+    assert picture_payload["content_types"] == ["figure"]
     assert picture_payload["picture_description"] == "A bar chart of revenue."
     assert picture_payload["picture_class"] == "bar_chart"
     assert "table_markdown" not in picture_payload
@@ -144,6 +146,20 @@ def test_picture_and_table_payloads_keep_serialized_text():
     assert table_payload["table_markdown"].startswith("| Year | Revenue |")
     assert "picture_description" not in table_payload
     assert "picture_class" not in table_payload
+
+
+def test_missing_content_type_is_left_off_the_payload():
+    settings = JobSettings()
+    points = build_points(
+        [{"text": "Hello", "embedding_text": "Hello"}],
+        [[0.1, 0.2]],
+        source="paper.pdf",
+        settings=settings,
+        embedding_model="qwen3-embedding",
+    )
+    assert "content_type" not in points[0].payload
+    assert "content_types" not in points[0].payload
+
 
 def test_disabled_metadata_flags_omit_fields():
     settings = JobSettings(

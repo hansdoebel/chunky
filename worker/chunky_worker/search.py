@@ -203,6 +203,52 @@ def hybrid_query_arguments(
         "with_vectors": False,
     }
 
+def _load_element_types():
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import element_types
+
+    return element_types
+
+
+def _element_clause(stored: list[str], kinds: list[str]):
+    from qdrant_client.models import FieldCondition, Filter, MatchAny
+
+    return Filter(
+        should=[
+            FieldCondition(key="content_type", match=MatchAny(any=stored)),
+            FieldCondition(key="content_types", match=MatchAny(any=kinds)),
+        ]
+    )
+
+
+def _element_request(item: PayloadFilter) -> tuple[list[str], list[str]] | None:
+    raw: list[str] = []
+    if isinstance(item.match, str):
+        raw = [item.match]
+    elif item.any:
+        raw = [str(value) for value in item.any]
+    if not raw or item.text is not None or item.has_range():
+        return None
+    types = _load_element_types()
+    stored: list[str] = []
+    kinds: list[str] = []
+    for value in raw:
+        kind = types.element_filter_kind(value)
+        if kind is None:
+            return None
+        if kind not in kinds:
+            kinds.append(kind)
+        for alias in types.stored_values(kind):
+            if alias not in stored:
+                stored.append(alias)
+    return stored, kinds
+
+
 def build_query_filter(filters: list[PayloadFilter]):
     if not filters:
         return None
@@ -212,6 +258,12 @@ def build_query_filter(filters: list[PayloadFilter]):
     must_not = []
     for item in filters:
         item.check_complete()
+        if item.key == "content_type":
+            expanded = _element_request(item)
+            if expanded is not None:
+                clause = _element_clause(*expanded)
+                (must_not if item.negate else must).append(clause)
+                continue
         kwargs: dict[str, Any] = {"key": item.key}
         if item.text is not None:
             kwargs["match"] = MatchText(text=item.text)

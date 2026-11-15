@@ -11,6 +11,8 @@ struct ChunkPoint: Identifiable, Sendable {
     let headings: [String]
     let year: Int?
     let metadata: [String: String]
+    let contentTypes: [String]
+    let formulaLatex: String?
 
     init(
         id: String = UUID().uuidString,
@@ -21,7 +23,9 @@ struct ChunkPoint: Identifiable, Sendable {
         page: Int? = nil,
         headings: [String] = [],
         year: Int? = nil,
-        metadata: [String: String] = [:]
+        metadata: [String: String] = [:],
+        contentTypes: [String] = [],
+        formulaLatex: String? = nil
     ) {
         self.id = id
         self.vector = vector
@@ -32,6 +36,8 @@ struct ChunkPoint: Identifiable, Sendable {
         self.headings = headings
         self.year = year
         self.metadata = metadata
+        self.contentTypes = contentTypes
+        self.formulaLatex = formulaLatex
     }
 }
 
@@ -190,6 +196,12 @@ extension ChunkPoint {
 
         if !headings.isEmpty {
             payload["headings"] = .array(headings.map { .string($0) })
+        }
+        if !contentTypes.isEmpty {
+            payload["content_types"] = .array(contentTypes.map { .string($0) })
+        }
+        if let formulaLatex, !formulaLatex.isEmpty {
+            payload["formula_latex"] = .string(formulaLatex)
         }
 
         for (key, value) in metadata {

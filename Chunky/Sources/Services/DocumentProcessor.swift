@@ -209,7 +209,9 @@ class DocumentProcessor: ObservableObject {
                         bboxesJSON: Self.bboxesJSON(pc.bboxes),
                         pageLabels: pc.pageLabels ?? [],
                         printedPage: pc.printedPage,
-                        pageOffset: pc.pageOffset
+                        pageOffset: pc.pageOffset,
+                        contentTypes: pc.contentTypes ?? [],
+                        formulaLatex: pc.formulaLatex
                     )
                 }
             } else {
@@ -567,7 +569,9 @@ class DocumentProcessor: ObservableObject {
                 pageLabels: chunk.pageLabels,
                 printedPage: chunk.pageLabels.count > 1
                     ? "pp. \(chunk.pageLabels[0])–\(chunk.pageLabels[chunk.pageLabels.count - 1])"
-                    : chunk.pageLabels.first.map { "p. \($0)" }
+                    : chunk.pageLabels.first.map { "p. \($0)" },
+                contentTypes: chunk.contentTypes,
+                formulaLatex: chunk.formulaLatex
             )
         }
         if mode == .chunkOnly {
@@ -808,7 +812,9 @@ class DocumentProcessor: ObservableObject {
                 page: chunk.page,
                 headings: chunk.headings,
                 year: settings.metadataIncludeYear ? chunk.year : nil,
-                metadata: metadata
+                metadata: metadata,
+                contentTypes: chunk.contentTypes,
+                formulaLatex: chunk.formulaLatex
             )
         }
     }
@@ -1355,7 +1361,9 @@ class DocumentProcessor: ObservableObject {
                 bboxesJSON: Self.bboxesJSON(raw["bboxes"]),
                 pageLabels: (raw["page_labels"] as? [Any])?.compactMap { $0 as? String } ?? [],
                 printedPage: raw["printed_page"] as? String,
-                pageOffset: (raw["page_offset"] as? NSNumber)?.intValue
+                pageOffset: (raw["page_offset"] as? NSNumber)?.intValue,
+                contentTypes: (raw["content_types"] as? [Any])?.compactMap { $0 as? String } ?? [],
+                formulaLatex: raw["formula_latex"] as? String
             )
         }
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
