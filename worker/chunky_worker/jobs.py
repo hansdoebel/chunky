@@ -256,12 +256,8 @@ class JobRunner:
             self.store.set_status(job_id, JobStatus.RUNNING)
             self._emit(job_id, "Job started", 0)
             recorder = MetricsRecorder(job.settings, host="devbox", resources=self.resources)
-
-            def flush_metrics() -> None:
-                pending = recorder.events
-                recorder.events = []
-                for event in pending:
-                    self.store.append_event(job_id, event)
+            recorder.on_event = lambda event: self.store.append_event(job_id, event)
+            embedded_count = 0
 
             def on_progress(message: str, percent: float | None = None) -> None:
                 self._emit(job_id, message, percent)
@@ -275,7 +271,6 @@ class JobRunner:
                 cancel_event=cancel_event,
             )
             recorder.apply_pipeline(raw, max(0.0, (recorder.clock() - convert_started) * 1000))
-            flush_metrics()
             if cancel_event.is_set():
                 raise JobCanceled()
 
@@ -343,7 +338,7 @@ class JobRunner:
                     lambda: backend.embed(texts, model),
                     chunks=len(chunks),
                 )
-                flush_metrics()
+                embedded_count = len(vectors)
                 actual = len(vectors[0]) if vectors else 0
                 if vectors and actual != probed:
                     raise DimensionMismatch(
@@ -366,7 +361,6 @@ class JobRunner:
                     ),
                     chunks=len(chunks),
                 )
-                flush_metrics()
 
             if cancel_event.is_set():
                 raise JobCanceled()
@@ -374,7 +368,7 @@ class JobRunner:
             metrics = recorder.finish(
                 pages=result.page_count,
                 chunks=len(result.chunks),
-                embeddings=len(result.embeddings or []),
+                embeddings=embedded_count,
             )
             result.metrics = metrics.model_dump(mode="json")
             self.store.set_status(job_id, JobStatus.SUCCEEDED, result=result, error=None)

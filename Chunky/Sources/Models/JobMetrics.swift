@@ -94,7 +94,7 @@ struct JobMetrics: Codable, Equatable {
         case "convert_layout": return (job.conversionTime ?? 0) * 1000
         case "chunking": return (job.chunkingTime ?? 0) * 1000
         case "embedding": return (job.embeddingTime ?? 0) * 1000
-        case "qdrant_upsert": return (job.uploadTime ?? job.embeddingTime ?? 0) * 1000
+        case "qdrant_upsert": return (job.uploadTime ?? 0) * 1000
         default: return 0
         }
     }
@@ -106,7 +106,7 @@ struct JobMetrics: Codable, Equatable {
         case "picture_description": return settings.doPictureDescription
         case "vlm_convert": return settings.doclingModel != "standard"
         case "embedding": return job.embeddedCount > 0 || (job.embeddingTime ?? 0) > 0
-        case "qdrant_upsert": return (job.uploadTime ?? 0) > 0 || job.embeddedCount > 0
+        case "qdrant_upsert": return (job.uploadTime ?? 0) > 0
         default: return true
         }
     }
@@ -117,5 +117,23 @@ struct JobMetrics: Codable, Equatable {
         case "qdrant_upsert": return "qdrant"
         default: return settings.processingHost == .devbox ? "docling" : "docling"
         }
+    }
+
+    func addingLocalUpload(seconds: TimeInterval) -> JobMetrics {
+        var copy = self
+        let extra = seconds * 1000
+        copy.stages = stages.map { stage in
+            guard stage.name == "qdrant_upsert" else { return stage }
+            var updated = stage
+            updated.durationMs += extra
+            if extra > 0 {
+                updated.status = "ok"
+                if updated.runtime == nil {
+                    updated.runtime = "qdrant"
+                }
+            }
+            return updated
+        }
+        return copy
     }
 }

@@ -206,6 +206,8 @@ def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, 
     assert "qdrant_api_key" not in raw
     result = body["result"]
     assert result["embeddings"] is None
+    assert result["metrics"]["embeddings_per_s"] is not None
+    assert result["metrics"]["embeddings_per_s"] > 0
     assert result["ingest"]["target"] == "qdrant_cloud"
     assert result["ingest"]["upserted"] == 2
     assert result["ingest"]["collection"] == "documents"

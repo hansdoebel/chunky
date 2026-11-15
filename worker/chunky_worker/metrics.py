@@ -58,6 +58,8 @@ def stage_enabled(name: str, settings) -> bool:
         return bool(settings.do_picture_description)
     if name == "vlm_convert":
         return bool(settings.vlm_model)
+    if name == "chunking":
+        return bool(settings.chunk)
     if name == "embedding":
         return needs_embeddings(settings)
     if name == "qdrant_upsert":
@@ -91,6 +93,7 @@ class MetricsRecorder:
         self.host = host
         self.resources = resources or sample_amd_smi
         self.clock = clock or time.perf_counter
+        self.on_event = None
         self.started = self.clock()
         self.stages: dict[str, StageMetric] = {
             name: StageMetric(name=name, status="skipped" if not stage_enabled(name, settings) else "ok")
@@ -99,7 +102,7 @@ class MetricsRecorder:
         self.events: list[dict[str, Any]] = []
 
     def time(self, name: str, runtime: str, fn: Callable[[], Any], **counts: int | None) -> Any:
-        self.events.append({"type": "stage", "stage": name, "phase": "start", "runtime": runtime})
+        self._emit({"type": "stage", "stage": name, "phase": "start", "runtime": runtime})
         started = self.clock()
         status = "ok"
         try:
@@ -118,7 +121,7 @@ class MetricsRecorder:
                 chunks=counts.get("chunks"),
                 tokens=counts.get("tokens"),
             )
-            self.events.append(
+            self._emit(
                 {"type": "stage", "stage": name, "phase": "end", "runtime": runtime, "status": status, "duration_ms": elapsed}
             )
 
@@ -137,8 +140,8 @@ class MetricsRecorder:
                 pages=raw.get("page_count") if name in {"convert_layout", "ocr", "vlm_convert"} else None,
                 chunks=len(raw.get("chunks") or []) if name == "chunking" else None,
             )
-            self.events.append({"type": "stage", "stage": name, "phase": "start", "runtime": self.stages[name].runtime})
-            self.events.append(
+            self._emit({"type": "stage", "stage": name, "phase": "start", "runtime": self.stages[name].runtime})
+            self._emit(
                 {
                     "type": "stage",
                     "stage": name,
@@ -169,3 +172,8 @@ class MetricsRecorder:
             stages=[self.stages[name] for name in STAGE_NAMES],
             resources=ResourceSample.model_validate(self.resources()),
         )
+
+    def _emit(self, event: dict[str, Any]) -> None:
+        self.events.append(event)
+        if self.on_event is not None:
+            self.on_event(event)

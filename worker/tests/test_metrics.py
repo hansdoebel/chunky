@@ -47,3 +47,33 @@ def test_metrics_round_trip_and_skipped_stages():
     assert ("embedding", "end") in kinds
     assert restored.wall_ms == 100
     time.sleep(0)
+
+
+def test_disabled_chunking_is_skipped_and_stage_events_emit_immediately():
+    settings = JobSettings(chunk=False)
+    recorder = MetricsRecorder(settings, clock=lambda: 1.0)
+    seen = []
+    recorder.on_event = seen.append
+
+    def embed():
+        assert seen[-1] == {"type": "stage", "stage": "embedding", "phase": "start", "runtime": "ollama"}
+        return [[1.0]]
+
+    recorder.time("embedding", "ollama", embed)
+
+    def boom():
+        raise RuntimeError("nope")
+
+    try:
+        recorder.time("qdrant_upsert", "qdrant", boom)
+    except RuntimeError:
+        pass
+    else:
+        raise AssertionError("expected the stage function to raise")
+
+    assert seen[-1]["phase"] == "end"
+    assert seen[-1]["status"] == "error"
+    finished = recorder.finish(pages=0, chunks=0, embeddings=0)
+    by_name = {stage.name: stage for stage in finished.stages}
+    assert by_name["chunking"].status == "skipped"
+    assert by_name["qdrant_upsert"].status == "error"

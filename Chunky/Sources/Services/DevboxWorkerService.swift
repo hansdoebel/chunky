@@ -102,6 +102,7 @@ struct ParsedWorkerJob {
     var year: Int?
     var ingestUpserted: Int?
     var ingestCollection: String?
+    var metrics: JobMetrics?
 }
 
 enum DevboxJobPayload {
@@ -192,6 +193,12 @@ enum DevboxJobPayload {
             }
         }
         let ingest = result?["ingest"] as? [String: Any]
+        var metrics: JobMetrics?
+        if let metricsObject = result?["metrics"],
+           JSONSerialization.isValidJSONObject(metricsObject),
+           let metricsData = try? JSONSerialization.data(withJSONObject: metricsObject) {
+            metrics = try? JSONDecoder().decode(JobMetrics.self, from: metricsData)
+        }
         return ParsedWorkerJob(
             status: object["status"] as? String ?? "",
             error: object["error"] as? String,
@@ -204,7 +211,8 @@ enum DevboxJobPayload {
             language: result?["language"] as? String,
             year: (result?["year"] as? NSNumber)?.intValue,
             ingestUpserted: (ingest?["upserted"] as? NSNumber)?.intValue,
-            ingestCollection: ingest?["collection"] as? String
+            ingestCollection: ingest?["collection"] as? String,
+            metrics: metrics
         )
     }
 

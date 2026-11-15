@@ -21,6 +21,7 @@ import logging
 import os
 import re
 import sys
+import time
 import traceback
 
 LOG_DIR = os.path.expanduser("~/Library/Logs/Chunky")
@@ -539,6 +540,30 @@ def _chunk_document(doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, p
     return chunk_list
 
 
+def _conversion_stage_ms(
+    convert_ms,
+    chunk_ms,
+    *,
+    enable_ocr,
+    no_tables,
+    do_picture_description,
+    vlm_model,
+    chunk,
+):
+    stages = {"convert_layout": convert_ms}
+    if enable_ocr:
+        stages["ocr"] = convert_ms
+    if not no_tables:
+        stages["table"] = convert_ms
+    if do_picture_description:
+        stages["picture_description"] = convert_ms
+    if vlm_model:
+        stages["vlm_convert"] = convert_ms
+    if chunk:
+        stages["chunking"] = chunk_ms
+    return stages
+
+
 def convert_document(
     input_path: str,
     output_dir: str | None = None,
@@ -681,6 +706,7 @@ def convert_document(
         converter = DocumentConverter(format_options=format_options)
 
         progress_callback("Converting document...", 10)
+        convert_started = time.perf_counter()
 
         if max_pages:
             result = converter.convert(input_path, max_num_pages=max_pages)
@@ -760,12 +786,26 @@ def convert_document(
             pass
         result_data["language"] = lang
 
+        convert_ms = (time.perf_counter() - convert_started) * 1000
+        chunk_ms = 0.0
         if chunk:
+            chunk_started = time.perf_counter()
             chunk_result = _chunk_document(
                 doc, chunk_tokenizer, chunk_max_tokens, chunk_merge_peers, progress_callback, embedding_model
             )
+            chunk_ms = (time.perf_counter() - chunk_started) * 1000
             if chunk_result is not None:
                 result_data["chunks"] = chunk_result
+        result_data["stage_ms"] = _conversion_stage_ms(
+            convert_ms,
+            chunk_ms,
+            enable_ocr=enable_ocr,
+            no_tables=no_tables,
+            do_picture_description=do_picture_description,
+            vlm_model=vlm_model,
+            chunk=chunk,
+        )
+        result_data["runtime"] = "docling"
 
         if extract_schema:
             progress_callback("Running structured extraction...", 85)
