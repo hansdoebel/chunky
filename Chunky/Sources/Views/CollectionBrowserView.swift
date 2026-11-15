@@ -7,6 +7,7 @@ struct CollectionBrowserView: View {
     @State private var sourceFilter = ""
     @State private var selectedIds: Set<String> = []
     @State private var showDeleteConfirmation = false
+    @State private var showNewCollection = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -58,6 +59,8 @@ struct CollectionBrowserView: View {
                     .foregroundStyle(.tertiary)
                     .font(.system(.caption, design: .rounded, weight: .medium))
 
+                Button("New") { showNewCollection = true }
+                    .buttonStyle(.bordered)
                 Button(action: { Task { await appState.loadBrowserPoints() } }) {
                     Image(systemName: "arrow.clockwise")
                         .foregroundStyle(.secondary)
@@ -135,6 +138,14 @@ struct CollectionBrowserView: View {
                 await appState.fetchCollections()
                 await appState.loadBrowserPoints()
             }
+        }
+        .sheet(isPresented: $showNewCollection) {
+            NewCollectionSheet(
+                vectorSize: appState.settings.embeddingDimensions,
+                embeddingBackend: appState.settings.embeddingBackend,
+                embeddingModel: appState.settings.embeddingModel
+            )
+            .environmentObject(appState)
         }
         .onChange(of: appState.settings.defaultCollection) { _, _ in
             selectedIds.removeAll()

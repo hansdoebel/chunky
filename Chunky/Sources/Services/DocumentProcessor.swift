@@ -658,11 +658,26 @@ class DocumentProcessor: ObservableObject {
             )
         }
 
+        var createHybrid = settings.hybridSearch
+        var createDistance = distance
+        if let saved = CollectionPlanStore.load(name: settings.defaultCollection) {
+            if saved.vectorSize != vectorSize {
+                job.statusMessage = "Collection \(saved.name) was saved with vector size \(saved.vectorSize), but \(settings.embeddingModel) probes \(vectorSize)."
+            } else if let warning = saved.mismatch(existingVectorSize: nil, existingHybrid: settings.hybridSearch) {
+                job.statusMessage = warning
+            }
+            createHybrid = saved.hybrid
+            switch saved.distance {
+            case .cosine: createDistance = .cosine
+            case .dot: createDistance = .dot
+            case .euclid: createDistance = .euclid
+            }
+        }
         try await qdrant.createCollectionIfNeeded(
             name: settings.defaultCollection,
             vectorSize: vectorSize,
-            hybrid: settings.hybridSearch,
-            distance: distance,
+            hybrid: createHybrid,
+            distance: createDistance,
             quantizationConfig: quantizationConfig
         )
 
