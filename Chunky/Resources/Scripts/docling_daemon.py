@@ -78,7 +78,14 @@ def _get_converter(cmd):
 
     if use_vlm:
         format_options = _build_vlm_format_options(
-            vlm_model, cmd.get("ollama_url", "http://localhost:11434")
+            vlm_model,
+            cmd.get("ollama_url", "http://localhost:11434"),
+            do_formula_enrichment=cmd.get("do_formula_enrichment", False),
+            do_code_enrichment=cmd.get("do_code_enrichment", False),
+            do_chart_extraction=cmd.get("do_chart_extraction", False),
+            do_picture_description=cmd.get("do_picture_description", False),
+            do_picture_classification=cmd.get("do_picture_classification", False),
+            generate_images=cmd.get("generate_images", False),
         )
     else:
         format_options = _build_standard_format_options(
