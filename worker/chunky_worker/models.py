@@ -144,6 +144,7 @@ class JobResult(BaseModel):
     ingest: IngestReceipt | None = None
     metrics: dict[str, Any] | None = None
     verification_status: str | None = None
+    reference_warning: str | None = None
 
 class Job(BaseModel):
     id: str

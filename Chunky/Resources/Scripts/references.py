@@ -95,23 +95,54 @@ def _parse_apa(text: str) -> list[dict[str, Any]]:
     return records
 
 
+def _unparsed(text: str) -> dict[str, Any]:
+    collapsed = " ".join(text.split())
+    return {
+        "index": None,
+        "authors": [],
+        "title": None,
+        "year": None,
+        "venue": None,
+        "doi": extract_doi(collapsed),
+        "raw": collapsed,
+    }
+
+
+def _gaps(text: str, spans: list[tuple[int, int]]) -> list[str]:
+    pieces = []
+    cursor = 0
+    for start, end in spans:
+        gap = text[cursor:start].strip()
+        if gap:
+            pieces.append(gap)
+        cursor = end
+    tail = text[cursor:].strip()
+    if tail:
+        pieces.append(tail)
+    return pieces
+
+
 def parse_reference_list(text: str) -> tuple[list[dict[str, Any]], list[str]]:
     raw = (text or "").strip()
     if not raw:
         return [], []
-    numbered = _parse_ieee(raw)
+    numbered = list(IEEE_RE.finditer(raw))
     if numbered:
-        warnings = []
-        for record in numbered:
-            if not record["title"] and record["year"] is None:
-                warnings.append("unparsed reference block")
-        return numbered, warnings
-    named = _parse_apa(raw)
+        records = _parse_ieee(raw)
+        warnings = ["unparsed reference block" for record in records if not record["title"] and record["year"] is None]
+        for gap in _gaps(raw, [match.span() for match in numbered]):
+            records.append(_unparsed(gap))
+            warnings.append("unparsed reference block")
+        return records, warnings
+    named = list(APA_RE.finditer(raw))
     if named:
-        return named, []
-    return [
-        {"index": None, "authors": [], "title": None, "year": None, "venue": None, "doi": extract_doi(raw), "raw": raw}
-    ], ["unparsed reference block"]
+        records = _parse_apa(raw)
+        warnings = []
+        for gap in _gaps(raw, [match.span() for match in named]):
+            records.append(_unparsed(gap))
+            warnings.append("unparsed reference block")
+        return records, warnings
+    return [_unparsed(raw)], ["unparsed reference block"]
 
 
 def _local(tag: str) -> str:
@@ -133,7 +164,9 @@ def references_from_grobid(xml_text: str) -> list[dict[str, Any]]:
     except ET.ParseError:
         return []
     records = []
-    for index, bibl in enumerate((node for node in root.iter() if _local(node.tag) == "biblStruct"), start=1):
+    lists = [node for node in root.iter() if _local(node.tag) == "listBibl"]
+    entries = [child for parent in lists for child in parent if _local(child.tag) == "biblStruct"]
+    for index, bibl in enumerate(entries, start=1):
         authors = []
         for person in bibl.iter():
             if _local(person.tag) != "persName":
@@ -210,17 +243,19 @@ def _compact(record: dict[str, Any]) -> dict[str, Any]:
 
 
 def cited_in_text(text: str, references: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    by_index = {record.get("index"): record for record in references if isinstance(record.get("index"), int)}
+    known = set(by_index)
     wanted: list[int] = []
     for match in CITE_RE.finditer(text or ""):
         for part in re.split(r"\s*,\s*", match.group(1)):
             ends = [piece.strip() for piece in part.split("-", 1)]
             if len(ends) == 2 and ends[0].isdigit() and ends[1].isdigit():
                 start, stop = int(ends[0]), int(ends[1])
-                step = 1 if stop >= start else -1
-                wanted.extend(range(start, stop + step, step))
+                if start > stop:
+                    start, stop = stop, start
+                wanted.extend(index for index in sorted(known) if start <= index <= stop)
             elif part.strip().isdigit():
                 wanted.append(int(part.strip()))
-    by_index = {record.get("index"): record for record in references if record.get("index") is not None}
     for record in references:
         authors = record.get("authors") or []
         year = record.get("year")
@@ -251,6 +286,8 @@ def link_citations(chunks: list[dict[str, Any]], references: list[dict[str, Any]
         names = _heading_names(chunk)
         if any(name in REF_HEADINGS for name in names):
             started = True
+        elif started and any(name in STOP_HEADINGS for name in names):
+            started = False
         if started:
             chunk["cited_references"] = []
             continue

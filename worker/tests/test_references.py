@@ -11,6 +11,7 @@ sys.path.insert(0, str(SCRIPTS))
 from references import (  # noqa: E402
     attach_references,
     cited_in_text,
+    link_citations,
     parse_reference_list,
     references_from_grobid,
     section_text,
@@ -94,3 +95,41 @@ def test_numeric_and_author_year_links():
     assert linked[0]["year"] == 2021
     assert cited_in_text("Jones, 2020 agrees", named)[0]["title"] == "Another title"
     assert records
+    wide = cited_in_text("[1-1000000000]", ieee)
+    assert [item["index"] for item in wide] == [1, 2]
+
+
+def test_partial_list_keeps_the_unparsed_block():
+    records, warnings = parse_reference_list(APA + "\nnot a citation at all\n")
+    assert records[0]["title"] == "A useful title"
+    assert records[-1]["title"] is None
+    assert records[-1]["raw"] == "not a citation at all"
+    assert "unparsed reference block" in warnings
+
+
+def test_grobid_full_document_ignores_the_header_article():
+    xml = """
+    <TEI>
+      <teiHeader><sourceDesc><biblStruct><analytic><title>This Paper</title></analytic></biblStruct></sourceDesc></teiHeader>
+      <text><back><listBibl>
+        <biblStruct><analytic><title>Cited title</title></analytic><monogr><imprint><date when="2020"/></imprint></monogr></biblStruct>
+      </listBibl></back></text>
+    </TEI>
+    """
+    parsed = references_from_grobid(xml)
+    assert len(parsed) == 1
+    assert parsed[0]["index"] == 1
+    assert parsed[0]["title"] == "Cited title"
+
+
+def test_appendix_after_references_is_linked_again():
+    records, _warnings = parse_reference_list(IEEE)
+    chunks = [
+        {"text": "see [1]", "headings": ["Intro"]},
+        {"text": IEEE, "headings": ["References"]},
+        {"text": "also [2]", "headings": ["Appendix"]},
+    ]
+    link_citations(chunks, records)
+    assert chunks[0]["cited_references"][0]["index"] == 1
+    assert chunks[1]["cited_references"] == []
+    assert chunks[2]["cited_references"][0]["index"] == 2

@@ -540,6 +540,8 @@ class JobRunner:
                 chunks = _enrich_bibliography(chunks, input_path, job.settings, raw)
             chunks = _enrich_context(chunks, input_path, job.settings, raw, self.chunk_cache, cancel_event)
             chunks = _attach_references(chunks, input_path, job.settings, raw)
+            if raw.get("reference_warning"):
+                self._emit(job_id, str(raw["reference_warning"]), type="warning")
             raw["chunks"] = chunks
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset
@@ -566,6 +568,7 @@ class JobRunner:
                 language=raw.get("language"),
                 year=year,
                 chunks=chunks,
+                reference_warning=raw.get("reference_warning"),
             )
 
             if needs_embeddings(job.settings):
