@@ -95,6 +95,7 @@ class DoclingPipeline:
             ollama_url=settings.ollama_url or "http://127.0.0.1:11434",
             vlm_engine=vlm_engine,
             vllm_url=self.vllm_url,
+            chart_host="devbox",
             generate_images=settings.generate_images,
             image_export_mode=settings.image_export_mode,
             do_formula_enrichment=settings.do_formula_enrichment,

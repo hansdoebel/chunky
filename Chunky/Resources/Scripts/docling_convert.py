@@ -126,10 +126,13 @@ def _build_vlm_format_options(
     vlm_engine=None,
     vllm_url=None,
     accelerator="cuda",
+    chart_host=None,
     **enrichment,
 ):
     if vlm_model == "granite-docling-transformers" and vlm_engine in {"vllm", "transformers"}:
-        return _build_granite_format_options(vlm_engine, vllm_url, accelerator, **enrichment)
+        return _build_granite_format_options(
+            vlm_engine, vllm_url, accelerator, chart_host=chart_host, **enrichment
+        )
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import VlmPipelineOptions
     from docling.document_converter import FormatOption, PdfFormatOption
@@ -160,6 +163,13 @@ def _build_vlm_format_options(
             vlm_options=spec,
         )
         _apply_pipeline_enrichment(pipeline_options, **enrichment)
+        _apply_chart_extraction(
+            pipeline_options,
+            enabled=enrichment.get("do_chart_extraction", False),
+            host=chart_host,
+            vlm_engine=vlm_engine,
+            vllm_url=vllm_url,
+        )
     else:
         from docling.datamodel.pipeline_options_vlm_model import (
             ApiVlmOptions,
@@ -180,6 +190,13 @@ def _build_vlm_format_options(
             vlm_options=vlm_options,
         )
         _apply_pipeline_enrichment(pipeline_options, **enrichment)
+        _apply_chart_extraction(
+            pipeline_options,
+            enabled=enrichment.get("do_chart_extraction", False),
+            host=chart_host,
+            vlm_engine=vlm_engine,
+            vllm_url=vllm_url,
+        )
 
     format_options: dict[InputFormat, FormatOption] = {
         InputFormat.PDF: PdfFormatOption(
@@ -197,7 +214,13 @@ def _apply_pipeline_enrichment(pipeline_options, **enrichment):
     return apply_enrichment(pipeline_options, **enrichment)
 
 
-def _build_granite_format_options(vlm_engine, vllm_url, accelerator, **enrichment):
+def _apply_chart_extraction(pipeline_options, **kwargs):
+    from presets import apply_chart_extraction
+
+    return apply_chart_extraction(pipeline_options, **kwargs)
+
+
+def _build_granite_format_options(vlm_engine, vllm_url, accelerator, chart_host=None, **enrichment):
     """granite-docling via the DocTags preset. vLLM first, Transformers on CUDA as fallback."""
     from docling.datamodel.base_models import InputFormat
     from docling.document_converter import FormatOption, PdfFormatOption
@@ -215,6 +238,13 @@ def _build_granite_format_options(vlm_engine, vllm_url, accelerator, **enrichmen
     )
     pipeline_options = build_granite_pipeline_options(plan)
     _apply_pipeline_enrichment(pipeline_options, **enrichment)
+    _apply_chart_extraction(
+        pipeline_options,
+        enabled=enrichment.get("do_chart_extraction", False),
+        host=chart_host,
+        vlm_engine=vlm_engine,
+        vllm_url=vllm_url,
+    )
     format_options: dict[InputFormat, FormatOption] = {
         InputFormat.PDF: PdfFormatOption(
             pipeline_cls=VlmPipeline,
@@ -239,6 +269,9 @@ def _build_standard_format_options(
     do_picture_classification,
     layout_model="default",
     workers=2,
+    chart_host=None,
+    vlm_engine=None,
+    vllm_url=None,
 ):
     from docling.datamodel.accelerator_options import AcceleratorOptions
     from docling.datamodel.base_models import InputFormat
@@ -272,17 +305,22 @@ def _build_standard_format_options(
         do_picture_description=do_picture_description,
         do_picture_classification=do_picture_classification,
     )
+    _apply_chart_extraction(
+        pipeline_options,
+        enabled=do_chart_extraction,
+        host=chart_host,
+        vlm_engine=vlm_engine,
+        vllm_url=vllm_url,
+    )
 
     if layout_model != "default":
         from docling.datamodel.pipeline_options import LayoutObjectDetectionOptions
 
-        preset_ids = {
-            "egret-medium": "layout_egret_medium",
-            "egret-large": "layout_egret_large",
-            "egret-xlarge": "layout_egret_xlarge",
-        }
-        if layout_model in preset_ids:
-            layout_opts = LayoutObjectDetectionOptions.from_preset(preset_ids[layout_model])
+        from presets import layout_preset_id
+
+        preset_id = layout_preset_id(layout_model)
+        if preset_id:
+            layout_opts = LayoutObjectDetectionOptions.from_preset(preset_id)
         else:
             layout_opts = LayoutObjectDetectionOptions()
         pipeline_options.layout_options = layout_opts
@@ -439,6 +477,7 @@ def convert_document(
     on_progress=None,
     vlm_engine: str | None = None,
     vllm_url: str | None = None,
+    chart_host: str | None = None,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -494,6 +533,7 @@ def convert_document(
                 do_chart_extraction=do_chart_extraction,
                 do_picture_description=do_picture_description,
                 do_picture_classification=do_picture_classification,
+                chart_host=chart_host,
             )
         else:
             format_options = _build_standard_format_options(
@@ -510,6 +550,9 @@ def convert_document(
                 do_picture_classification=do_picture_classification,
                 layout_model=layout_model,
                 workers=workers,
+                chart_host=chart_host,
+                vlm_engine=vlm_engine,
+                vllm_url=vllm_url,
             )
 
         if input_format:
