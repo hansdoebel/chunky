@@ -444,6 +444,83 @@ final class DevboxWorkerService {
         return data
     }
 
+    func fetchVerification(jobID: String, baseURL: String, token: String) async throws -> VerificationReport {
+        let data = try await authorizedData(
+            baseURL: baseURL,
+            token: token,
+            path: ["v1", "jobs", jobID, "verification"],
+            method: "GET",
+            body: nil
+        )
+        return try JSONDecoder().decode(VerificationReport.self, from: data)
+    }
+
+    func reverifyJob(
+        jobID: String,
+        baseURL: String,
+        token: String,
+        qdrantURL: String,
+        qdrantKey: String,
+        collection: String
+    ) async throws -> VerificationReport {
+        var body: [String: Any] = ["qdrant_collection": collection]
+        if !qdrantURL.isEmpty { body["qdrant_url"] = qdrantURL }
+        if !qdrantKey.isEmpty { body["qdrant_api_key"] = qdrantKey }
+        let data = try await authorizedData(
+            baseURL: baseURL,
+            token: token,
+            path: ["v1", "jobs", jobID, "verify"],
+            method: "POST",
+            body: try JSONSerialization.data(withJSONObject: body)
+        )
+        return try JSONDecoder().decode(VerificationReport.self, from: data)
+    }
+
+    func verifyFile(
+        fileURL: URL,
+        chunks: [ChunkingService.DocumentChunk],
+        baseURL: String,
+        token: String,
+        qdrantURL: String,
+        qdrantKey: String,
+        collection: String,
+        embeddingModel: String
+    ) async throws -> VerificationReport {
+        guard let root = URL(string: baseURL), root.host != nil else {
+            throw DevboxClientError.invalidURL(baseURL)
+        }
+        var settings: [String: Any] = [
+            "chunks": VerificationPayload.chunkRows(chunks),
+            "qdrant_collection": collection,
+            "embedding_model": embeddingModel,
+        ]
+        if !qdrantURL.isEmpty { settings["qdrant_url"] = qdrantURL }
+        if !qdrantKey.isEmpty { settings["qdrant_api_key"] = qdrantKey }
+        let boundary = "ChunkyBoundary\(UUID().uuidString.replacingOccurrences(of: "-", with: ""))"
+        let fileData = try Data(contentsOf: fileURL)
+        let body = try DevboxJobPayload.multipartBody(
+            filename: fileURL.lastPathComponent,
+            fileData: fileData,
+            settings: settings,
+            boundary: boundary
+        )
+        let endpoint = root.appendingPathComponent("v1").appendingPathComponent("verify")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(DevboxJobPayload.authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
+        request.setValue("multipart/form-data; boundary=\(boundary)", forHTTPHeaderField: "Content-Type")
+        request.httpBody = body
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DevboxClientError.unreachable(url: endpoint.absoluteString, reason: "No HTTP response")
+        }
+        if !(200..<300).contains(http.statusCode) {
+            let text = VerificationPayload.redact(String(data: data, encoding: .utf8) ?? "", secrets: [qdrantKey, token])
+            throw DevboxErrorMapper.classify(url: endpoint.absoluteString, status: http.statusCode, body: text)
+        }
+        return try JSONDecoder().decode(VerificationReport.self, from: data)
+    }
+
     func cancel(jobID: String, baseURL: String, token: String) async {
         guard let root = URL(string: baseURL) else { return }
         let endpoint = root.appendingPathComponent("v1").appendingPathComponent("jobs").appendingPathComponent(jobID).appendingPathComponent("cancel")

@@ -25,6 +25,9 @@ class ProcessingJob: ObservableObject, Identifiable {
     var analyticsStored = false
     var analyticsPending = false
     var analyticsRuntime: String?
+    var workerJobID: String?
+    @Published var verification: VerificationReport?
+    @Published var verificationNote: String?
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }

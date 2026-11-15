@@ -11,7 +11,8 @@ struct EnumsTests {
         #expect(ViewMode.eval.rawValue == "Eval")
         #expect(ViewMode.analytics.rawValue == "Analytics")
         #expect(ViewMode.benchmark.rawValue == "Benchmark")
-        #expect(ViewMode.allCases.count == 6)
+        #expect(ViewMode.verification.rawValue == "Verification")
+        #expect(ViewMode.allCases.count == 7)
     }
 
     @Test func processingModeValues() {

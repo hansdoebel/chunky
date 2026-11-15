@@ -406,6 +406,7 @@ class DocumentProcessor: ObservableObject {
             let timing = job.timingSummary ?? ""
             job.statusMessage = "\(chunks.count) chunks | \(timing)"
             job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+            await refreshVerification(job: job, settings: settings, chunks: chunks)
             job.status = .completed
 
         } catch is CancellationError {
@@ -802,7 +803,10 @@ class DocumentProcessor: ObservableObject {
                 baseURL: settings.devboxWorkerURL,
                 token: settings.workerToken,
                 onCreated: { [weak self] id in
-                    Task { @MainActor in self?.activeDevboxJobID = id }
+                    job.workerJobID = id
+                    Task { @MainActor in
+                        self?.activeDevboxJobID = id
+                    }
                 },
                 onEvent: { [weak job] event in
                     Task { @MainActor in
@@ -851,6 +855,7 @@ class DocumentProcessor: ObservableObject {
             } else {
                 job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
             }
+            await refreshVerification(job: job, settings: settings, chunks: nil)
             job.status = .completed
         } catch is CancellationError {
             captureFailure(job: job, settings: settings, started: started)
@@ -862,6 +867,61 @@ class DocumentProcessor: ObservableObject {
             job.status = .failed
             job.error = error.localizedDescription
             job.statusMessage = "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    func reverify(job: ProcessingJob, settings: AppSettings) async {
+        await refreshVerification(job: job, settings: settings, chunks: nil, rerun: true)
+    }
+
+    private func refreshVerification(
+        job: ProcessingJob,
+        settings: AppSettings,
+        chunks: [ChunkingService.DocumentChunk]?,
+        rerun: Bool = false
+    ) async {
+        let base = settings.devboxWorkerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, !settings.workerToken.isEmpty else {
+            job.verificationNote = "Set the devbox worker URL to verify this document."
+            return
+        }
+        let target = VerificationPayload.qdrantTarget(settings: settings)
+        do {
+            let report: VerificationReport
+            if let workerJobID = job.workerJobID, rerun {
+                report = try await devboxService.reverifyJob(
+                    jobID: workerJobID,
+                    baseURL: base,
+                    token: settings.workerToken,
+                    qdrantURL: target.url,
+                    qdrantKey: target.key,
+                    collection: target.collection
+                )
+            } else if let workerJobID = job.workerJobID {
+                report = try await devboxService.fetchVerification(
+                    jobID: workerJobID,
+                    baseURL: base,
+                    token: settings.workerToken
+                )
+            } else {
+                report = try await devboxService.verifyFile(
+                    fileURL: job.sourceURL,
+                    chunks: chunks ?? [],
+                    baseURL: base,
+                    token: settings.workerToken,
+                    qdrantURL: target.url,
+                    qdrantKey: target.key,
+                    collection: target.collection,
+                    embeddingModel: settings.embeddingModel
+                )
+            }
+            job.verification = report
+            job.verificationNote = nil
+        } catch {
+            job.verificationNote = VerificationPayload.redact(
+                error.localizedDescription,
+                secrets: [target.key, settings.workerToken]
+            )
         }
     }
 
@@ -889,6 +949,7 @@ class DocumentProcessor: ObservableObject {
         }
         let documentChunks: [ChunkingService.DocumentChunk] = parsed.chunks.enumerated().map { index, raw in
             ChunkingService.DocumentChunk(
+                id: raw["id"] as? String ?? UUID().uuidString,
                 text: raw["text"] as? String ?? "",
                 source: raw["source"] as? String ?? job.fileName,
                 page: (raw["page"] as? NSNumber)?.intValue,
