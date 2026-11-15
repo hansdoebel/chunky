@@ -77,9 +77,9 @@ struct CollectionPacking: Equatable, Codable {
     }
 
     static func vectorName(in data: Data) -> String {
-        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-              let result = (object["result"] as? [String: Any]) ?? object,
-              let config = result["config"] as? [String: Any],
+        guard let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return "" }
+        let result = (object["result"] as? [String: Any]) ?? object
+        guard let config = result["config"] as? [String: Any],
               let params = config["params"] as? [String: Any],
               let vectors = params["vectors"] as? [String: Any]
         else { return "" }
