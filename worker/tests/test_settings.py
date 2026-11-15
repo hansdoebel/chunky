@@ -14,6 +14,7 @@ TOKEN_ENV = [
     "CHUNKY_WORKER_PORT",
     "CHUNKY_OLLAMA_URL",
     "CHUNKY_VLLM_URL",
+    "CHUNKY_VLM_ENGINE",
     "XDG_CONFIG_HOME",
 ]
 
@@ -32,6 +33,7 @@ def test_defaults_are_loopback(clean_env):
     assert settings.port == 8080
     assert settings.ollama_url == "http://127.0.0.1:11434"
     assert settings.vllm_url == "http://127.0.0.1:8000"
+    assert settings.vlm_engine == "vllm"
     assert settings.token is None
     assert is_loopback_url(settings.ollama_url)
     assert is_loopback_url(settings.vllm_url)
@@ -84,6 +86,17 @@ def test_default_config_file_is_read(clean_env, monkeypatch, tmp_path):
     (config / "worker.token").write_text("xdg-token\n", encoding="utf-8")
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path))
     assert load_token() == "xdg-token"
+
+
+def test_vlm_engine_from_env(clean_env, monkeypatch):
+    monkeypatch.setenv("CHUNKY_VLM_ENGINE", "Transformers")
+    assert Settings.from_env().vlm_engine == "transformers"
+
+
+def test_mlx_vlm_engine_is_rejected(clean_env, monkeypatch):
+    monkeypatch.setenv("CHUNKY_VLM_ENGINE", "mlx")
+    with pytest.raises(ValueError, match="vllm"):
+        Settings.from_env()
 
 
 def test_loopback_detection():

@@ -29,6 +29,12 @@ def test_health_ok_when_backends_mocked(client, monkeypatch):
     assert body["docling"]["importable"] is True
     assert body["embeddings"]["reachable"] is True
     assert body["embeddings"]["backend"] == "ollama"
+    assert body["vlm"]["engine"] == "vllm"
+    assert body["vlm"]["preset"] == "granite_docling"
+    assert body["vlm"]["model"] == "ibm-granite/granite-docling-258M"
+    assert body["vlm"]["device"] == "cuda"
+    assert body["vlm"]["flash_attention2"] is False
+    assert body["vlm"]["mlx"] is False
 
 
 def test_health_degraded_when_docling_missing_and_ollama_down(tmp_settings, monkeypatch):

@@ -16,7 +16,34 @@ worker/.venv/bin/pip install -r worker/requirements.txt
 worker/.venv/bin/pip install -r worker/requirements-docling.txt
 ```
 
-Do not install `mlx-vlm`. For the GPU, install a ROCm PyTorch wheel into the same venv. Ollama stays on `127.0.0.1:11434`:
+Do not install `mlx-vlm`. The PyPI `torch==2.15.0` pin is for CPU CI. On this machine, replace it with the ROCm wheel that ROCm 10.1 validates (PyTorch 2.14.x) and that lists `gfx1201`. The generic 2.15.0 wheel does not. See the [ROCm compatibility matrix](https://rocm.docs.amd.com/en/latest/compatibility/compatibility-matrix.html).
+
+```bash
+worker/.venv/bin/python -c "import torch; print(torch.version.hip, torch.cuda.is_available(), torch.cuda.get_arch_list())"
+```
+
+`torch.cuda.is_available()` must be true. ROCm reports the R9700 through that CUDA API. `gfx1201` must appear in the arch list. `/v1/health` repeats this under `vlm.gpu` and logs `gpu_visible` at startup.
+
+## Granite-docling
+
+The worker does not load MLX. A granite job uses Docling's `granite_docling` preset, which sends DocTags rather than a generic markdown OCR prompt.
+
+Preferred engine: vLLM on ROCm, loopback only. Install the vLLM build that matches this ROCm release. The default PyPI vLLM wheel is CUDA and will not see the R9700. Leave Flash Attention 2 off (`cuda_use_flash_attention2` stays false).
+
+```bash
+vllm serve ibm-granite/granite-docling-258M \
+  --host 127.0.0.1 --port 8000 \
+  --max-num-seqs 512 \
+  --max-num-batched-tokens 8192 \
+  --enable-chunked-prefill \
+  --gpu-memory-utilization 0.6
+```
+
+`0.6` is a starting point so Ollama can keep `qwen3-embedding` on the same 32 GB GPU. The 258M VLM and that embedding model both fit; raise utilization only if the embedding model is not resident. The worker calls `http://127.0.0.1:8000/v1/chat/completions` with `CHUNKY_VLM_ENGINE=vllm` (the default).
+
+Fallback, if vLLM is not running: `CHUNKY_VLM_ENGINE=transformers`. That loads `GRANITEDOCLING_TRANSFORMERS` through `VlmConvertOptions.from_preset("granite_docling", engine_options=TransformersVlmEngineOptions())` with `device="cuda"`. Same rule: do not enable Flash Attention 2.
+
+Ollama stays on `127.0.0.1:11434` for embeddings:
 
 ```bash
 ollama pull qwen3-embedding
