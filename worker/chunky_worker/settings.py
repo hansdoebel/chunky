@@ -7,6 +7,8 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from urllib.parse import urlparse
 
+from chunky_worker.vlm import normalize_vlm_engine
+
 
 def default_state_dir() -> Path:
     xdg = os.environ.get("XDG_STATE_HOME")
@@ -89,6 +91,8 @@ class Settings:
     scripts_dir: Path = field(default_factory=default_scripts_dir)
     ollama_url: str = "http://127.0.0.1:11434"
     vllm_url: str = "http://127.0.0.1:8000"
+    # vllm calls the granite_docling preset. transformers is the in-process fallback.
+    vlm_engine: str = "vllm"
     embedding_model: str = "qwen3-embedding"
     # None means protected routes reject every request (fail closed).
     token: str | None = None
@@ -103,6 +107,7 @@ class Settings:
             scripts_dir=default_scripts_dir(),
             ollama_url=os.environ.get("CHUNKY_OLLAMA_URL", "http://127.0.0.1:11434"),
             vllm_url=os.environ.get("CHUNKY_VLLM_URL", "http://127.0.0.1:8000"),
+            vlm_engine=normalize_vlm_engine(os.environ.get("CHUNKY_VLM_ENGINE", "vllm")),
             embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding"),
             token=load_token(),
         )

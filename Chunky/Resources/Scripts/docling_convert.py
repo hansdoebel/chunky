@@ -120,7 +120,9 @@ def _non_pdf_format_options():
     }
 
 
-def _build_vlm_format_options(vlm_model, ollama_url):
+def _build_vlm_format_options(vlm_model, ollama_url, vlm_engine=None, vllm_url=None, accelerator="cuda"):
+    if vlm_model == "granite-docling-transformers" and vlm_engine in {"vllm", "transformers"}:
+        return _build_granite_format_options(vlm_engine, vllm_url, accelerator)
     from docling.datamodel.base_models import InputFormat
     from docling.datamodel.pipeline_options import VlmPipelineOptions
     from docling.document_converter import FormatOption, PdfFormatOption
@@ -170,6 +172,33 @@ def _build_vlm_format_options(vlm_model, ollama_url):
             vlm_options=vlm_options,
         )
 
+    format_options: dict[InputFormat, FormatOption] = {
+        InputFormat.PDF: PdfFormatOption(
+            pipeline_cls=VlmPipeline,
+            pipeline_options=pipeline_options,
+        ),
+        **_non_pdf_format_options(),
+    }
+    return format_options
+
+
+def _build_granite_format_options(vlm_engine, vllm_url, accelerator):
+    """granite-docling via the DocTags preset. vLLM first, Transformers on CUDA as fallback."""
+    from docling.datamodel.base_models import InputFormat
+    from docling.document_converter import FormatOption, PdfFormatOption
+    from docling.pipeline.vlm_pipeline import VlmPipeline
+
+    from chunky_worker.vlm import build_granite_pipeline_options, granite_plan
+
+    plan = granite_plan(vlm_engine, vllm_url or "http://127.0.0.1:8000", accelerator)
+    log.info(
+        "granite-docling preset=%s engine=%s device=%s flash_attention2=%s",
+        plan["preset"],
+        plan["engine"],
+        plan["device"],
+        plan["cuda_use_flash_attention2"],
+    )
+    pipeline_options = build_granite_pipeline_options(plan)
     format_options: dict[InputFormat, FormatOption] = {
         InputFormat.PDF: PdfFormatOption(
             pipeline_cls=VlmPipeline,
@@ -415,6 +444,8 @@ def convert_document(
     chunk_merge_peers: bool = True,
     chunk_tokenizer: str = "",
     on_progress=None,
+    vlm_engine: str | None = None,
+    vllm_url: str | None = None,
 ) -> ConversionResult:
     try:
         from docling.document_converter import DocumentConverter
@@ -459,7 +490,13 @@ def convert_document(
 
         use_vlm = vlm_model is not None
         if use_vlm:
-            format_options = _build_vlm_format_options(vlm_model, ollama_url)
+            format_options = _build_vlm_format_options(
+                vlm_model,
+                ollama_url,
+                vlm_engine=vlm_engine,
+                vllm_url=vllm_url,
+                accelerator=accelerator,
+            )
         else:
             format_options = _build_standard_format_options(
                 accelerator=accelerator,

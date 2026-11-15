@@ -6,7 +6,12 @@ API when the Devbox processing host is selected (see Linear PER-43).
 
 This package wraps the existing scripts in `Chunky/Resources/Scripts/`
 (`convert_document`, `_chunk_document`, and the daemon command fields). It does
-**not** install or import `mlx-vlm` (Apple-only).
+**not** install or import `mlx-vlm` (Apple-only). Granite-docling on the
+devbox uses the `granite_docling` DocTags preset through vLLM
+(`CHUNKY_VLM_ENGINE=vllm`, the default) or Transformers on CUDA
+(`CHUNKY_VLM_ENGINE=transformers`). Flash Attention 2 stays off.
+`/v1/health` reports the engine and whether the GPU is visible. See
+`docs/devbox-setup.md`.
 
 GPU / model backends are pluggable. Unit tests inject fakes and do not need
 Docling, Ollama, or a GPU.
@@ -19,7 +24,7 @@ Docling, Ollama, or a GPU.
 | `GET` | `/v1/jobs/{id}` | Job status and result (chunks, optional embeddings) |
 | `GET` | `/v1/jobs/{id}/events` | SSE progress `{type, message, percent}` |
 | `POST` | `/v1/jobs/{id}/cancel` | Request cancellation |
-| `GET` | `/v1/health` | Docling import and embedding-backend reachability. **No token.** |
+| `GET` | `/v1/health` | Docling import, embedding reachability, and the granite VLM engine plus GPU visibility. **No token.** |
 | `GET` | `/v1/models` | Embedding model names and known VLM ids. **Bearer token.** |
 
 `settings.mode` is `chunk_only` (default) or `chunk_and_embed`. Other fields

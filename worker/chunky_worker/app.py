@@ -18,6 +18,7 @@ from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
 from chunky_worker.settings import Settings, is_loopback_url
+from chunky_worker.vlm import GRANITE_PRESET, GRANITE_REPO_ID, gpu_probe
 
 log = logging.getLogger(__name__)
 
@@ -52,7 +53,11 @@ def create_app(
     settings.work_dir.mkdir(parents=True, exist_ok=True)
     configure_logging(settings.log_dir)
 
-    pipeline = pipeline or DoclingPipeline(settings.scripts_dir)
+    pipeline = pipeline or DoclingPipeline(
+        settings.scripts_dir,
+        vlm_engine=settings.vlm_engine,
+        vllm_url=settings.vllm_url,
+    )
     embeddings = embeddings or OllamaEmbeddingBackend(settings.ollama_url)
     store = store or JobStore()
     runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
@@ -83,6 +88,16 @@ def create_app(
                 "url": settings.ollama_url,
                 "error": embed_error,
             },
+            "vlm": {
+                "model": GRANITE_REPO_ID,
+                "preset": GRANITE_PRESET,
+                "engine": settings.vlm_engine,
+                "vllm_url": settings.vllm_url if settings.vlm_engine == "vllm" else None,
+                "device": "cuda",
+                "flash_attention2": False,
+                "mlx": False,
+                "gpu": gpu_probe(),
+            },
         }
 
     @api.get("/v1/models")
@@ -90,7 +105,15 @@ def create_app(
         names, error = embeddings.list_models()
         embedding_models = [{"name": name, "available": True} for name in names]
         vlm = [
-            {"name": name, "available": True, "engine": "transformers"}
+            {
+                "name": name,
+                "available": True,
+                "engine": settings.vlm_engine if name.startswith("granite-docling") else "transformers",
+                "preset": GRANITE_PRESET if name.startswith("granite-docling") else None,
+                "repo_id": GRANITE_REPO_ID if name.startswith("granite-docling") else None,
+                "device": "cuda" if name.startswith("granite-docling") else None,
+                "flash_attention2": False if name.startswith("granite-docling") else None,
+            }
             for name in TRANSFORMERS_VLM_MODELS
         ] + [
             {
@@ -196,6 +219,13 @@ def _log_startup(settings: Settings) -> None:
         log.warning("Ollama URL is not loopback: %s", settings.ollama_url)
     if not is_loopback_url(settings.vllm_url):
         log.warning("vLLM URL is not loopback: %s", settings.vllm_url)
+    gpu = gpu_probe()
+    log.info(
+        "VLM granite-docling engine=%s device=cuda flash_attention2=false gpu_visible=%s arch=%s",
+        settings.vlm_engine,
+        gpu["cuda"],
+        gpu["arch_list"],
+    )
 
 
 def _job_payload(job: Job) -> dict:
