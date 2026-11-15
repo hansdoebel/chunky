@@ -81,6 +81,10 @@ nonisolated enum LibraryFilter {
         return trimmed.isEmpty ? PaperLibrary.defaultID : trimmed
     }
 
+    static func belongs(existing: String?, to libraryID: String) -> Bool {
+        keeps([PaperLibrary.field: existing ?? ""], filters: membership(ids: [assignedID(libraryID)]))
+    }
+
     static func backfill(existing: String?) -> String? {
         let trimmed = existing?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
         return trimmed.isEmpty ? PaperLibrary.defaultID : nil

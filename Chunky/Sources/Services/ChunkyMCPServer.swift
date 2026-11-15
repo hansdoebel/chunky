@@ -162,7 +162,8 @@ nonisolated enum ChunkyMCPDispatch {
             let ids = values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
             if !ids.isEmpty { return (ids, .selected) }
         }
-        if let one = string(arguments["library"]), !one.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+        let one = string(arguments["library"])
+        if !one.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             return ([one], .selected)
         }
         return ([], .active)

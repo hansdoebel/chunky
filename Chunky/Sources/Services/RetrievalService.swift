@@ -482,6 +482,7 @@ struct RetrievalRequest: Equatable, Sendable {
         librarySearch: LibrarySearch = .active,
         rrfWeights: [Double]? = nil,
         rerank: RerankConfig? = nil,
+        libraryID: String? = nil,
         settings: AppSettings
     ) -> RetrievalRequest {
         let resolvedBackend = (backend ?? settings.embeddingBackend).trimmingCharacters(in: .whitespacesAndNewlines)
@@ -512,7 +513,7 @@ struct RetrievalRequest: Equatable, Sendable {
             expandPapers: expandPapers,
             expandSection: expandSection,
             sectionRatio: sectionRatio,
-            libraryID: settings.activeLibraryID,
+            libraryID: LibraryFilter.assignedID(libraryID ?? settings.activeLibraryID),
             libraryIDs: libraryIDs,
             librarySearch: librarySearch,
             rrfWeights: rrfWeights,
@@ -1070,7 +1071,8 @@ struct QdrantRetrievalIndex: RetrievalIndex {
                         page: point.page,
                         pageEnd: Int(point.metadata["page_end"] ?? ""),
                         text: point.text,
-                        chunkIndex: Int(point.metadata["chunk_index"] ?? "")
+                        chunkIndex: Int(point.metadata["chunk_index"] ?? ""),
+                        libraryID: point.metadata[PaperLibrary.field]
                     )
                 )
             }
@@ -1108,10 +1110,10 @@ struct RetrievalService {
         let sources = Array(Set(hits.map(\.source))).filter { !$0.isEmpty }
         if let index, !sources.isEmpty {
             if let loaded = try? await index.sectionChunks(collection: request.collection, sources: sources), !loaded.isEmpty {
-                return loaded
+                return SectionExpansion.restricting(loaded, filters: request.scopedFilters())
             }
         }
-        return hits.map {
+        return SectionExpansion.restricting(hits.map {
             SectionSibling(
                 id: $0.id,
                 source: $0.source,
@@ -1119,9 +1121,10 @@ struct RetrievalService {
                 page: $0.page,
                 pageEnd: $0.pageEnd,
                 text: $0.text,
-                chunkIndex: Int($0.payload["chunk_index"] ?? "")
+                chunkIndex: Int($0.payload["chunk_index"] ?? ""),
+                libraryID: $0.payload[PaperLibrary.field]
             )
-        }
+        }, filters: request.scopedFilters())
     }
 
     init(

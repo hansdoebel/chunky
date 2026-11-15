@@ -383,7 +383,7 @@ class JobRunner:
         self.store.append_event(job_id, event)
 
     def _with_summary_point(self, points, *, chunks, job, result, model):
-        from chunky_worker.document_summary import resolve_summary, summary_payload
+        from chunky_worker.document_summary import resolve_summary, summary_payload, summary_point_id
 
         text, kind = resolve_summary(chunks, result.doc_title, generated=None)
         if not text or not points:
@@ -398,6 +398,7 @@ class JobRunner:
                 document_id = str(chunk["document_id"])
                 break
         settings = job.settings
+        library = (settings.library_id or "default").strip() or "default"
         payload = summary_payload(
             text=text,
             kind=kind,
@@ -407,10 +408,11 @@ class JobRunner:
             year=result.year if settings.metadata_include_year else None,
             document_id=document_id if settings.metadata_include_document_id else None,
             source_path=settings.source_path or None,
+            library_id=library,
         )
         points.append(
             PreparedPoint(
-                id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunky-summary:{job.filename}")),
+                id=summary_point_id(job.filename, library),
                 vector=list(vectors[0]),
                 payload=payload,
             )

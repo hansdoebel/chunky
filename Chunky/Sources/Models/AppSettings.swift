@@ -333,6 +333,10 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.workerTokenKey, newValue) }
     }
 
+    func storedActiveLibraryID() -> String {
+        LibraryFilter.assignedID(defaults.string(forKey: prefix + "activeLibraryID") ?? "")
+    }
+
     func workerEndpoints() -> [WorkerEndpoint] {
         let stored = WorkerEndpointStore.load(defaults: defaults)
         if !stored.isEmpty { return stored }

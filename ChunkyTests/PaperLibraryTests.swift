@@ -63,6 +63,37 @@ struct PaperLibraryTests {
         #expect(point.vector == [0.1])
     }
 
+    @Test func sectionSiblingsStayInsideTheSearchedLibrary() {
+        let filters = LibraryFilter.membership(ids: ["thesis"])
+        let siblings = [
+            SectionSibling(id: "a", source: "paper.pdf", headings: ["Results"], text: "A", libraryID: "thesis"),
+            SectionSibling(id: "b", source: "paper.pdf", headings: ["Results"], text: "B", libraryID: "notes"),
+            SectionSibling(id: "c", source: "paper.pdf", headings: ["Results"], text: "C"),
+        ]
+        let kept = SectionExpansion.restricting(siblings, filters: filters)
+        #expect(kept.map(\.id) == ["a"])
+        #expect(LibraryFilter.belongs(existing: nil, to: PaperLibrary.defaultID))
+        #expect(!LibraryFilter.belongs(existing: "thesis", to: PaperLibrary.defaultID))
+        #expect(LibraryFilter.belongs(existing: "thesis", to: "thesis"))
+    }
+
+    @Test func integerPointIDsStayIntegers() {
+        #expect(StoredPointID.wire("42") == "integer:42")
+        #expect(StoredPointID.wire("bdefd408-de82-54f7-b74f-8478d8f689e9") == "uuid:bdefd408-de82-54f7-b74f-8478d8f689e9")
+    }
+
+    @Test func mcpReadsTheLibrarySavedAfterStartup() {
+        let name = "chunky-library-\(UUID().uuidString)"
+        let defaults = UserDefaults(suiteName: name)!
+        defaults.removePersistentDomain(forName: name)
+        defer { defaults.removePersistentDomain(forName: name) }
+        let first = AppSettings(defaults: defaults, secrets: MemorySecretStore())
+        let second = AppSettings(defaults: defaults, secrets: MemorySecretStore())
+        second.activeLibraryID = "thesis"
+        #expect(first.activeLibraryID == PaperLibrary.defaultID)
+        #expect(first.storedActiveLibraryID() == "thesis")
+    }
+
     @Test func scopedSearchCarriesTheLibraryFilter() {
         let settings = IsolatedSettings.make()
         settings.activeLibraryID = "thesis"

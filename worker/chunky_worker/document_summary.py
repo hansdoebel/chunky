@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import uuid
 from typing import Any
 
 ABSTRACT_HEADINGS = {"abstract", "summary", "zusammenfassung"}
@@ -66,6 +67,12 @@ def resolve_summary(
     return material, "extract"
 
 
+def summary_point_id(source: str, library_id: str = "default") -> str:
+    library = (library_id or "default").strip() or "default"
+    name = f"chunky-summary:{source}" if library == "default" else f"chunky-summary:{library}:{source}"
+    return str(uuid.uuid5(uuid.NAMESPACE_URL, name))
+
+
 def summary_payload(
     *,
     text: str,
@@ -76,7 +83,9 @@ def summary_payload(
     year: int | None,
     document_id: str | None,
     source_path: str | None = None,
+    library_id: str = "default",
 ) -> dict[str, Any]:
+    library = (library_id or "default").strip() or "default"
     payload: dict[str, Any] = {
         "text": text,
         "embedding_text": text,
@@ -84,6 +93,7 @@ def summary_payload(
         "record_type": DOCUMENT_RECORD,
         "summary_kind": kind,
         "content_type": "document",
+        "library_id": library,
     }
     if doc_title:
         payload["doc_title"] = doc_title

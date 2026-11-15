@@ -116,6 +116,7 @@ nonisolated struct RetrievalServiceSearch: ChunkySearchProviding {
             filters: request.filters.map(Self.retrievalFilter),
             libraryIDs: request.libraryIDs,
             librarySearch: request.librarySearch,
+            libraryID: settings.storedActiveLibraryID(),
             settings: settings
         )
         let page = try await retrieval.search(retrievalRequest)

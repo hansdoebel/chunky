@@ -445,6 +445,8 @@ def _payload(
         payload["cite_key"] = settings.bibliography_cite_key
     if settings.bibliography_source:
         payload["metadata_source"] = settings.bibliography_source
+    library = (settings.library_id or "default").strip() or "default"
+    payload["library_id"] = library
     return payload
 
 def dense_vector_name(info: Any) -> str | None:

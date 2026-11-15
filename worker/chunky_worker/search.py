@@ -205,6 +205,19 @@ def hybrid_query_arguments(
         "with_vectors": False,
     }
 
+def source_scroll_filter(source: str, library_filters: list[PayloadFilter]):
+    from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+    library = build_query_filter(library_filters)
+    must = [FieldCondition(key="source", match=MatchValue(value=source))]
+    must_not = None
+    if library is not None:
+        if library.must:
+            must.extend(library.must)
+        must_not = library.must_not
+    return Filter(must=must, must_not=must_not)
+
+
 def _load_element_types():
     import sys
     from pathlib import Path
@@ -557,8 +570,20 @@ def run_search(
             loaded: list[dict[str, Any]] = []
             loader = getattr(searcher, "section_chunks", None)
             if callable(loader) and sources:
+                library_filters = [item for item in request.filters if item.key == "library_id"]
                 try:
-                    loaded = loader(url=url, api_key=api_key, collection=collection, sources=sources)
+                    loaded = loader(
+                        url=url,
+                        api_key=api_key,
+                        collection=collection,
+                        sources=sources,
+                        library_filters=library_filters,
+                    )
+                except TypeError:
+                    try:
+                        loaded = loader(url=url, api_key=api_key, collection=collection, sources=sources)
+                    except Exception:
+                        loaded = []
                 except Exception:
                     loaded = []
             hits = expand_section_hits(hits, loaded, request.section_ratio)
@@ -634,9 +659,15 @@ class QdrantPointSearcher:
         if _ensure_filter_indexes(client, collection):
             self._indexed.add(key)
 
-    def section_chunks(self, *, url: str, api_key: str, collection: str, sources: list[str]) -> list[dict[str, Any]]:
-        from qdrant_client.models import FieldCondition, Filter, MatchValue
-
+    def section_chunks(
+        self,
+        *,
+        url: str,
+        api_key: str,
+        collection: str,
+        sources: list[str],
+        library_filters: list[PayloadFilter] | None = None,
+    ) -> list[dict[str, Any]]:
         client = self._open(url, api_key)
         found: list[dict[str, Any]] = []
         try:
@@ -645,7 +676,7 @@ class QdrantPointSearcher:
                 while True:
                     points, offset = client.scroll(
                         collection_name=collection,
-                        scroll_filter=Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))]),
+                        scroll_filter=source_scroll_filter(source, library_filters or []),
                         limit=128,
                         offset=offset,
                         with_payload=True,
