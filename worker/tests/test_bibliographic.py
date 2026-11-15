@@ -85,3 +85,61 @@ def test_llm_alone_when_crossref_is_absent():
     assert source == "llm"
     assert chunks[0]["doc_title"] == "Only LLM"
     assert chunks[0]["metadata_source"] == "llm"
+
+
+def test_known_document_year_is_kept():
+    from bibliographic import seed_document_fields
+
+    chunks = [{"text": "body", "year": None, "doc_title": None}]
+    seed_document_fields(chunks, {"year": 1999, "doc_title": "Known"})
+
+    def llm(_prompt):
+        return '{"doc_title": "Guess", "authors": ["Bea"], "year": 2020}'
+
+    enrich_chunks(chunks, ["first page"], llm=llm)
+    assert chunks[0]["year"] == 1999
+    assert chunks[0]["doc_title"] == "Known"
+    assert chunks[0]["authors"] == ["Bea"]
+
+
+def test_reference_doi_does_not_overwrite_the_paper():
+    calls = []
+
+    def crossref(doi):
+        calls.append(doi)
+        return {"doc_title": "Cited Paper", "authors": ["Other"], "year": 2010, "doi": doi}
+
+    def llm(_prompt):
+        return '{"doc_title": "This Paper", "authors": ["Ada"], "year": 2024, "doi": "10.1000/cited"}'
+
+    chunks = [{"text": "body"}]
+    source = enrich_chunks(
+        chunks,
+        ["Introduction without a DOI", "References\n10.1000/cited"],
+        llm=llm,
+        crossref=crossref,
+    )
+    assert calls == []
+    assert source == "llm"
+    assert chunks[0]["doc_title"] == "This Paper"
+    assert chunks[0]["year"] == 2024
+    assert chunks[0].get("doi") in (None, "")
+
+
+def test_empty_pages_skip_the_llm_and_chunk_text_can_fill_them():
+    from bibliographic import pages_for_metadata
+
+    calls = []
+    chunks = [{"text": "Scanned title by Ada, 2018"}]
+    assert pages_for_metadata(["", ""], chunks) == ["Scanned title by Ada, 2018"]
+    enrich_chunks(chunks, ["", ""], llm=lambda _prompt: calls.append("llm") or "{}")
+    assert calls == []
+
+
+def test_chat_payload_without_a_message_is_empty():
+    from chunky_worker.jobs import _message_text
+
+    assert _message_text(None) == ""
+    assert _message_text([]) == ""
+    assert _message_text({"choices": [None]}) == ""
+    assert _message_text({"choices": [{"message": {"content": "ok"}}]}) == "ok"

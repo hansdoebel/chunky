@@ -134,6 +134,59 @@ def apply_fields(chunks: list[dict], fields: dict[str, Any], source: str) -> Non
         chunk["metadata_source"] = source
 
 
+def pages_for_metadata(pages: list[str], chunks: list[dict]) -> list[str]:
+    if any(page and str(page).strip() for page in pages):
+        return list(pages)
+    texts = [str(chunk.get("text") or "").strip() for chunk in chunks]
+    texts = [text for text in texts if text]
+    if not texts:
+        return []
+    chosen = texts[:2]
+    if len(texts) > 2:
+        chosen.append(texts[-1])
+    return chosen
+
+
+def seed_document_fields(chunks: list[dict], document: dict[str, Any]) -> list[dict]:
+    for chunk in chunks:
+        for key in ("doc_title", "authors", "year", "doi"):
+            if chunk.get(key) not in (None, "", []):
+                continue
+            value = document.get(key)
+            if value in (None, "", []):
+                continue
+            chunk[key] = value
+    return chunks
+
+
+def front_matter(pages: list[str]) -> str:
+    headings = {"references", "bibliography", "works cited", "literatur"}
+    kept = []
+    for page in pages[:2]:
+        if not page:
+            continue
+        lines = []
+        for line in str(page).splitlines():
+            if line.strip().lower().rstrip(":") in headings:
+                break
+            lines.append(line)
+        if lines:
+            kept.append("\n".join(lines))
+    return "\n".join(kept)
+
+
+def document_doi(existing: Any, front_text: str, suggested: Any = None) -> str | None:
+    if existing not in (None, "", []):
+        return _text(existing)
+    found = extract_doi(front_text)
+    if found:
+        return found
+    suggested_text = _text(suggested)
+    if suggested_text and suggested_text.lower() in (front_text or "").lower():
+        return suggested_text
+    return None
+
+
 def prompt_for(pages: list[str], doi: str | None) -> str:
     sample = "\n\n".join(page.strip() for page in pages[:2] if page and page.strip())
     if len(pages) > 2 and pages[-1].strip():
@@ -157,17 +210,24 @@ def enrich_chunks(
         apply_fields(chunks, current_fields(chunks), source)
         return source
     fields = current_fields(chunks)
-    text = "\n".join(pages)
-    doi = fields.get("doi") or extract_doi(text)
+    front = front_matter(pages)
+    doi = document_doi(fields.get("doi"), front)
     if doi and not fields.get("doi"):
         fields["doi"] = doi
     chosen = "docling" if not missing_required(fields) else "pdf"
-    if llm is not None and missing_required(fields):
+    visible = "\n".join(page.strip() for page in pages if page and str(page).strip())
+    if llm is not None and missing_required(fields) and visible:
         parsed = parse_metadata_json(llm(prompt_for(pages, doi)))
+        doi = document_doi(doi, front, parsed.get("doi"))
+        if parsed.get("doi") and (doi is None or str(parsed.get("doi")).lower() != doi.lower()):
+            parsed = dict(parsed)
+            parsed["doi"] = None
+        elif doi and not fields.get("doi"):
+            parsed = dict(parsed)
+            parsed["doi"] = doi
         fields = merge_fields(fields, parsed, overwrite=False)
         if not missing_required(fields) or any(parsed.get(key) for key in FIELDS):
             chosen = "llm"
-        doi = fields.get("doi") or doi
     if crossref is not None and doi:
         confirmed = crossref(doi)
         if confirmed:

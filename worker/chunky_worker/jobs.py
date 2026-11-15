@@ -57,17 +57,27 @@ def _apply_printed_labels(chunks: list[dict[str, Any]], pdf_path: Path, settings
     return apply_printed_labels(chunks, pdf_path, settings.page_offset)
 
 
-def _enrich_bibliography(chunks: list[dict[str, Any]], pdf_path: Path, settings: JobSettings) -> list[dict[str, Any]]:
+def _enrich_bibliography(
+    chunks: list[dict[str, Any]],
+    pdf_path: Path,
+    settings: JobSettings,
+    document: dict[str, Any] | None = None,
+) -> list[dict[str, Any]]:
     import sys
 
     scripts = str(Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts")
     if scripts not in sys.path:
         sys.path.insert(0, scripts)
-    from bibliographic import enrich_chunks
+    from bibliographic import enrich_chunks, pages_for_metadata, seed_document_fields
     from chunky_worker.verification import extract_pdf_pages
 
-    pages = extract_pdf_pages(pdf_path) if pdf_path.suffix.lower() == ".pdf" else []
-    llm = (lambda prompt: _llm_complete(settings, prompt)) if settings.metadata_chat_url else None
+    if document is not None:
+        seed_document_fields(chunks, document)
+    extracted = extract_pdf_pages(pdf_path) if pdf_path.suffix.lower() == ".pdf" else []
+    pages = pages_for_metadata(extracted, chunks)
+    llm = None
+    if settings.metadata_chat_url and any(page and str(page).strip() for page in pages):
+        llm = lambda prompt: _llm_complete(settings, prompt)
     crossref = _crossref_lookup if settings.metadata_crossref else None
     enrich_chunks(
         chunks,
@@ -77,6 +87,18 @@ def _enrich_bibliography(chunks: list[dict[str, Any]], pdf_path: Path, settings:
         imported_source=settings.metadata_source or None,
     )
     return chunks
+
+
+def _message_text(body: Any) -> str:
+    if not isinstance(body, dict):
+        return ""
+    choices = body.get("choices")
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return ""
+    message = choices[0].get("message")
+    if not isinstance(message, dict):
+        return ""
+    return str(message.get("content") or "")
 
 
 def _llm_complete(settings: JobSettings, prompt: str) -> str:
@@ -100,11 +122,7 @@ def _llm_complete(settings: JobSettings, prompt: str) -> str:
         body = response.json()
     except ValueError:
         return ""
-    choices = body.get("choices") or []
-    if not choices:
-        return ""
-    message = choices[0].get("message") or {}
-    return str(message.get("content") or "")
+    return _message_text(body)
 
 
 def _crossref_lookup(doi: str) -> dict[str, Any] | None:
@@ -427,15 +445,19 @@ class JobRunner:
             ensure_chunk_ids(chunks, hash_file(input_path))
             chunks = _apply_printed_labels(chunks, input_path, job.settings)
             if job.settings.metadata_enrich:
-                chunks = _enrich_bibliography(chunks, input_path, job.settings)
+                chunks = _enrich_bibliography(chunks, input_path, job.settings, raw)
             raw["chunks"] = chunks
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset
             vectors: list[list[float]] | None = None
             first = chunks[0] if chunks else {}
-            year = first.get("year")
-            if isinstance(year, bool) or not isinstance(year, int):
-                year = raw.get("year")
+            raw_year = raw.get("year")
+            if isinstance(raw_year, int) and not isinstance(raw_year, bool):
+                year = raw_year
+            else:
+                year = first.get("year")
+                if isinstance(year, bool) or not isinstance(year, int):
+                    year = None
             result = JobResult(
                 mode=job.settings.mode,
                 success=True,
