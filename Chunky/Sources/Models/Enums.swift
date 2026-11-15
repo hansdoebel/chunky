@@ -225,6 +225,45 @@ enum XMLDocumentFormat: String, CaseIterable {
     }
 }
 
+enum PictureDescriptionPreset: String, CaseIterable, Identifiable {
+    case smolvlm
+    case graniteVision = "granite_vision"
+    case qwen
+    case api
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .smolvlm: return "SmolVLM"
+        case .graniteVision: return "Granite Vision 3.3-2B"
+        case .qwen: return "Qwen2.5-VL-3B"
+        case .api: return "OpenAI-compatible API"
+        }
+    }
+
+    static func hostDefault(_ host: ProcessingHost) -> PictureDescriptionPreset {
+        host == .devbox ? .graniteVision : .smolvlm
+    }
+}
+
+enum QdrantProfile: String, CaseIterable, Identifiable {
+    case standard
+    case quality
+
+    var id: String { rawValue }
+
+    var displayName: String {
+        switch self {
+        case .standard: return "Standard"
+        case .quality: return "Quality"
+        }
+    }
+
+    var pictureDescription: Bool { self == .quality }
+    var pictureClassification: Bool { self == .quality }
+}
+
 // MARK: - Layout Model
 
 enum LayoutModel: String, CaseIterable {

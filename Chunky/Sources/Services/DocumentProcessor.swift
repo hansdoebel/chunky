@@ -82,6 +82,8 @@ class DocumentProcessor: ObservableObject {
             doclingOptions.doChartExtraction = settings.doChartExtraction
             doclingOptions.doPictureDescription = settings.doPictureDescription
             doclingOptions.doPictureClassification = settings.doPictureClassification
+            doclingOptions.pictureDescriptionPreset = settings.resolvedPictureDescriptionPreset
+            doclingOptions.vlmServerURL = settings.vlmServerURL
             doclingOptions.layoutModel = settings.layoutModel
             doclingOptions.workers = settings.doclingWorkers
             doclingOptions.timeout = settings.doclingTimeout

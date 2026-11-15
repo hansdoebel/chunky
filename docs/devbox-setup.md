@@ -53,6 +53,12 @@ vllm serve ibm-granite/granite-vision-4.1-4b \
 
 Then set `CHUNKY_CHART_VLLM_URL=http://127.0.0.1:8001`. `0.3` is a starting point beside the document server and the embedding model. If the GPU cannot hold all three, keep charts on Transformers and start that process only for a chart job, or lower the document server's utilization.
 
+## Picture description on 32 GB
+
+The devbox default description model is Granite Vision 3.3-2B (`granite_vision`). The Mac default is SmolVLM-256M, which also has an MLX build. Qwen2.5-VL-3B is the larger picker choice. The VLM server URL is only for the API preset. It is separate from Ollama, which stays the embedding server.
+
+A 2B or 3B description model plus `qwen3-embedding` fits in 32 GB if the granite-docling vLLM process is not also holding most of the card. SmolVLM-256M is small enough to leave room for the document server. Do not keep granite-docling, Granite Vision or Qwen, and the embedding model fully resident at the same time. Drop one, or lower `--gpu-memory-utilization` on the document server before enabling description. The Qdrant quality profile turns description and classification on.
+
 Fallback, if vLLM is not running: `CHUNKY_VLM_ENGINE=transformers`. That loads `GRANITEDOCLING_TRANSFORMERS` through `VlmConvertOptions.from_preset("granite_docling", engine_options=TransformersVlmEngineOptions())` with `device="cuda"`. Same rule: do not enable Flash Attention 2.
 
 Ollama stays on `127.0.0.1:11434` for embeddings:

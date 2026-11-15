@@ -90,6 +90,58 @@ def test_chart_extraction_uses_mlx_on_mac_and_transformers_or_api_on_devbox():
     assert chart_extraction_plan(host="devbox")["engine"] == "transformers"
 
 
+class PictureFactory:
+    def __init__(self):
+        self.calls = []
+
+    def from_preset(self, preset, **kwargs):
+        self.calls.append((preset, kwargs))
+        return {"preset": preset, **kwargs}
+
+
+class PictureOptions:
+    model_fields = {"picture_description_options": None}
+
+    def __init__(self):
+        self.picture_description_options = None
+
+
+def test_picture_presets_map_to_docling_options():
+    from presets import apply_picture_description, picture_description_plan, qdrant_quality_profile
+
+    assert picture_description_plan(host="mac")["preset"] == "smolvlm"
+    assert picture_description_plan(host="devbox")["preset"] == "granite_vision"
+    assert picture_description_plan("qwen")["repo_id"] == "Qwen/Qwen2.5-VL-3B-Instruct"
+    assert picture_description_plan("granite_vision")["name"] == "Granite-Vision-3.3-2B"
+
+    api = picture_description_plan("api", host="devbox", vlm_server_url="http://127.0.0.1:8001")
+    assert api["preset"] == "granite_vision"
+    assert api["engine"] == "api"
+    assert api["url"] == "http://127.0.0.1:8001/v1/chat/completions"
+    assert api["params"]["model"] == "ibm-granite/granite-vision-3.3-2b"
+    assert "11434" not in api["url"]
+
+    factory = PictureFactory()
+    options = PictureOptions()
+    apply_picture_description(
+        options,
+        enabled=True,
+        preset="smolvlm",
+        host="mac",
+        factories={
+            "PictureDescriptionVlmEngineOptions": factory,
+            "ApiVlmEngineOptions": Api,
+        },
+    )
+    assert factory.calls == [("smolvlm", {})]
+    assert options.picture_description_options["preset"] == "smolvlm"
+
+    quality = qdrant_quality_profile("devbox")
+    assert quality["do_picture_description"] is True
+    assert quality["do_picture_classification"] is True
+    assert quality["picture_description_preset"] == "granite_vision"
+
+
 def test_chart_preset_is_left_alone_when_extraction_is_off():
     options, factory = _apply("mac", enabled=False)
     assert factory.calls == []

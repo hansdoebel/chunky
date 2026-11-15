@@ -107,6 +107,8 @@ class DoclingPipeline:
             do_chart_extraction=settings.do_chart_extraction,
             do_picture_description=settings.do_picture_description,
             do_picture_classification=settings.do_picture_classification,
+            picture_description_preset=settings.picture_description_preset,
+            vlm_server_url=settings.vlm_server_url,
             input_format=settings.input_format,
             layout_model=settings.layout_model,
             workers=settings.workers,

@@ -128,6 +128,8 @@ def test_daemon_forwards_enrichment_flags_to_the_vlm_builder(monkeypatch):
             "do_formula_enrichment": True,
             "do_code_enrichment": True,
             "generate_images": True,
+            "picture_description_preset": "qwen",
+            "vlm_server_url": "http://127.0.0.1:8001",
         }
     )
     assert seen["model"] == "granite-docling-mlx"
@@ -138,3 +140,5 @@ def test_daemon_forwards_enrichment_flags_to_the_vlm_builder(monkeypatch):
     assert seen["kwargs"]["do_formula_enrichment"] is True
     assert seen["kwargs"]["do_code_enrichment"] is True
     assert seen["kwargs"]["generate_images"] is True
+    assert seen["kwargs"]["picture_description_preset"] == "qwen"
+    assert seen["kwargs"]["vlm_server_url"] == "http://127.0.0.1:8001"
