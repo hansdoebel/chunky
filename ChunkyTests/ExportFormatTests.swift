@@ -8,21 +8,27 @@ struct ExportFormatTests {
 
     // MARK: - Test Setup
 
+    /// Repo root: walk up from this file until `Chunky.xcodeproj` is found.
+    static let projectRoot: URL = {
+        var url = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        let fm = FileManager.default
+        for _ in 0..<8 {
+            if fm.fileExists(atPath: url.appendingPathComponent("Chunky.xcodeproj").path) {
+                return url
+            }
+            url.deleteLastPathComponent()
+        }
+        return URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    }()
+
     /// Path to sample.pdf in assets directory
     static let samplePDFPath: String = {
-        // Get the project root by finding the assets directory
-        let currentFile = #file
-        let testsDir = URL(fileURLWithPath: currentFile).deletingLastPathComponent()
-        let projectRoot = testsDir.deletingLastPathComponent()
-        return projectRoot.appendingPathComponent("assets/sample.pdf").path
+        projectRoot.appendingPathComponent("assets/sample.pdf").path
     }()
 
     /// Path to sample_chunks.json in assets directory
     static let sampleChunksPath: String = {
-        let currentFile = #file
-        let testsDir = URL(fileURLWithPath: currentFile).deletingLastPathComponent()
-        let projectRoot = testsDir.deletingLastPathComponent()
-        return projectRoot.appendingPathComponent("assets/sample_chunks.json").path
+        projectRoot.appendingPathComponent("assets/sample_chunks.json").path
     }()
 
     /// Test chunk data structure (mirrors ChunkingService.DocumentChunk)
