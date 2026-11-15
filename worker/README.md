@@ -1,8 +1,8 @@
 # Chunky worker
 
-HTTP worker for running Docling conversion, HybridChunker, and optional Ollama
-embeddings on a Linux host (the Ubuntu devbox). The macOS app will call this
-API when the Devbox processing host is selected (see Linear PER-43).
+HTTP worker for Docling conversion, HybridChunker, embeddings, Qdrant ingest,
+and search on a Linux host (the Ubuntu devbox). The macOS app calls this API
+when the Devbox processing host is selected and a saved worker profile is in use.
 
 This package wraps the existing scripts in `Chunky/Resources/Scripts/`
 (`convert_document`, `_chunk_document`, and the daemon command fields). It does
@@ -50,7 +50,9 @@ Payload fields match the Mac app: `text`, `source`, `page` (int), `year` (int), 
 
 `POST /v1/search` embeds one query with the configured embedding backend (Ollama
 by default, or OpenAI-compatible `/v1/embeddings` when `embedding_backend` is
-`openai`) and runs a dense Qdrant query. The web UI is out of scope.
+`openai`) and runs a Qdrant query. The worker has no web UI. Rerank, eval
+metrics, and RAG chat run in the Mac app. The app may rerank these hits with
+its own `/v1/rerank` client. This process does not call a reranker.
 
 The Qdrant target is the request's `qdrant_url` and optional `qdrant_api_key`,
 or `CHUNKY_QDRANT_URL` / `CHUNKY_QDRANT_API_KEY` when the body omits the URL.
