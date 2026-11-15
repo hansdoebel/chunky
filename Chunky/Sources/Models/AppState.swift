@@ -55,6 +55,87 @@ class AppState: ObservableObject {
         }
     }
 
+    var watchedIndex = WatchedFolderIndex(folders: [], records: [])
+    private let folderWatcher: FolderWatching = MacFolderWatcher()
+    var watchedStatus = ""
+
+    func watchedIndexURL() -> URL {
+        ChunkCacheLocation.macDirectory()
+            .deletingLastPathComponent()
+            .appendingPathComponent("watched-folders.json")
+    }
+
+    func loadWatchedFolders() {
+        watchedIndex = WatchedFolderIndex.load(from: watchedIndexURL())
+    }
+
+    func saveWatchedFolders() {
+        try? watchedIndex.save(to: watchedIndexURL())
+    }
+
+    func enqueueWatched(url: URL, docID: String) {
+        guard FileManager.default.isReadableFile(atPath: url.path) else { return }
+        if jobs.contains(where: { $0.sourceURL == url && $0.status != .completed && $0.status != .failed }) { return }
+        let job = ProcessingJob(url: url)
+        job.watchedDocID = docID
+        jobs.append(job)
+    }
+
+    func scanWatchedFolders() {
+        loadWatchedFolders()
+        var records = watchedIndex.records
+        var ingested = 0
+        var skipped = 0
+        var replaced = 0
+        var removed = 0
+        var pointIDs: [String] = []
+        for folder in watchedIndex.folders where !folder.paused {
+            let prefix = folder.path.hasSuffix("/") ? folder.path : folder.path + "/"
+            let owned = records.filter { $0.path == folder.path || $0.path.hasPrefix(prefix) }
+            let outside = records.filter { $0.path != folder.path && !$0.path.hasPrefix(prefix) }
+            let files = WatchedFolderFiles.list(directory: URL(fileURLWithPath: folder.path)).compactMap {
+                WatchedFolderFiles.file(at: $0)
+            }
+            let fingerprint = FolderSync.settingsFingerprint(
+                collection: folder.collection,
+                embeddingModel: settings.embeddingModel,
+                chunkTokens: settings.maxTokensPerChunk,
+                overlap: settings.chunkOverlap
+            )
+            let plan = FolderSync.plan(files: files, records: owned, settingsHash: fingerprint, deleteRemoved: folder.deleteRemoved)
+            FolderSyncApply.apply(plan.actions, enqueue: { url, docID in
+                enqueueWatched(url: url, docID: docID)
+            }, delete: { ids in
+                pointIDs.append(contentsOf: ids)
+            })
+            for action in plan.actions {
+                switch action {
+                case .ingest: ingested += 1
+                case .skip: skipped += 1
+                case .replace: replaced += 1
+                case .delete: removed += 1
+                }
+            }
+            records = outside + plan.records
+        }
+        watchedIndex.records = records
+        saveWatchedFolders()
+        watchedStatus = "Ingest \(ingested), replace \(replaced), skip \(skipped), delete \(removed)."
+        if !pointIDs.isEmpty {
+            Task { await deletePoints(ids: pointIDs) }
+        }
+        startWatchingFolders()
+    }
+
+    func startWatchingFolders() {
+        let paths = watchedIndex.folders.filter { !$0.paused }.map(\.path)
+        folderWatcher.start(paths: paths) { [weak self] in
+            Task { @MainActor in
+                self?.scanWatchedFolders()
+            }
+        }
+    }
+
     func addFiles(_ urls: [URL]) {
         for url in urls {
 

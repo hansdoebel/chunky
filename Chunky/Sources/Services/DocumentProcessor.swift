@@ -182,7 +182,7 @@ class DocumentProcessor: ObservableObject {
             var chunks: [ChunkingService.DocumentChunk]
 
             if let pythonChunks = result.chunks, !pythonChunks.isEmpty {
-                let documentId = UUID().uuidString
+                let documentId = job.watchedDocID ?? UUID().uuidString
                 chunks = pythonChunks.map { pc in
                     ChunkingService.DocumentChunk(
                         text: pc.text,

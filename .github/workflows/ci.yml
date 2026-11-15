@@ -112,8 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
-          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots
-          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots
+          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots /tmp/chunky-watched-folder-screenshots
+          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots /tmp/chunky-watched-folder-screenshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -213,4 +213,19 @@ jobs:
         with:
           name: health-screenshots
           path: health-screenshots/*.png
+          if-no-files-found: error
+
+      - name: Stage watched folder screenshots
+        if: always()
+        run: |
+          mkdir -p watched-folder-screenshots
+          cp -f /tmp/chunky-watched-folder-screenshots/*.png watched-folder-screenshots/ || true
+          ls -la watched-folder-screenshots
+
+      - name: Upload watched folder screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: watched-folder-screenshots
+          path: watched-folder-screenshots/*.png
           if-no-files-found: error

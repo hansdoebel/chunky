@@ -35,6 +35,7 @@ class ProcessingJob: ObservableObject, Identifiable {
     @Published var cacheStatus: String?
     var preparedEmbeddings: [[Float]]?
     var bibliography: BibliographicMetadata?
+    var watchedDocID: String?
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }
