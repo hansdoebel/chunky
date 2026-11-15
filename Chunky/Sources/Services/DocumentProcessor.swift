@@ -543,11 +543,31 @@ class DocumentProcessor: ObservableObject {
         }
         job.conversionTime = 0
         job.chunksCount = cached.chunks.count
+        job.retainedChunks = cached.chunks.map { chunk in
+            ChunkingService.DocumentChunk(
+                text: chunk.text,
+                source: job.fileName,
+                page: chunk.page,
+                headings: chunk.headings,
+                tokenCount: chunk.tokenCount,
+                formattedContent: chunk.embeddingText,
+                chunkIndex: chunk.chunkIndex,
+                contentType: chunk.contentType,
+                docTitle: chunk.docTitle,
+                authors: chunk.authors,
+                doi: chunk.doi,
+                year: chunk.year,
+                language: chunk.language,
+                embeddingText: chunk.embeddingText,
+                pageEnd: chunk.pageEnd
+            )
+        }
         if mode == .chunkOnly {
             job.totalTime = CFAbsoluteTimeGetCurrent() - started
             job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
             job.statusMessage = "\(cached.chunks.count) cached chunks"
             job.status = .completed
+            await refreshVerification(job: job, settings: settings, chunks: job.retainedChunks)
             return true
         }
         guard vectors.count == cached.chunks.count, !vectors.isEmpty else { return false }
@@ -591,6 +611,7 @@ class DocumentProcessor: ObservableObject {
         job.totalTime = CFAbsoluteTimeGetCurrent() - started
         job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
         job.status = .completed
+        await refreshVerification(job: job, settings: settings, chunks: job.retainedChunks)
         return true
     }
 
