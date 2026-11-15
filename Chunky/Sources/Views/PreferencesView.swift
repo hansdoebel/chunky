@@ -20,6 +20,8 @@ struct PreferencesView: View {
     @State private var qdrantCloudURLInput: String = ""
     @State private var devboxStatusMessage: String = ""
     @State private var devboxStatus: ConnectionStatus = .unknown
+    @State private var downloadingModels: Set<String> = []
+    @State private var modelStatusMessage = ""
     @State private var doclingVersion: String = "Unknown"
     @State private var latestDoclingVersion: String?
     @State private var isCheckingDocling = false
@@ -205,6 +207,27 @@ struct PreferencesView: View {
         .padding()
     }
 
+    private var recommendedModels: [ManagedModel] {
+        let host = appState.settings.processingHost
+        let models = ModelCatalog.visible(ModelCatalog.recommended(host: host), host: host)
+        return ModelCatalog.marking(models, installed: [], downloading: downloadingModels)
+    }
+
+    private func downloadModel(_ repoID: String) async {
+        downloadingModels.insert(repoID)
+        do {
+            let id = try await DevboxWorkerService().startModelDownload(
+                baseURL: appState.settings.devboxWorkerURL,
+                token: appState.settings.workerToken,
+                repoID: repoID
+            )
+            modelStatusMessage = id.isEmpty ? "Download started for \(repoID)." : "Download \(id) started for \(repoID)."
+        } catch {
+            downloadingModels.remove(repoID)
+            modelStatusMessage = error.localizedDescription
+        }
+    }
+
     private var documentTab: some View {
         Form {
             Section {
@@ -250,6 +273,35 @@ struct PreferencesView: View {
                     Text("Plain HTTP to a private 10GbE address is allowed by NSAllowsLocalNetworking. The token is stored in the Keychain.")
                         .font(.caption)
                         .foregroundColor(.secondary)
+                }
+
+                Section {
+                    ForEach(recommendedModels) { model in
+                        HStack {
+                            Text(model.name)
+                            Spacer()
+                            Text(model.state.rawValue)
+                                .foregroundStyle(.secondary)
+                            if !model.sizeLabel.isEmpty {
+                                Text(model.sizeLabel)
+                                    .foregroundStyle(.secondary)
+                            }
+                            if model.state == .missing && appState.settings.processingHost == .devbox {
+                                Button("Download") { Task { await downloadModel(model.name) } }
+                            }
+                        }
+                    }
+                    if !modelStatusMessage.isEmpty {
+                        Text(modelStatusMessage)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                } header: {
+                    Text("Recommended models")
+                } footer: {
+                    Text(appState.settings.processingHost == .devbox
+                         ? "Devbox: qwen3-embedding, granite-docling, and granite-vision. MLX models stay on the Mac. The worker reports what is actually cached."
+                         : "Mac: Granite-Docling MLX. A devbox download uses the worker token.")
                 }
 
                 Picker("VLM Model", selection: $appState.settings.doclingModel) {

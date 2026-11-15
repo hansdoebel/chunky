@@ -282,6 +282,31 @@ final class DevboxWorkerService {
         return try await fetchJob(id: created, root: root, token: token)
     }
 
+    func startModelDownload(baseURL: String, token: String, repoID: String) async throws -> String {
+        guard let root = URL(string: baseURL), root.host != nil else {
+            throw DevboxClientError.invalidURL(baseURL)
+        }
+        let endpoint = root.appendingPathComponent("v1").appendingPathComponent("models").appendingPathComponent("download")
+        var request = URLRequest(url: endpoint)
+        request.httpMethod = "POST"
+        request.setValue(DevboxJobPayload.authorizationHeader(token: token), forHTTPHeaderField: "Authorization")
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.httpBody = try JSONSerialization.data(withJSONObject: ["repo_id": repoID])
+        let (data, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DevboxClientError.unreachable(url: endpoint.absoluteString, reason: "No HTTP response")
+        }
+        if http.statusCode == 401 {
+            throw DevboxClientError.unauthorized(url: endpoint.absoluteString)
+        }
+        guard http.statusCode == 202 else {
+            let body = String(data: data, encoding: .utf8) ?? ""
+            throw DevboxClientError.http(url: endpoint.absoluteString, status: http.statusCode, detail: body)
+        }
+        let object = try JSONSerialization.jsonObject(with: data) as? [String: Any]
+        return object?["id"] as? String ?? ""
+    }
+
     func cancel(jobID: String, baseURL: String, token: String) async {
         guard let root = URL(string: baseURL) else { return }
         let endpoint = root.appendingPathComponent("v1").appendingPathComponent("jobs").appendingPathComponent(jobID).appendingPathComponent("cancel")

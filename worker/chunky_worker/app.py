@@ -14,6 +14,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from chunky_worker.auth import require_bearer
 from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
 from chunky_worker.jobs import TERMINAL, JobRunner, JobStore
+from chunky_worker.model_catalog import DownloadManager, recommended, scan_hf_cache, vlm_report
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
@@ -47,6 +48,8 @@ def create_app(
     embeddings: EmbeddingBackend | None = None,
     store: JobStore | None = None,
     ingestor=None,
+    model_cache=None,
+    downloader=None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.log_dir.mkdir(parents=True, exist_ok=True)
@@ -66,6 +69,7 @@ def create_app(
     )
     store = store or JobStore()
     runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
+    downloads = DownloadManager(downloader)
 
     app = FastAPI(title="Chunky worker", version="0.1.0")
     app.state.settings = settings
@@ -111,31 +115,43 @@ def create_app(
     def models() -> dict:
         names, error = embeddings.list_models()
         embedding_models = [{"name": name, "available": True} for name in names]
-        vlm = [
-            {
-                "name": name,
-                "available": True,
-                "engine": settings.vlm_engine if name.startswith("granite-docling") else "transformers",
-                "preset": GRANITE_PRESET if name.startswith("granite-docling") else None,
-                "repo_id": GRANITE_REPO_ID if name.startswith("granite-docling") else None,
-                "device": "cuda" if name.startswith("granite-docling") else None,
-                "flash_attention2": False if name.startswith("granite-docling") else None,
-            }
-            for name in TRANSFORMERS_VLM_MODELS
-        ] + [
-            {
-                "name": name,
-                "available": False,
-                "engine": "mlx",
-                "reason": "mlx-vlm is Apple-only and is not installed on the worker",
-            }
-            for name in MLX_VLM_MODELS
-        ]
+        if model_cache is None:
+            cache_rows, cache_error = scan_hf_cache()
+        else:
+            cache_rows, cache_error = model_cache()
         return {
             "embeddings": embedding_models,
-            "vlm": vlm,
+            "vlm": vlm_report(cache_rows),
             "embeddings_error": error,
+            "cache_error": cache_error,
+            "recommended": {
+                "devbox": recommended("devbox"),
+                "mac": recommended("mac"),
+            },
         }
+
+    @api.post("/v1/models/download", status_code=202)
+    def start_download(body: dict) -> dict:
+        repo_id = (body.get("repo_id") or "").strip()
+        if not repo_id:
+            raise HTTPException(status_code=400, detail="repo_id is required")
+        revision = body.get("revision")
+        job_id = downloads.start(repo_id, revision)
+        return {"id": job_id, "status": "running", "repo_id": repo_id}
+
+    @api.get("/v1/models/download/{job_id}")
+    def download_status(job_id: str) -> dict:
+        record = downloads.get(job_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Download not found")
+        return record
+
+    @api.post("/v1/models/download/{job_id}/cancel")
+    def cancel_download(job_id: str) -> dict:
+        record = downloads.cancel(job_id)
+        if record is None:
+            raise HTTPException(status_code=404, detail="Download not found")
+        return record
 
     @api.post("/v1/jobs", status_code=202)
     async def create_job(
