@@ -30,6 +30,14 @@ enum ProcessingHost: String, CaseIterable, Identifiable {
     }
 }
 
+/// Where a Devbox Chunk & Ingest job writes vectors. Local Mac ignores this.
+enum DevboxIngestTarget: String, CaseIterable, Identifiable {
+    case localDocker = "Local Docker"
+    case qdrantCloud = "Qdrant Cloud"
+
+    var id: String { rawValue }
+}
+
 // MARK: - Export Format (for chunk export)
 
 enum ExportFormat: String, CaseIterable {

@@ -207,6 +207,38 @@ class AppSettings: ObservableObject {
     @Published var exportFormat: String {
         didSet { defaults.set(exportFormat, forKey: prefix + "exportFormat") }
     }
+    @Published var devboxWorkerURL: String {
+        didSet { defaults.set(devboxWorkerURL, forKey: prefix + "devboxWorkerURL") }
+    }
+    @Published var devboxIngestTarget: DevboxIngestTarget {
+        didSet { defaults.set(devboxIngestTarget.rawValue, forKey: prefix + "devboxIngestTarget") }
+    }
+
+    /// Bearer token for the devbox worker. Stored in the Keychain.
+    var workerToken: String {
+        get { KeychainService.get(key: KeychainService.workerTokenKey) ?? "" }
+        set {
+            if newValue.isEmpty {
+                KeychainService.delete(key: KeychainService.workerTokenKey)
+            } else {
+                try? KeychainService.save(key: KeychainService.workerTokenKey, value: newValue)
+            }
+            objectWillChange.send()
+        }
+    }
+
+    /// Qdrant Cloud URL sent with a devbox job. Local Docker stays in `qdrantURL`.
+    var qdrantCloudURL: String {
+        get { KeychainService.get(key: KeychainService.qdrantCloudURLKey) ?? "" }
+        set {
+            if newValue.isEmpty {
+                KeychainService.delete(key: KeychainService.qdrantCloudURLKey)
+            } else {
+                try? KeychainService.save(key: KeychainService.qdrantCloudURLKey, value: newValue)
+            }
+            objectWillChange.send()
+        }
+    }
 
     /// Qdrant API Key - stored in Keychain, not in UserDefaults
     var qdrantAPIKey: String {
@@ -297,6 +329,10 @@ class AppSettings: ObservableObject {
         // Migrate old docling_images format to docling, default to markdown
         let savedFormat = defaults.string(forKey: prefix + "exportFormat") ?? ExportFormat.docling.rawValue
         self.exportFormat = savedFormat == "docling_images" ? ExportFormat.docling.rawValue : savedFormat
+        self.devboxWorkerURL = defaults.string(forKey: prefix + "devboxWorkerURL") ?? ""
+        self.devboxIngestTarget = DevboxIngestTarget(
+            rawValue: defaults.string(forKey: prefix + "devboxIngestTarget") ?? ""
+        ) ?? .localDocker
     }
 
     func save() {

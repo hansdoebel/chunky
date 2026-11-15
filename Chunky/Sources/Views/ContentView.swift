@@ -642,6 +642,18 @@ struct BottomBarView: View {
     private var canStart: Bool {
         guard !appState.pendingJobs.isEmpty else { return false }
 
+        if appState.settings.processingHost == .devbox {
+            guard !appState.settings.devboxWorkerURL.isEmpty, !appState.settings.workerToken.isEmpty else {
+                return false
+            }
+            if appState.processingMode == .full && appState.settings.devboxIngestTarget == .qdrantCloud {
+                return !appState.settings.qdrantCloudURL.isEmpty && !appState.settings.qdrantAPIKey.isEmpty
+            }
+            if appState.processingMode == .full {
+                return isQdrantConfigured
+            }
+            return true
+        }
         switch appState.processingMode {
         case .chunkOnly:
             return !appState.settings.exportFolder.isEmpty
