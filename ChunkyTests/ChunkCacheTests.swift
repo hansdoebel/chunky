@@ -14,8 +14,8 @@ struct ChunkCacheTests {
             tokenizer: "",
             maxTokens: 512
         )
-        #expect(key.id == "71d568677ac1aeaaf2e1d1d762fb6c2b630ce1a6f27abdd7ee9779dfbdba38d6")
-        #expect(key.canonical == "abc\n2.64.0\nstandard\n\n512")
+        #expect(key.id == "3636fff3a40669cb435b521f6960f2888b9555317a5077458119ae261d853611")
+        #expect(key.canonical == "abc\n2.64.0\nstandard\n\n512\n")
     }
 
     @Test func macCacheLivesUnderApplicationSupport() {
@@ -103,6 +103,10 @@ struct ChunkCacheTests {
         #expect(ChunkCachePolicy.use(force: true, chunkCount: 2, vectorCount: 2) == .miss)
         #expect(ChunkCachePolicy.use(force: false, chunkCount: 2, vectorCount: nil) == .hit)
         #expect(ChunkCachePolicy.use(force: false, chunkCount: 2, vectorCount: 2) == .vectors)
+        let limited = IsolatedSettings.make()
+        limited.doclingMaxPages = 3
+        limited.doOCR = true
+        #expect(ChunkCachePolicy.key(contentSHA256: "abc", settings: limited).id != ChunkCachePolicy.key(contentSHA256: "abc", settings: settings).id)
         let chunk = ChunkCacheChunk.normalize(["text": "Hello", "source": "paper.pdf", "page": 1])
         let document = try JSONSerialization.data(withJSONObject: ["name": "paper.pdf"])
         try bridge.store(digest: "abc", document: document, chunks: [chunk], vectors: [[0.5, 0.25]])

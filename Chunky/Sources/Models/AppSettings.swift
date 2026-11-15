@@ -199,6 +199,25 @@ class AppSettings: ObservableObject {
     var chunkCacheLimitBytes: Int {
         chunkCacheLimitMB <= 0 ? 0 : chunkCacheLimitMB * 1024 * 1024
     }
+
+    var chunkCacheOptions: String {
+        [
+            "maxPages=\(doclingMaxPages)",
+            "ocr=\(doOCR ? 1 : 0)",
+            "ocrLanguage=\(ocrLanguage)",
+            "merge=\(chunkMergePeers ? 1 : 0)",
+            "tables=\(doTableExtraction ? 1 : 0)",
+            "tableMode=\(tableMode)",
+            "pictures=\(doPictureDescription ? 1 : 0)",
+            "pictureClass=\(doPictureClassification ? 1 : 0)",
+            "formula=\(doFormulaEnrichment ? 1 : 0)",
+            "code=\(doCodeEnrichment ? 1 : 0)",
+            "chart=\(doChartExtraction ? 1 : 0)",
+            "layout=\(layoutModel)",
+            "images=\(imageExportMode)",
+            "cleanup=\(doTextCleanup ? 1 : 0)",
+        ].joined(separator: ";")
+    }
     @Published var doTableExtraction: Bool {
         didSet { defaults.set(doTableExtraction, forKey: prefix + "doTableExtraction") }
     }

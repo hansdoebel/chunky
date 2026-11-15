@@ -23,7 +23,8 @@ enum ChunkCachePolicy {
             doclingVersion: settings.recordedDoclingVersion,
             pipeline: settings.doclingModel,
             tokenizer: settings.chunkTokenizer,
-            maxTokens: settings.maxTokensPerChunk
+            maxTokens: settings.maxTokensPerChunk,
+            options: settings.chunkCacheOptions
         )
     }
 }
@@ -95,7 +96,7 @@ struct ChunkCacheBridge {
 }
 
 extension ChunkCacheChunk {
-    init(chunk: DoclingService.PythonChunk, source: String, docTitle: String?, authors: [String]?, year: Int?, doi: String?) {
+    init(chunk: DoclingService.PythonChunk, source: String, docTitle: String?, authors: [String]?, year: Int?, doi: String?, url: String? = nil, language: String? = nil) {
         let boxes = (chunk.bboxes ?? []).map { box in
             ChunkCacheBox(page: box.page, l: box.l, t: box.t, r: box.r, b: box.b, coordOrigin: nil)
         }
@@ -115,6 +116,8 @@ extension ChunkCacheChunk {
             year: year,
             doi: doi,
             source: source,
+            url: url,
+            language: language,
             contentType: chunk.contentType ?? "text",
             chunkIndex: chunk.chunkIndex,
             tokenCount: chunk.tokenCount,

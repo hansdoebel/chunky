@@ -99,6 +99,7 @@ class DocumentProcessor: ObservableObject {
             doclingOptions.chunkTokenizer = settings.chunkTokenizer
             doclingOptions.useDaemon = settings.useDaemonMode
 
+            await refreshDoclingVersion(settings: settings)
             let digest = RunHistory.contentHash(ofFile: job.sourceURL)
             let bridge = cacheBridge(settings: settings)
             let convertStart = CFAbsoluteTimeGetCurrent()
@@ -127,9 +128,9 @@ class DocumentProcessor: ObservableObject {
                     docTitle: cached.chunks.first?.docTitle,
                     authors: cached.chunks.first?.authors,
                     doi: cached.chunks.first?.doi,
-                    docURL: nil,
+                    docURL: cached.chunks.first?.url,
                     year: cached.chunks.first?.year,
-                    language: nil
+                    language: cached.chunks.first?.language
                 )
                 job.preparedEmbeddings = cached.vectors?.map { row in row.map(Float.init) }
             } else {
@@ -155,7 +156,9 @@ class DocumentProcessor: ObservableObject {
                             docTitle: result.docTitle,
                             authors: result.authors,
                             year: result.year,
-                            doi: result.doi
+                            doi: result.doi,
+                            url: result.docURL,
+                            language: result.language
                         )
                     }
                     try? bridge.store(digest: digest, document: document, chunks: records, vectors: nil)
@@ -488,6 +491,109 @@ class DocumentProcessor: ObservableObject {
         }
     }
 
+    private func refreshDoclingVersion(settings: AppSettings) async {
+        if settings.processingHost == .devbox, let version = await remoteDoclingVersion(settings: settings) {
+            settings.recordedDoclingVersion = version
+            return
+        }
+        let python = ("~/.chunky-venv/bin/python3" as NSString).expandingTildeInPath
+        let report = await doclingService.checkInstallation(pythonPath: python)
+        if let version = report.version, !version.isEmpty {
+            settings.recordedDoclingVersion = version
+        }
+    }
+
+    private func remoteDoclingVersion(settings: AppSettings) async -> String? {
+        let trimmed = settings.devboxWorkerURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: trimmed + "/v1/health") else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let docling = object["docling"] as? [String: Any],
+              let version = docling["version"] as? String,
+              !version.isEmpty
+        else { return nil }
+        return version
+    }
+
+    private func finishFromCache(
+        job: ProcessingJob,
+        settings: AppSettings,
+        mode: ProcessingMode,
+        cached: (chunks: [ChunkCacheChunk], vectors: [[Double]]?),
+        started: CFAbsoluteTime
+    ) async throws -> Bool {
+        var vectors = (cached.vectors ?? []).map { row in row.map(Float.init) }
+        if mode == .full, vectors.count != cached.chunks.count {
+            let ollama = try getOllamaService(baseURL: settings.ollamaURL)
+            let texts = cached.chunks.map { $0.embeddingText.isEmpty ? $0.text : $0.embeddingText }
+            vectors = try await ollama.embedBatch(texts: texts, model: settings.embeddingModel)
+            let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+            try? cacheBridge(settings: settings).storeVectors(
+                digest: digest,
+                vectors: vectors.map { row in row.map(Double.init) }
+            )
+            job.cacheStatus = ChunkCacheUse.hit.rawValue
+        } else {
+            job.cacheStatus = ChunkCachePolicy.use(
+                force: false,
+                chunkCount: cached.chunks.count,
+                vectorCount: vectors.count
+            ).rawValue
+        }
+        job.conversionTime = 0
+        job.chunksCount = cached.chunks.count
+        if mode == .chunkOnly {
+            job.totalTime = CFAbsoluteTimeGetCurrent() - started
+            job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+            job.statusMessage = "\(cached.chunks.count) cached chunks"
+            job.status = .completed
+            return true
+        }
+        guard vectors.count == cached.chunks.count, !vectors.isEmpty else { return false }
+        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        let supplied: QdrantService?
+        if options.target == .qdrantCloud {
+            let cloud = QdrantService()
+            let apiKey = settings.qdrantAPIKey.isEmpty ? nil : settings.qdrantAPIKey
+            try await cloud.configure(url: settings.qdrantCloudURL, apiKey: apiKey)
+            try await cloud.connect(timeout: settings.qdrantTimeout)
+            supplied = cloud
+        } else {
+            supplied = nil
+        }
+        let rawChunks = cached.chunks.map { chunk -> [String: Any] in
+            var object = chunk.jsonObject()
+            object["source"] = job.fileName
+            return object
+        }
+        let parsed = ParsedWorkerJob(
+            status: "succeeded",
+            error: nil,
+            errorType: nil,
+            chunks: rawChunks,
+            embeddings: vectors,
+            embeddingDim: vectors.first?.count ?? settings.embeddingDimensions,
+            docTitle: cached.chunks.first?.docTitle,
+            authors: cached.chunks.first?.authors ?? [],
+            language: cached.chunks.first?.language,
+            year: cached.chunks.first?.year,
+            ingestUpserted: nil,
+            ingestCollection: settings.defaultCollection,
+            pageCount: cached.chunks.compactMap(\.page).max(),
+            tokenCount: cached.chunks.reduce(0) { $0 + $1.tokenCount },
+            metrics: nil
+        )
+        job.status = .uploading
+        let uploadStarted = CFAbsoluteTimeGetCurrent()
+        try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed, qdrant: supplied)
+        job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
+        job.totalTime = CFAbsoluteTimeGetCurrent() - started
+        job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+        job.status = .completed
+        return true
+    }
+
     private func cacheBridge(settings: AppSettings) -> ChunkCacheBridge {
         let remote: WorkerChunkCache?
         if settings.processingHost == .devbox, !settings.devboxWorkerURL.isEmpty, !settings.workerToken.isEmpty {
@@ -676,7 +782,7 @@ class DocumentProcessor: ObservableObject {
                 job.embeddingTime = (job.embeddingTime ?? 0) + (CFAbsoluteTimeGetCurrent() - embedStarted)
             }
 
-            if job.cacheStatus == ChunkCacheUse.hit.rawValue, embeddings.count == chunks.count {
+            if job.cacheStatus != ChunkCacheUse.vectors.rawValue, embeddings.count == chunks.count {
                 let digest = RunHistory.contentHash(ofFile: job.sourceURL)
                 try? cacheBridge(settings: settings).storeVectors(
                     digest: digest,
@@ -800,6 +906,7 @@ class DocumentProcessor: ObservableObject {
         try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: firstPoints, batchSize: settings.qdrantBatchSize)
         uploadSeconds += CFAbsoluteTimeGetCurrent() - firstUploadStarted
 
+        var savedEmbeddings = firstEmbeddings
         var embeddedSoFar = firstChunkBatch.count
         job.statusMessage = "Embedding & uploading batch 1/\(totalBatches)..."
         job.progress = 1.0 / Double(totalBatches)
@@ -822,6 +929,7 @@ class DocumentProcessor: ObservableObject {
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: batchPoints, batchSize: settings.qdrantBatchSize)
             uploadSeconds += CFAbsoluteTimeGetCurrent() - batchUploadStarted
 
+            savedEmbeddings.append(contentsOf: batchEmbeddings)
             embeddedSoFar += batchChunks.count
             job.progress = Double(batchIndex + 1) / Double(totalBatches)
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
@@ -830,6 +938,13 @@ class DocumentProcessor: ObservableObject {
         job.embeddedCount = embeddedSoFar
         job.embeddingTime = embedSeconds
         job.uploadTime = uploadSeconds
+        if savedEmbeddings.count == chunks.count {
+            let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+            try? cacheBridge(settings: settings).storeVectors(
+                digest: digest,
+                vectors: savedEmbeddings.map { row in row.map(Double.init) }
+            )
+        }
     }
 
     @MainActor
@@ -894,47 +1009,20 @@ class DocumentProcessor: ObservableObject {
         }
         let payload = DevboxJobPayload.settings(from: settings, mode: mode)
         do {
+            await refreshDoclingVersion(settings: settings)
             let digest = RunHistory.contentHash(ofFile: job.sourceURL)
             if let cached = await cacheBridge(settings: settings).load(digest: digest, force: job.forceReconvert),
                !cached.chunks.isEmpty {
-                job.cacheStatus = ChunkCachePolicy.use(
-                    force: false,
-                    chunkCount: cached.chunks.count,
-                    vectorCount: cached.vectors?.count
-                ).rawValue
-                job.conversionTime = 0
-                job.chunksCount = cached.chunks.count
-                let rawChunks = cached.chunks.map { $0.jsonObject() }
-                let vectors = (cached.vectors ?? []).map { row in row.map(Float.init) }
-                if mode == .full, vectors.count == cached.chunks.count {
-                    job.status = .uploading
-                    let parsed = ParsedWorkerJob(
-                        status: "succeeded",
-                        error: nil,
-                        errorType: nil,
-                        chunks: rawChunks,
-                        embeddings: vectors,
-                        embeddingDim: settings.embeddingDimensions,
-                        docTitle: cached.chunks.first?.docTitle,
-                        authors: cached.chunks.first?.authors ?? [],
-                        language: nil,
-                        year: cached.chunks.first?.year,
-                        ingestUpserted: nil,
-                        ingestCollection: settings.defaultCollection,
-                        pageCount: cached.chunks.compactMap(\.page).max(),
-                        tokenCount: cached.chunks.reduce(0) { $0 + $1.tokenCount },
-                        metrics: nil
-                    )
-                    let uploadStarted = CFAbsoluteTimeGetCurrent()
-                    try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed)
-                    job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
-                } else {
-                    job.statusMessage = "\(cached.chunks.count) cached chunks"
+                let finished = try await finishFromCache(
+                    job: job,
+                    settings: settings,
+                    mode: mode,
+                    cached: cached,
+                    started: started
+                )
+                if finished {
+                    return
                 }
-                job.totalTime = CFAbsoluteTimeGetCurrent() - started
-                job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
-                job.status = .completed
-                return
             }
             job.cacheStatus = ChunkCacheUse.miss.rawValue
             let parsed = try await devboxService.run(
@@ -1086,7 +1174,7 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob) async throws {
+    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob, qdrant supplied: QdrantService? = nil) async throws {
         guard parsed.embeddings.count == parsed.chunks.count, !parsed.embeddings.isEmpty else {
             throw DevboxClientError.http(
                 url: settings.devboxWorkerURL,
@@ -1095,9 +1183,15 @@ class DocumentProcessor: ObservableObject {
             )
         }
         let vectorSize = parsed.embeddingDim ?? parsed.embeddings[0].count
-        guard let appState else { throw QdrantError.notConnected }
-        try await appState.ensureQdrantConnection()
-        guard let qdrant = appState.qdrantService else { throw QdrantError.notConnected }
+        let qdrant: QdrantService
+        if let supplied {
+            qdrant = supplied
+        } else {
+            guard let appState else { throw QdrantError.notConnected }
+            try await appState.ensureQdrantConnection()
+            guard let connected = appState.qdrantService else { throw QdrantError.notConnected }
+            qdrant = connected
+        }
         if try await qdrant.collectionExists(settings.defaultCollection) {
             let info = try await qdrant.getCollectionInfo(settings.defaultCollection)
             try EmbeddingDimensionError.validate(
@@ -1111,7 +1205,7 @@ class DocumentProcessor: ObservableObject {
             ChunkingService.DocumentChunk(
                 id: raw["id"] as? String ?? UUID().uuidString,
                 text: raw["text"] as? String ?? "",
-                source: raw["source"] as? String ?? job.fileName,
+                source: job.fileName,
                 page: (raw["page"] as? NSNumber)?.intValue,
                 headings: (raw["headings"] as? [Any])?.compactMap { $0 as? String } ?? [],
                 chunkIndex: (raw["chunk_index"] as? NSNumber)?.intValue ?? index,

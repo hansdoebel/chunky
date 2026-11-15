@@ -12,6 +12,7 @@ struct ChunkCacheKey: Equatable, Sendable {
     var pipeline: String
     var tokenizer: String
     var maxTokens: Int
+    var options: String = ""
 
     var canonical: String {
         [
@@ -20,6 +21,7 @@ struct ChunkCacheKey: Equatable, Sendable {
             pipeline.trimmingCharacters(in: .whitespacesAndNewlines),
             tokenizer.trimmingCharacters(in: .whitespacesAndNewlines),
             String(maxTokens),
+            options.trimmingCharacters(in: .whitespacesAndNewlines),
         ].joined(separator: "\n")
     }
 
@@ -51,6 +53,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
     var year: Int?
     var doi: String?
     var source: String
+    var url: String?
+    var language: String?
     var contentType: String
     var chunkIndex: Int
     var tokenCount: Int
@@ -94,6 +98,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
             year: intValue(raw["year"]),
             doi: text(raw["doi"]),
             source: text(raw["source"]) ?? "",
+            url: text(raw["url"]),
+            language: text(raw["language"]),
             contentType: text(raw["content_type"]) ?? "text",
             chunkIndex: intValue(raw["chunk_index"]) ?? 0,
             tokenCount: intValue(raw["token_count"]) ?? 0,
@@ -127,6 +133,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
             "year": year as Any? ?? NSNull(),
             "doi": doi as Any? ?? NSNull(),
             "source": source,
+            "url": url as Any? ?? NSNull(),
+            "language": language as Any? ?? NSNull(),
             "content_type": contentType,
             "chunk_index": chunkIndex,
             "token_count": tokenCount,
@@ -537,6 +545,7 @@ struct WorkerChunkCache {
             "pipeline": key.pipeline,
             "tokenizer": key.tokenizer,
             "max_tokens": key.maxTokens,
+            "options": key.options,
             "include_document": includeDocument,
         ]
         if let embeddingModel, !embeddingModel.isEmpty {

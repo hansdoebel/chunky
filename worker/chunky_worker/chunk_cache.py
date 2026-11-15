@@ -27,6 +27,7 @@ def canonical_key(
     pipeline: str,
     tokenizer: str,
     max_tokens: int,
+    options: str = "",
 ) -> str:
     return "\n".join(
         [
@@ -35,6 +36,7 @@ def canonical_key(
             pipeline.strip(),
             tokenizer.strip(),
             str(int(max_tokens)),
+            options.strip(),
         ]
     )
 
@@ -45,9 +47,10 @@ def entry_id(
     pipeline: str,
     tokenizer: str,
     max_tokens: int,
+    options: str = "",
 ) -> str:
     digest = hashlib.sha256(
-        canonical_key(content_sha256, docling_version, pipeline, tokenizer, max_tokens).encode("utf-8")
+        canonical_key(content_sha256, docling_version, pipeline, tokenizer, max_tokens, options).encode("utf-8")
     )
     return digest.hexdigest()
 
@@ -120,6 +123,8 @@ def normalize_chunk(raw: dict[str, Any]) -> dict[str, Any]:
         "year": _int(raw.get("year")),
         "doi": _text(raw.get("doi")),
         "source": _text(raw.get("source")) or "",
+        "url": _text(raw.get("url")),
+        "language": _text(raw.get("language")),
         "content_type": _text(raw.get("content_type")) or "text",
         "chunk_index": _int(raw.get("chunk_index")) or 0,
         "token_count": _int(raw.get("token_count")) or 0,
@@ -298,6 +303,7 @@ class ChunkCache:
             str(key["pipeline"]),
             str(key.get("tokenizer") or ""),
             int(key["max_tokens"]),
+            str(key.get("options") or ""),
         )
 
     def _entry_dir(self, ident: str) -> Path:
@@ -324,6 +330,7 @@ class ChunkCache:
             "pipeline": str(key["pipeline"]).strip(),
             "tokenizer": str(key.get("tokenizer") or "").strip(),
             "max_tokens": int(key["max_tokens"]),
+            "options": str(key.get("options") or "").strip(),
             "bytes": self._entry_bytes(ident),
             "last_used_at": _now(),
             "vectors": vectors,
