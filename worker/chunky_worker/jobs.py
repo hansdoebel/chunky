@@ -298,7 +298,9 @@ class JobRunner:
                     raise JobCanceled()
                 model = job.settings.embedding_model or self.settings.embedding_model
                 backend = self.backend_for(job.settings)
-                probed = self.dimensions.dimension(backend, model)
+                kind = (job.settings.embedding_backend or self.settings.embedding_backend or "ollama").strip()
+                url = (job.settings.embedding_url or self.settings.embedding_url or self.settings.ollama_url).strip()
+                probed = self.dimensions.dimension(backend, model, cache_key=f"{kind}|{url}|{model}")
                 if job.settings.ingest_target == IngestTarget.QDRANT_CLOUD:
                     existing = self.ingestor.collection_vector_size(
                         url=job.settings.qdrant_url or "",

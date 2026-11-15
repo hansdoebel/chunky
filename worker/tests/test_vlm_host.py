@@ -68,3 +68,4 @@ def test_pipeline_rewrites_mlx_before_convert(tmp_path: Path):
     )
     assert seen["vlm_engine"] is None
     assert seen["vlm_resident"] is False
+    assert seen["embedding_model"] == "qwen3-embedding"

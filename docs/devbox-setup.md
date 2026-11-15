@@ -76,7 +76,7 @@ vllm serve Qwen/Qwen3-Embedding-0.6B \
   --gpu-memory-utilization 0.15
 ```
 
-Set `CHUNKY_EMBEDDING_BACKEND=openai` and `CHUNKY_EMBEDDING_URL=http://127.0.0.1:8002`. This process is not the granite-docling server. `0.15` leaves room for that server on 32 GB. If both cannot stay resident, stop one before starting the other. The chunk tokenizer follows this model (`Qwen/Qwen3-Embedding-0.6B`), not MiniLM.
+Set `CHUNKY_EMBEDDING_BACKEND=openai`, `CHUNKY_EMBEDDING_URL=http://127.0.0.1:8002`, and `CHUNKY_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B`. The server name is sent unchanged, so it has to match the model that was started. This process is not the granite-docling server. `0.15` leaves room for that server on 32 GB. If both cannot stay resident, stop one before starting the other. The chunk tokenizer follows this model, not MiniLM.
 
 Ollama remains available:
 

@@ -37,11 +37,13 @@ class DoclingPipeline:
         vlm_engine: str = "vllm",
         vllm_url: str = "http://127.0.0.1:8000",
         chart_vllm_url: str = "",
+        embedding_model: str = "qwen3-embedding",
     ) -> None:
         self.scripts_dir = scripts_dir
         self.vlm_engine = vlm_engine
         self.vllm_url = vllm_url
         self.chart_vllm_url = chart_vllm_url
+        self.embedding_model = embedding_model
 
     def _load_convert(self):
         scripts = str(self.scripts_dir)
@@ -124,7 +126,7 @@ class DoclingPipeline:
             chunk_max_tokens=settings.chunk_max_tokens,
             chunk_merge_peers=settings.chunk_merge_peers,
             chunk_tokenizer=settings.chunk_tokenizer,
-            embedding_model=settings.embedding_model or "",
+            embedding_model=settings.embedding_model or self.embedding_model,
             on_progress=hooked,
         )
 

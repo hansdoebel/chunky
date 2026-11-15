@@ -58,6 +58,7 @@ def create_app(
         vlm_engine=settings.vlm_engine,
         vllm_url=settings.vllm_url,
         chart_vllm_url=settings.chart_vllm_url,
+        embedding_model=settings.embedding_model,
     )
     embeddings = embeddings or make_embedding_backend(
         settings.embedding_backend,
@@ -89,7 +90,9 @@ def create_app(
             "embeddings": {
                 "reachable": embed_ok,
                 "backend": settings.embedding_backend,
-                "url": settings.ollama_url,
+                "url": settings.embedding_url or settings.ollama_url
+                if settings.embedding_backend == "openai"
+                else settings.ollama_url,
                 "error": embed_error,
             },
             "vlm": {

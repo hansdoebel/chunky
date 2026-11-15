@@ -146,9 +146,10 @@ class DimensionCache:
         self._sizes: dict[str, int] = {}
         self._lock = threading.Lock()
 
-    def dimension(self, backend: EmbeddingBackend, model: str) -> int:
+    def dimension(self, backend: EmbeddingBackend, model: str, *, cache_key: str | None = None) -> int:
+        key = cache_key or model
         with self._lock:
-            cached = self._sizes.get(model)
+            cached = self._sizes.get(key)
         if cached is not None:
             return cached
         vectors = backend.embed([PROBE_TEXT], model)
@@ -156,5 +157,5 @@ class DimensionCache:
             raise RuntimeError(f"Embedding probe for {model!r} returned no vector")
         size = len(vectors[0])
         with self._lock:
-            self._sizes.setdefault(model, size)
-            return self._sizes[model]
+            self._sizes.setdefault(key, size)
+            return self._sizes[key]

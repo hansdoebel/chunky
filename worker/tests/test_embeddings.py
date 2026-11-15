@@ -109,6 +109,26 @@ def test_openai_embeddings_and_health(monkeypatch):
     assert DimensionCache().dimension(backend, "Qwen/Qwen3-Embedding-0.6B") == 3
 
 
+def test_dimension_cache_keeps_endpoints_apart():
+    class Counting:
+        def __init__(self):
+            self.calls = 0
+
+        def embed(self, texts, model):
+            self.calls += 1
+            return [[0.0] * self.calls]
+
+    backend = Counting()
+    cache = DimensionCache()
+    first = cache.dimension(backend, "same", cache_key="openai|http://a|same")
+    second = cache.dimension(backend, "same", cache_key="openai|http://b|same")
+    again = cache.dimension(backend, "same", cache_key="openai|http://a|same")
+    assert first == 1
+    assert second == 2
+    assert again == 1
+    assert backend.calls == 2
+
+
 def test_tokenizer_follows_the_embedding_model():
     assert tokenizer_for_embedding("qwen3-embedding") == "Qwen/Qwen3-Embedding-0.6B"
     assert tokenizer_for_embedding("Qwen/Qwen3-Embedding-0.6B") == "Qwen/Qwen3-Embedding-0.6B"
