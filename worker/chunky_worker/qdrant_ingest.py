@@ -169,6 +169,7 @@ def build_points(
 KEYWORD_PAYLOAD_INDEXES = (
     "source",
     "content_type",
+    "content_types",
     "language",
     "doi",
     "picture_class",
@@ -233,6 +234,23 @@ def ensure_payload_indexes(client, collection: str) -> None:
                 continue
             raise
 
+def _chunk_elements(chunk: dict[str, Any]) -> tuple[str, list[str]] | None:
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    from element_types import classify
+
+    labels = chunk.get("content_types")
+    if isinstance(labels, str):
+        labels = [labels]
+    elif not isinstance(labels, list):
+        labels = []
+    return classify([str(item) for item in labels], None if chunk.get("content_type") is None else str(chunk.get("content_type")))
+
+
 def _payload(
     chunk: dict[str, Any],
     *,
@@ -292,7 +310,15 @@ def _payload(
 
     if settings.metadata_include_chunk_index and chunk.get("chunk_index") is not None:
         payload["chunk_index"] = str(chunk["chunk_index"])
-    put_string(settings.metadata_include_content_type, "content_type", chunk.get("content_type"))
+    raw_type = chunk.get("content_type")
+    if str(raw_type or "").strip().lower() == "document":
+        put_string(settings.metadata_include_content_type, "content_type", raw_type)
+    else:
+        classified = _chunk_elements(chunk)
+        if classified and settings.metadata_include_content_type:
+            payload["content_type"] = classified[0]
+            payload["content_types"] = classified[1]
+    put_string(True, "formula_latex", chunk.get("formula_latex"))
     for key, value in put_visual:
         put_string(True, key, value)
     put_string(settings.metadata_include_section, "section", chunk.get("section"))

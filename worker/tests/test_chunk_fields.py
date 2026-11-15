@@ -34,6 +34,7 @@ def test_plain_text_has_no_visual_fields():
     assert record["text"] == "Hello"
     assert record["embedding_text"] == "Hello"
     assert record["content_type"] == "text"
+    assert record["content_types"] == ["text"]
     assert record["page"] == 2
     assert record["page_end"] == 2
     assert record["pages"] == [2]
@@ -91,7 +92,8 @@ def test_picture_keeps_description_and_class():
         1,
         Chunker(),
     )
-    assert record["content_type"] == "picture"
+    assert record["content_type"] == "figure"
+    assert record["content_types"] == ["figure"]
     assert record["text"] == "Figure 1"
     assert record["embedding_text"] == "Figure 1\nA bar chart of revenue."
     assert record["picture_description"] == "A bar chart of revenue."
@@ -109,3 +111,20 @@ def test_table_markdown_comes_from_the_grid_or_exporter():
         export_to_markdown=lambda doc: "| A | B |",
     )
     assert visual_fields([exported], doc=object())["table_markdown"] == "| A | B |"
+
+
+def test_mixed_chunk_keeps_a_primary_type_and_the_full_set():
+    text = SimpleNamespace(label="text", prov=None, annotations=[])
+    table = SimpleNamespace(label="table", prov=None, annotations=[], data=SimpleNamespace(grid=[]))
+    record = record_from_chunk(_chunk("Intro", "Intro", [text, table]), 0, Chunker())
+    assert record["content_type"] == "table"
+    assert record["content_types"] == ["table", "text"]
+
+
+def test_formula_without_text_uses_latex_for_embedding():
+    item = SimpleNamespace(label="formula", prov=None, annotations=[], latex=r"E = mc^2", text="")
+    record = record_from_chunk(_chunk("", "", [item]), 0, Chunker())
+    assert record["content_type"] == "formula"
+    assert record["text"] == ""
+    assert record["embedding_text"] == r"E = mc^2"
+    assert record["formula_latex"] == r"E = mc^2"

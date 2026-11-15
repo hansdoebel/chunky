@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from element_types import canonical_type, classify, embedding_fallback, formula_source
+
 PICTURE_LABELS = {"picture", "figure", "chart"}
 TABLE_LABELS = {"table"}
 
@@ -241,25 +243,34 @@ def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     meta = getattr(chunk, "meta", None)
     if meta is not None and getattr(meta, "doc_items", None):
         items = list(meta.doc_items)
-    content_type = "text"
-    if items:
-        label = _label(items[0])
-        if label:
-            content_type = label
+    labels = [_label(item) for item in items if _label(item)]
+    classified = classify(labels)
+    content_type = classified[0] if classified else "text"
+    content_types = classified[1] if classified else ["text"]
     headings = []
     if meta is not None and getattr(meta, "headings", None):
         headings = [str(heading) for heading in meta.headings]
     token_count = chunker.tokenizer.count_tokens(chunk.text)
     located = provenance(items)
+    embedding = embedding_fallback(chunk.text or "", contextualized or "", items, content_type)
+    formula = None
+    for item in items:
+        if canonical_type(_label(item)) == "formula":
+            formula = formula_source(item)
+            if formula:
+                break
     record = {
         "text": chunk.text,
-        "embedding_text": contextualized,
+        "embedding_text": embedding,
         "page": located.get("page"),
         "headings": headings,
         "content_type": content_type,
+        "content_types": content_types,
         "chunk_index": index,
         "token_count": token_count,
     }
+    if formula:
+        record["formula_latex"] = formula
     for key in ("page_end", "pages", "page_labels", "bboxes"):
         if key in located:
             record[key] = located[key]

@@ -203,6 +203,34 @@ def hybrid_query_arguments(
         "with_vectors": False,
     }
 
+def _load_element_types():
+    import sys
+    from pathlib import Path
+
+    scripts = Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts"
+    if str(scripts) not in sys.path:
+        sys.path.insert(0, str(scripts))
+    import element_types
+
+    return element_types
+
+
+def _element_kind(value: str) -> str | None:
+    return _load_element_types().element_filter_kind(value)
+
+
+def _element_clause(kind: str):
+    from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchValue
+
+    values = _load_element_types().stored_values(kind)
+    return Filter(
+        should=[
+            FieldCondition(key="content_type", match=MatchAny(any=values)),
+            FieldCondition(key="content_types", match=MatchValue(value=kind)),
+        ]
+    )
+
+
 def build_query_filter(filters: list[PayloadFilter]):
     if not filters:
         return None
@@ -212,6 +240,19 @@ def build_query_filter(filters: list[PayloadFilter]):
     must_not = []
     for item in filters:
         item.check_complete()
+        if (
+            item.key == "content_type"
+            and isinstance(item.match, str)
+            and item.text is None
+            and not item.any
+            and not item.negate
+            and not item.has_range()
+        ):
+            kind = _element_kind(item.match)
+            if kind is not None:
+                target = must_not if item.negate else must
+                target.append(_element_clause(kind))
+                continue
         kwargs: dict[str, Any] = {"key": item.key}
         if item.text is not None:
             kwargs["match"] = MatchText(text=item.text)

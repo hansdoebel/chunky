@@ -169,10 +169,10 @@ def test_build_query_filter_ands_match_and_range():
         ]
     )
     must = query_filter.must
-    assert [item.key for item in must] == ["source", "page", "content_type", "year"]
+    assert [_condition_key(item) for item in must] == ["source", "page", "content_type", "year"]
     assert must[0].match.value == "paper.pdf"
     assert must[1].match.value == 2
-    assert must[2].match.value == "text"
+    assert must[2].should[0].match.any == ["text"]
     assert must[3].range.gte == 2020
     assert must[3].range.lte == 2024
     assert must[3].match is None
@@ -190,7 +190,7 @@ def test_build_query_filter_uses_text_for_author_title_and_heading():
         ]
     )
     must = query_filter.must
-    assert [item.key for item in must] == [
+    assert [_condition_key(item) for item in must] == [
         "year",
         "authors",
         "doi",
@@ -204,7 +204,7 @@ def test_build_query_filter_uses_text_for_author_title_and_heading():
     assert must[2].match.value == "10.1000/xyz"
     assert must[3].match.text == "Revenue"
     assert must[4].match.text == "Results"
-    assert must[5].match.value == "table"
+    assert must[5].should[1].match.value == "table"
     inside = {
         "year": 2022,
         "authors": "Ada; Bea",
@@ -219,26 +219,49 @@ def test_build_query_filter_uses_text_for_author_title_and_heading():
     other = dict(inside, authors="Bea")
     assert not _keeps(other, query_filter)
 
+def _condition_key(condition) -> str:
+    if getattr(condition, "should", None):
+        return condition.should[0].key
+    return condition.key
+
+
 def _keeps(payload, query_filter) -> bool:
     for condition in query_filter.must:
-        value = payload.get(condition.key)
-        match = condition.match
-        if match is not None and getattr(match, "text", None):
-            needle = str(match.text).lower()
-            if isinstance(value, list):
-                if not any(needle in str(item).lower() for item in value):
-                    return False
-            elif needle not in str(value).lower():
+        if not _matches(payload, condition):
+            return False
+    return True
+
+
+def _matches(payload, condition) -> bool:
+    if getattr(condition, "should", None):
+        return any(_matches(payload, item) for item in condition.should)
+    value = payload.get(condition.key)
+    match = condition.match
+    if match is not None and getattr(match, "any", None):
+        if isinstance(value, list):
+            if not any(item in match.any for item in value):
                 return False
-        elif match is not None and getattr(match, "value", None) is not None:
-            if value != match.value:
+        elif value not in match.any:
+            return False
+    elif match is not None and getattr(match, "text", None):
+        needle = str(match.text).lower()
+        if isinstance(value, list):
+            if not any(needle in str(item).lower() for item in value):
                 return False
-        bounds = condition.range
-        if bounds is not None:
-            if bounds.gte is not None and value < bounds.gte:
+        elif needle not in str(value or "").lower():
+            return False
+    elif match is not None and getattr(match, "value", None) is not None:
+        if isinstance(value, list):
+            if match.value not in value:
                 return False
-            if bounds.lte is not None and value > bounds.lte:
-                return False
+        elif value != match.value:
+            return False
+    bounds = getattr(condition, "range", None)
+    if bounds is not None:
+        if bounds.gte is not None and value < bounds.gte:
+            return False
+        if bounds.lte is not None and value > bounds.lte:
+            return False
     return True
 
 def test_index_setup_runs_once_per_collection():
@@ -355,7 +378,7 @@ def test_search_embeds_then_queries_mock_qdrant(tmp_settings, monkeypatch):
     assert call["offset"] == 4
     assert call["using"] == "dense"
     assert call["query"] == [0.1, 0.2, 0.3]
-    assert [item.key for item in call["query_filter"].must] == ["source", "page", "content_type"]
+    assert [_condition_key(item) for item in call["query_filter"].must] == ["source", "page", "content_type"]
     assert body["limit"] == 2
     assert body["offset"] == 4
     assert body["next_offset"] == 6
@@ -412,7 +435,7 @@ def test_papers_first_returns_the_document_then_its_chunks(tmp_settings, monkeyp
             self.query_calls.append(kwargs)
             query_filter = kwargs.get("query_filter")
             must = list(getattr(query_filter, "must", None) or [])
-            keys = [item.key for item in must]
+            keys = [getattr(item, "key", None) for item in must]
             if "record_type" in keys:
                 return FakeQueryResponse([
                     FakePoint("doc", 0.9, {"text": "abstract", "source": "paper.pdf", "record_type": "document"})
