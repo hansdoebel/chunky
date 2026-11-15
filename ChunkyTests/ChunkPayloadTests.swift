@@ -37,7 +37,7 @@ struct ChunkPayloadTests {
 
     private func payload(_ point: ChunkPoint) -> [String: String] {
         var fields: [String: String] = [:]
-        for (key, value) in point.toQdrantPoint().payload {
+        for (key, value) in point.toQdrantPoint().payload ?? [:] {
             if let text = value.stringValue {
                 fields[key] = text
             }
