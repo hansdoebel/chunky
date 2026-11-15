@@ -350,6 +350,8 @@ struct RetrievalRequest: Equatable, Sendable {
     var filters: [RetrievalFilter]
     var papersFirst: Bool = false
     var expandPapers: Bool = false
+    var expandSection: Bool = false
+    var sectionRatio: Double = SectionExpansion.defaultThreshold
     var rrfWeights: [Double]?
     var rerank: RerankConfig?
 
@@ -364,6 +366,8 @@ struct RetrievalRequest: Equatable, Sendable {
         filters: [RetrievalFilter] = [],
         papersFirst: Bool = false,
         expandPapers: Bool = false,
+        expandSection: Bool = false,
+        sectionRatio: Double = SectionExpansion.defaultThreshold,
         rrfWeights: [Double]? = nil,
         rerank: RerankConfig? = nil,
         settings: AppSettings
@@ -394,6 +398,8 @@ struct RetrievalRequest: Equatable, Sendable {
             filters: filters,
             papersFirst: papersFirst,
             expandPapers: expandPapers,
+            expandSection: expandSection,
+            sectionRatio: sectionRatio,
             rrfWeights: rrfWeights,
             rerank: rerank
         )
@@ -423,6 +429,8 @@ struct RetrievalRequest: Equatable, Sendable {
             "filters": filters.map { $0.jsonObject() },
             "papers_first": papersFirst,
             "expand_documents": expandPapers,
+            "expand_section": expandSection,
+            "section_ratio": sectionRatio,
         ]
         if let rrfWeights {
             body["rrf_weights"] = rrfWeights
@@ -663,6 +671,13 @@ protocol RetrievalIndex {
         vectorName: String?
     ) async throws -> [SearchResult]
     func hybridRRF(collection: String, url: String, apiKey: String, body: [String: Any]) async throws -> [SearchResult]
+    func sectionChunks(collection: String, sources: [String]) async throws -> [SectionSibling]
+}
+
+extension RetrievalIndex {
+    func sectionChunks(collection: String, sources: [String]) async throws -> [SectionSibling] {
+        []
+    }
 }
 
 enum HybridQuery {
@@ -902,6 +917,27 @@ struct QdrantRetrievalIndex: RetrievalIndex {
         }
         return try HybridQuery.hits(from: data)
     }
+
+    func sectionChunks(collection: String, sources: [String]) async throws -> [SectionSibling] {
+        var siblings: [SectionSibling] = []
+        for source in sources where !source.isEmpty {
+            let points = try await service.loadPointsBySource(collectionName: collection, source: source)
+            for point in points where point.metadata["record_type"] != DocumentSummary.documentRecord {
+                siblings.append(
+                    SectionSibling(
+                        id: point.id,
+                        source: point.source,
+                        headings: point.headings,
+                        page: point.page,
+                        pageEnd: Int(point.metadata["page_end"] ?? ""),
+                        text: point.text,
+                        chunkIndex: Int(point.metadata["chunk_index"] ?? "")
+                    )
+                )
+            }
+        }
+        return siblings
+    }
 }
 
 struct LiveRetrievalWorker: RetrievalWorker {
@@ -929,6 +965,25 @@ struct RetrievalService {
     var embedding: any RetrievalEmbedding
     var worker: any RetrievalWorker
     var reranker: any Reranker
+    var sectionSiblings: @Sendable (RetrievalRequest, [RetrievalHit], (any RetrievalIndex)?) async -> [SectionSibling] = { request, hits, index in
+        let sources = Array(Set(hits.map(\.source))).filter { !$0.isEmpty }
+        if let index, !sources.isEmpty {
+            if let loaded = try? await index.sectionChunks(collection: request.collection, sources: sources), !loaded.isEmpty {
+                return loaded
+            }
+        }
+        return hits.map {
+            SectionSibling(
+                id: $0.id,
+                source: $0.source,
+                headings: $0.headings,
+                page: $0.page,
+                pageEnd: $0.pageEnd,
+                text: $0.text,
+                chunkIndex: Int($0.payload["chunk_index"] ?? "")
+            )
+        }
+    }
 
     init(
         embedding: any RetrievalEmbedding = LiveRetrievalEmbedding(),
@@ -966,7 +1021,15 @@ struct RetrievalService {
             }
             page = try await searchWorker(request)
         }
-        return try await applyRerank(page, request: request)
+        var expanded = page
+        if request.expandSection && request.route != .worker {
+            expanded.hits = SectionExpansion.merge(
+                hits: expanded.hits,
+                siblings: await sectionSiblings(request, expanded.hits, index),
+                threshold: request.sectionRatio
+            )
+        }
+        return try await applyRerank(expanded, request: request)
     }
 
     private func applyRerank(_ page: RetrievalPage, request: RetrievalRequest) async throws -> RetrievalPage {

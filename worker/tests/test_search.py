@@ -12,8 +12,10 @@ from chunky_worker.search import (
     MAX_LIMIT,
     PayloadFilter,
     QdrantPointSearcher,
+    ScoredHit,
     SearchRequest,
     build_query_filter,
+    expand_section_hits,
     resolve_target,
 )
 from tests.conftest import TEST_TOKEN, FakeEmbeddings, FakePipeline, auth_headers
@@ -371,6 +373,36 @@ def test_search_embeds_then_queries_mock_qdrant(tmp_settings, monkeypatch):
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
     assert "collection=documents" in log_text
+
+def test_expand_section_keeps_rank_documents_and_chunk_order():
+    hits = [
+        ScoredHit("a1", 0.9, {"text": "A1", "source": "paper.pdf", "headings": ["A"], "page": 1}),
+        ScoredHit("doc", 0.8, {"text": "Abstract", "source": "paper.pdf", "record_type": "document"}),
+        ScoredHit("b1", 0.7, {"text": "B1", "source": "paper.pdf", "headings": ["B"], "page": 1}),
+        ScoredHit("a2", 0.6, {"text": "A2", "source": "paper.pdf", "headings": ["A"], "page": 2}),
+    ]
+    siblings = [
+        {"id": "a1", "text": "A1", "source": "paper.pdf", "headings": ["A"], "page": 1, "chunk_index": 1},
+        {"id": "a2", "text": "A2", "source": "paper.pdf", "headings": ["A"], "page": 2, "chunk_index": 1},
+        {"id": "a3", "text": "A3", "source": "paper.pdf", "headings": ["A"], "page": 3, "chunk_index": 1},
+    ]
+    kept = expand_section_hits(hits, siblings, 0.9)
+    assert [hit.id for hit in kept] == ["a1", "doc", "b1", "a2"]
+    merged = expand_section_hits(hits, siblings, 0.5)
+    assert [hit.id for hit in merged] == ["a1", "doc", "b1"]
+    assert merged[0].payload["text"] == "A1\n\nA2\n\nA3"
+    ordered = expand_section_hits(
+        [
+            ScoredHit("late", 0.4, {"text": "Late", "source": "p", "headings": ["M"], "page": 2}),
+            ScoredHit("early", 0.3, {"text": "Early", "source": "p", "headings": ["M"], "page": 2}),
+        ],
+        [
+            {"id": "late", "text": "Late", "source": "p", "headings": ["M"], "page": 2, "chunk_index": 2},
+            {"id": "early", "text": "Early", "source": "p", "headings": ["M"], "page": 2, "chunk_index": 1},
+        ],
+        0.5,
+    )
+    assert ordered[0].payload["text"] == "Early\n\nLate"
 
 def test_papers_first_returns_the_document_then_its_chunks(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)

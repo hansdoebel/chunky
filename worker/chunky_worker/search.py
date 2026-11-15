@@ -88,6 +88,8 @@ class SearchRequest(BaseModel):
     filters: list[PayloadFilter] = Field(default_factory=list)
     papers_first: bool = False
     expand_documents: bool = False
+    expand_section: bool = False
+    section_ratio: float = 0.5
     rrf_weights: list[float] | None = None
 
     @field_validator("query", "collection")
@@ -294,6 +296,83 @@ def parse_search_request(payload: Any) -> SearchRequest:
 
 PASSAGE_ONLY_KEYS = {"content_type", "page", "page_end", "headings", "section"}
 
+def _chunk_index(payload: dict[str, Any]) -> int:
+    raw = payload.get("chunk_index")
+    try:
+        return int(raw)
+    except (TypeError, ValueError):
+        return 10**9
+
+def _heading_list(payload: dict[str, Any]) -> list[str]:
+    headings = payload.get("headings") or []
+    if isinstance(headings, list):
+        return [str(item) for item in headings]
+    return []
+
+def _section_key(source: str, headings: list[str]) -> str:
+    return source + "\n" + "\n".join(headings)
+
+def expand_section_hits(hits: list[ScoredHit], siblings: list[dict[str, Any]], threshold: float) -> list[ScoredHit]:
+    ratio = min(max(threshold, 0.0), 1.0) if threshold == threshold else 0.5
+    groups: dict[str, list[ScoredHit]] = {}
+    for hit in hits:
+        payload = hit.payload or {}
+        if payload.get("record_type") == "document":
+            continue
+        headings = _heading_list(payload)
+        key = _section_key(str(payload.get("source") or ""), headings)
+        groups.setdefault(key, []).append(hit)
+    by_group: dict[str, list[dict[str, Any]]] = {}
+    for item in siblings:
+        if item.get("record_type") == "document":
+            continue
+        headings = _heading_list(item)
+        key = _section_key(str(item.get("source") or ""), headings)
+        by_group.setdefault(key, []).append(item)
+    merging: set[str] = set()
+    for key, group in groups.items():
+        headings = _heading_list(group[0].payload or {})
+        if not headings:
+            continue
+        population = max(len(by_group.get(key, [])), len(group))
+        share = len(group) / population
+        if population > 1 and share + 1e-9 >= ratio:
+            merging.add(key)
+    emitted: set[str] = set()
+    result: list[ScoredHit] = []
+    for hit in hits:
+        payload = hit.payload or {}
+        if payload.get("record_type") == "document":
+            result.append(hit)
+            continue
+        headings = _heading_list(payload)
+        key = _section_key(str(payload.get("source") or ""), headings)
+        if key not in merging:
+            result.append(hit)
+            continue
+        if key in emitted:
+            continue
+        emitted.add(key)
+        section = by_group.get(key) or []
+        if not section:
+            section = []
+            for member in groups[key]:
+                body = dict(member.payload or {})
+                body["id"] = member.id
+                section.append(body)
+        ordered = sorted(section, key=lambda item: (item.get("page") if isinstance(item.get("page"), int) else 10**9, _chunk_index(item), str(item.get("id") or "")))
+        pages = [item.get("page") for item in ordered if isinstance(item.get("page"), int)]
+        pages += [item.get("page_end") for item in ordered if isinstance(item.get("page_end"), int)]
+        text = "\n\n".join(str(item.get("text") or "") for item in ordered)
+        merged_payload = dict(groups[key][0].payload or {})
+        merged_payload["chunk_ids"] = ",".join(member.id for member in groups[key])
+        merged_payload["text"] = text
+        if pages:
+            merged_payload["page"] = min(pages)
+            merged_payload["page_end"] = max(pages)
+        result.append(ScoredHit(id=groups[key][0].id, score=max(member.score for member in groups[key]), payload=merged_payload))
+    return result
+
 def record_scope(filters: list[PayloadFilter], papers_first: bool) -> list[PayloadFilter]:
     scoped = [item for item in filters if item.key != "record_type"]
     if papers_first:
@@ -401,6 +480,23 @@ def run_search(
                     False,
                 )
                 hits = hits + query(expanded, 0)
+        if request.expand_section:
+            sources = []
+            for hit in hits:
+                payload = hit.payload or {}
+                if payload.get("record_type") == "document":
+                    continue
+                source = str(payload.get("source") or "")
+                if source and source not in sources:
+                    sources.append(source)
+            loaded: list[dict[str, Any]] = []
+            loader = getattr(searcher, "section_chunks", None)
+            if callable(loader) and sources:
+                try:
+                    loaded = loader(url=url, api_key=api_key, collection=collection, sources=sources)
+                except Exception:
+                    loaded = []
+            hits = expand_section_hits(hits, loaded, request.section_ratio)
     except SearchError:
         raise
     except Exception as exc:
@@ -472,6 +568,37 @@ class QdrantPointSearcher:
             return
         if _ensure_filter_indexes(client, collection):
             self._indexed.add(key)
+
+    def section_chunks(self, *, url: str, api_key: str, collection: str, sources: list[str]) -> list[dict[str, Any]]:
+        from qdrant_client.models import FieldCondition, Filter, MatchValue
+
+        client = self._open(url, api_key)
+        found: list[dict[str, Any]] = []
+        try:
+            for source in sources:
+                offset = None
+                while True:
+                    points, offset = client.scroll(
+                        collection_name=collection,
+                        scroll_filter=Filter(must=[FieldCondition(key="source", match=MatchValue(value=source))]),
+                        limit=128,
+                        offset=offset,
+                        with_payload=True,
+                        with_vectors=False,
+                    )
+                    for point in points:
+                        payload = _payload_dict(point.payload)
+                        if payload.get("record_type") == "document":
+                            continue
+                        payload["id"] = str(point.id)
+                        found.append(payload)
+                    if offset is None or len(found) >= 2000:
+                        break
+            return found
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
 
     def _open(self, url: str, api_key: str):
         if not url:

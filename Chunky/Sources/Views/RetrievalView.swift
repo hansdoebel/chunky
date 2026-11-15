@@ -88,6 +88,8 @@ struct RetrievalPlayground: View {
     @Binding var heading: String
     @Binding var papersFirst: Bool
     @Binding var expandPapers: Bool
+    @Binding var expandSection: Bool
+    @Binding var sectionRatio: String
     @Binding var mode: String
     @Binding var denseWeight: String
     @Binding var lexicalWeight: String
@@ -222,6 +224,11 @@ struct RetrievalPlayground: View {
             Toggle("Papers first", isOn: $papersFirst)
             if papersFirst {
                 Toggle("Expand to chunks", isOn: $expandPapers)
+            }
+            Toggle("Expand to section", isOn: $expandSection)
+            if expandSection {
+                TextField("Sibling ratio", text: $sectionRatio, prompt: Text("0.5"))
+                    .textFieldStyle(.roundedBorder)
             }
             Button(action: onSearch) {
                 Text(isSearching ? "Searching…" : "Search")
@@ -368,6 +375,8 @@ struct RetrievalScreen: View {
     @State private var heading = ""
     @State private var papersFirst = false
     @State private var expandPapers = false
+    @State private var expandSection = false
+    @State private var sectionRatio = "0.5"
     @State private var mode = RetrievalMode.dense.rawValue
     @State private var denseWeight = ""
     @State private var lexicalWeight = ""
@@ -425,6 +434,8 @@ struct RetrievalScreen: View {
             heading: $heading,
             papersFirst: $papersFirst,
             expandPapers: $expandPapers,
+            expandSection: $expandSection,
+            sectionRatio: $sectionRatio,
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,
@@ -527,6 +538,8 @@ struct RetrievalScreen: View {
             ),
             papersFirst: papersFirst,
             expandPapers: expandPapers,
+            expandSection: expandSection,
+            sectionRatio: Double(sectionRatio.trimmingCharacters(in: .whitespacesAndNewlines)) ?? SectionExpansion.defaultThreshold,
             rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
             rerank: rerankEnabled
                 ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey)
