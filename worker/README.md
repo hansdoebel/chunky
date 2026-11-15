@@ -26,8 +26,19 @@ Docling, Ollama, or a GPU.
 match the `docling_daemon.py` convert command (for example `vlm_model`,
 `accelerator`, `chunk_max_tokens`, `ollama_url`, `embedding_model`).
 
-Qdrant ingest is not implemented yet (PER-48 / PER-50). This worker returns
-artifacts (and embeddings) only.
+## Ingest targets
+
+`settings.ingest_target` is one of:
+
+| Value | Behavior |
+|-------|----------|
+| `none` | Default. `chunk_only` returns chunks. `chunk_and_embed` also returns embeddings. Nothing is written to Qdrant. |
+| `return_vectors` | Embeds even when `mode` is `chunk_only`, and puts `chunks` plus `embeddings` on the job result so the Mac can upsert into local Docker Qdrant. |
+| `qdrant_cloud` | Embeds, then upserts directly with `qdrant-client`. The result is a receipt (`collection`, `upserted`, `vector_size`, `distance`) and does **not** echo the vectors. |
+
+For `qdrant_cloud`, send `qdrant_url`, `qdrant_api_key`, and optional `qdrant_collection` (default `documents`), `qdrant_distance` (`cosine`, `dot`, `euclid`), and `qdrant_batch_size` (default 250). The API key is held in memory only for that job, stripped from `GET /v1/jobs`, and never written to the log. The worker creates the collection when it is missing, using the embedding width and the requested distance. If the collection already exists with a different vector size, the job fails with `error_type: dimension_mismatch`.
+
+Payload fields match the Mac app: `text`, `source`, `page` (int), `year` (int), `headings` (string array), and string metadata `chunk_index`, `content_type`, `section`, `doc_title`, `authors` (joined with `"; "`), `doi`, `document_id`, `url`, `language`, `ingested_at`, `content_hash` (SHA-256 of embedding text, `|`, and model). Metadata flags on the job default to on, same as the Mac app.
 
 ## Authentication and bind address
 

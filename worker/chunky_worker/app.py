@@ -45,6 +45,7 @@ def create_app(
     pipeline: DocumentPipeline | None = None,
     embeddings: EmbeddingBackend | None = None,
     store: JobStore | None = None,
+    ingestor=None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     settings.log_dir.mkdir(parents=True, exist_ok=True)
@@ -54,7 +55,7 @@ def create_app(
     pipeline = pipeline or DoclingPipeline(settings.scripts_dir)
     embeddings = embeddings or OllamaEmbeddingBackend(settings.ollama_url)
     store = store or JobStore()
-    runner = JobRunner(store, settings, pipeline, embeddings)
+    runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
 
     app = FastAPI(title="Chunky worker", version="0.1.0")
     app.state.settings = settings
@@ -200,7 +201,7 @@ def _job_payload(job: Job) -> dict:
         "id": job.id,
         "status": job.status.value,
         "filename": job.filename,
-        "settings": job.settings.model_dump(mode="json"),
+        "settings": job.settings.public_dict(),
         "progress": job.progress.as_dict() if job.progress else None,
         "result": job.result.model_dump(mode="json") if job.result else None,
         "error": job.error,

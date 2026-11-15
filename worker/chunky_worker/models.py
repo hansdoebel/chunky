@@ -13,6 +13,20 @@ class JobMode(str, Enum):
     CHUNK_AND_EMBED = "chunk_and_embed"
 
 
+class IngestTarget(str, Enum):
+    """Where embeddings go after the worker finishes.
+
+    ``none`` leaves ingest to the caller (today's chunk-only / return-embeddings path).
+    ``qdrant_cloud`` upserts from the worker with credentials supplied on this request.
+    ``return_vectors`` puts chunks and vectors on the job result so the Mac can
+    write them to a local Qdrant.
+    """
+
+    NONE = "none"
+    QDRANT_CLOUD = "qdrant_cloud"
+    RETURN_VECTORS = "return_vectors"
+
+
 class JobStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -49,6 +63,31 @@ class JobSettings(BaseModel):
     chunk_tokenizer: str = ""
     ollama_url: str | None = None
     embedding_model: str | None = None
+    ingest_target: IngestTarget = IngestTarget.NONE
+    qdrant_url: str | None = None
+    # Kept in memory for the duration of the job only. Never logged or returned.
+    qdrant_api_key: str | None = Field(default=None, repr=False)
+    qdrant_collection: str = "documents"
+    qdrant_distance: str = "cosine"
+    qdrant_batch_size: int = 250
+    # Payload toggles match AppSettings metadata flags (all on by default).
+    metadata_include_page: bool = True
+    metadata_include_headings: bool = True
+    metadata_include_timestamp: bool = True
+    metadata_include_doc_title: bool = True
+    metadata_include_authors: bool = True
+    metadata_include_chunk_index: bool = True
+    metadata_include_content_type: bool = True
+    metadata_include_section: bool = True
+    metadata_include_doi: bool = True
+    metadata_include_document_id: bool = True
+    metadata_include_url: bool = True
+    metadata_include_year: bool = True
+    metadata_include_language: bool = True
+    metadata_include_content_hash: bool = True
+
+    def public_dict(self) -> dict[str, Any]:
+        return self.model_dump(mode="json", exclude={"qdrant_api_key"})
 
 
 class ProgressEvent(BaseModel):
@@ -59,6 +98,14 @@ class ProgressEvent(BaseModel):
 
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
+
+
+class IngestReceipt(BaseModel):
+    target: IngestTarget
+    collection: str | None = None
+    upserted: int = 0
+    vector_size: int | None = None
+    distance: str | None = None
 
 
 class JobResult(BaseModel):
@@ -78,6 +125,7 @@ class JobResult(BaseModel):
     embeddings: list[list[float]] | None = None
     embedding_model: str | None = None
     embedding_dim: int | None = None
+    ingest: IngestReceipt | None = None
 
 
 class Job(BaseModel):

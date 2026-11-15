@@ -10,9 +10,19 @@ from typing import Any
 
 from chunky_worker.embeddings import EmbeddingBackend
 from chunky_worker.exceptions import JobCanceled
+from chunky_worker.qdrant_ingest import (
+    IngestError,
+    QdrantCloudIngestor,
+    QdrantIngestor,
+    build_points,
+    needs_embeddings,
+    normalize_distance,
+    redact,
+)
 from chunky_worker.models import (
+    IngestReceipt,
+    IngestTarget,
     Job,
-    JobMode,
     JobResult,
     JobSettings,
     JobStatus,
@@ -70,6 +80,13 @@ class JobStore:
                 self._changed[job_id].set()
             return job.model_copy(deep=True)
 
+    def forget_api_key(self, job_id: str) -> None:
+        """Drop the Qdrant API key so it is not retained after the job attempt."""
+        with self._lock:
+            job = self._jobs.get(job_id)
+            if job is not None and job.settings.qdrant_api_key:
+                job.settings.qdrant_api_key = None
+
     def append_event(self, job_id: str, event: dict[str, Any]) -> None:
         with self._lock:
             self._events[job_id].append(event)
@@ -114,11 +131,13 @@ class JobRunner:
         settings: Settings,
         pipeline: DocumentPipeline,
         embeddings: EmbeddingBackend,
+        ingestor: QdrantIngestor | None = None,
     ) -> None:
         self.store = store
         self.settings = settings
         self.pipeline = pipeline
         self.embeddings = embeddings
+        self.ingestor = ingestor or QdrantCloudIngestor()
 
     def start(self, job_id: str, input_path: Path) -> None:
         thread = threading.Thread(
@@ -135,6 +154,68 @@ class JobRunner:
             event["percent"] = percent
         self.store.append_event(job_id, event)
 
+    def _apply_ingest(
+        self,
+        job_id: str,
+        job: Job,
+        result: JobResult,
+        chunks: list[dict[str, Any]],
+        vectors: list[list[float]],
+        model: str,
+        cancel_event: threading.Event,
+    ) -> None:
+        target = job.settings.ingest_target
+        if target == IngestTarget.NONE:
+            result.embeddings = vectors
+            return
+
+        if target == IngestTarget.RETURN_VECTORS:
+            result.embeddings = vectors
+            result.ingest = IngestReceipt(
+                target=target,
+                vector_size=result.embedding_dim,
+            )
+            return
+
+        if cancel_event.is_set():
+            raise JobCanceled()
+        distance = normalize_distance(job.settings.qdrant_distance)
+        points = build_points(
+            chunks,
+            vectors,
+            source=job.filename,
+            settings=job.settings,
+            embedding_model=model,
+            doc_title=result.doc_title,
+            authors=result.authors,
+            language=result.language,
+            year=result.year,
+        )
+        self._emit(job_id, f"Upserting {len(points)} points", 97)
+
+        def on_batch(done: int, total: int) -> None:
+            self._emit(job_id, f"Upserted {done}/{total}", 98)
+
+        upserted = self.ingestor.upsert_cloud(
+            url=job.settings.qdrant_url or "",
+            api_key=job.settings.qdrant_api_key or "",
+            collection=job.settings.qdrant_collection,
+            points=points,
+            vector_size=result.embedding_dim or len(points[0].vector),
+            distance=distance,
+            batch_size=job.settings.qdrant_batch_size,
+            on_progress=on_batch,
+        )
+        # Cloud path stores the vectors in Qdrant. Do not echo them back.
+        result.embeddings = None
+        result.ingest = IngestReceipt(
+            target=IngestTarget.QDRANT_CLOUD,
+            collection=job.settings.qdrant_collection,
+            upserted=upserted,
+            vector_size=result.embedding_dim,
+            distance=distance,
+        )
+
     def _run(self, job_id: str, input_path: Path) -> None:
         job = self.store.get(job_id)
         if job is None:
@@ -143,6 +224,7 @@ class JobRunner:
         assert cancel_event is not None
         output_dir = self.settings.work_dir / job_id / "out"
         output_dir.mkdir(parents=True, exist_ok=True)
+        secret = job.settings.qdrant_api_key
 
         try:
             if cancel_event.is_set():
@@ -197,7 +279,7 @@ class JobRunner:
                 chunks=chunks,
             )
 
-            if job.settings.mode == JobMode.CHUNK_AND_EMBED:
+            if needs_embeddings(job.settings):
                 if cancel_event.is_set():
                     raise JobCanceled()
                 model = job.settings.embedding_model or self.settings.embedding_model
@@ -207,9 +289,17 @@ class JobRunner:
                     for chunk in chunks
                 ]
                 vectors = self.embeddings.embed(texts, model)
-                result.embeddings = vectors
                 result.embedding_model = model
                 result.embedding_dim = len(vectors[0]) if vectors else 0
+                self._apply_ingest(
+                    job_id,
+                    job,
+                    result,
+                    chunks,
+                    vectors,
+                    model,
+                    cancel_event,
+                )
 
             if cancel_event.is_set():
                 raise JobCanceled()
@@ -226,15 +316,34 @@ class JobRunner:
                 job_id,
                 {"type": "canceled", "message": "Job canceled", "status": "canceled"},
             )
-        except Exception as exc:  # noqa: BLE001 — surface any pipeline failure on the job
-            log.exception("Job %s failed", job_id)
+        except IngestError as exc:
+            message = redact(str(exc), secret)
+            log.error("Job %s ingest failed: %s", job_id, message)
             self.store.set_status(
                 job_id,
                 JobStatus.FAILED,
-                error=str(exc),
+                error=message,
+                error_type=exc.error_type,
+            )
+            self.store.append_event(
+                job_id,
+                {"type": "error", "message": message, "status": "failed"},
+            )
+        except Exception as exc:  # noqa: BLE001 — surface any pipeline failure on the job
+            message = redact(str(exc), secret)
+            if secret:
+                log.error("Job %s failed: %s", job_id, message)
+            else:
+                log.exception("Job %s failed", job_id)
+            self.store.set_status(
+                job_id,
+                JobStatus.FAILED,
+                error=message,
                 error_type="exception",
             )
             self.store.append_event(
                 job_id,
-                {"type": "error", "message": str(exc), "status": "failed"},
+                {"type": "error", "message": message, "status": "failed"},
             )
+        finally:
+            self.store.forget_api_key(job_id)
