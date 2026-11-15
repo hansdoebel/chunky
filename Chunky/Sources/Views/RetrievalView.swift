@@ -48,9 +48,13 @@ struct RetrievalPlayground: View {
             TextField("Query", text: $query, axis: .vertical)
                 .lineLimit(2...4)
                 .textFieldStyle(.roundedBorder)
-            Picker("Collection", selection: $collection) {
-                ForEach(collectionChoices, id: \.self) { name in
-                    Text(name).tag(name)
+            TextField("Collection", text: $collection, prompt: Text("Collection name"))
+                .textFieldStyle(.roundedBorder)
+            if !collectionChoices.isEmpty {
+                Picker("Known", selection: $collection) {
+                    ForEach(collectionChoices, id: \.self) { name in
+                        Text(name).tag(name)
+                    }
                 }
             }
             Picker("Backend", selection: $backend) {

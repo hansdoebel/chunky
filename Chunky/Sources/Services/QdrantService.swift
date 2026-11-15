@@ -117,7 +117,8 @@ class QdrantService: ObservableObject {
             vectorsCount: info.indexedVectorsCount ?? 0,
             pointsCount: info.pointsCount ?? 0,
             status: status,
-            vectorSize: info.vectorSize.map { Int($0) }
+            vectorSize: info.vectorSize.map { Int($0) },
+            vectorName: info.vectorName
         )
     }
 
@@ -250,7 +251,8 @@ class QdrantService: ObservableObject {
         limit: Int = 10,
         sourceFilter: String? = nil,
         filter: Filter? = nil,
-        offset: Int? = nil
+        offset: Int? = nil,
+        vectorName: String? = nil
     ) async throws -> [SearchResult] {
         guard let client = client else {
             throw QdrantServiceError.notConnected
@@ -282,7 +284,7 @@ class QdrantService: ObservableObject {
             offset: offset.map { UInt64($0) },
             withPayload: true,
             withVectors: false,
-            vectorName: nil
+            vectorName: vectorName
         )
 
         return results.map { $0.toSearchResult() }

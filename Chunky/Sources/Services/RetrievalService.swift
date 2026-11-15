@@ -175,16 +175,10 @@ struct RetrievalRequest: Equatable, Sendable {
         let embeddingURL = resolvedBackend == EmbeddingBackendKind.openai.rawValue
             ? settings.embeddingAPIURL
             : settings.ollamaURL
-        let route: RetrievalRoute = settings.processingHost == .devbox ? .worker : .localQdrant
-        let qdrantURL: String
-        let qdrantAPIKey: String
-        if settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud {
-            qdrantURL = settings.qdrantCloudURL
-            qdrantAPIKey = settings.qdrantAPIKey
-        } else {
-            qdrantURL = settings.qdrantURL
-            qdrantAPIKey = settings.qdrantAPIKey
-        }
+        let usesWorker = settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud
+        let route: RetrievalRoute = usesWorker ? .worker : .localQdrant
+        let qdrantURL = usesWorker ? settings.qdrantCloudURL : settings.qdrantURL
+        let qdrantAPIKey = settings.qdrantAPIKey
         return RetrievalRequest(
             text: text.trimmingCharacters(in: .whitespacesAndNewlines),
             collection: collection.trimmingCharacters(in: .whitespacesAndNewlines),
@@ -322,12 +316,14 @@ protocol RetrievalEmbedding {
 
 protocol RetrievalIndex {
     func vectorSize(collection: String) async throws -> Int?
+    func vectorName(collection: String) async throws -> String?
     func denseSearch(
         collection: String,
         vector: [Float],
         limit: Int,
         offset: Int,
-        filter: Filter?
+        filter: Filter?,
+        vectorName: String?
     ) async throws -> [SearchResult]
 }
 
@@ -380,19 +376,26 @@ struct QdrantRetrievalIndex: RetrievalIndex {
         return try await service.getCollectionInfo(collection).vectorSize
     }
 
+    func vectorName(collection: String) async throws -> String? {
+        guard try await service.collectionExists(collection) else { return nil }
+        return try await service.getCollectionInfo(collection).vectorName
+    }
+
     func denseSearch(
         collection: String,
         vector: [Float],
         limit: Int,
         offset: Int,
-        filter: Filter?
+        filter: Filter?,
+        vectorName: String?
     ) async throws -> [SearchResult] {
         try await service.search(
             collectionName: collection,
             vector: vector,
             limit: limit,
             filter: filter,
-            offset: offset
+            offset: offset,
+            vectorName: vectorName
         )
     }
 }
@@ -485,12 +488,14 @@ struct RetrievalService {
                 detail: "Collection \(request.collection) has vector size \(existing), but \(request.embeddingModel) produced \(vector.count). Refusing to search."
             )
         }
+        let vectorName = try await index.vectorName(collection: request.collection)
         let hits = try await index.denseSearch(
             collection: request.collection,
             vector: vector,
             limit: request.limit,
             offset: request.offset,
-            filter: RetrievalFilter.qdrantFilter(request.filters)
+            filter: RetrievalFilter.qdrantFilter(request.filters),
+            vectorName: vectorName
         ).map(RetrievalHit.init(result:))
         let nextOffset: Int? = hits.count == request.limit ? request.offset + request.limit : nil
         return RetrievalPage(

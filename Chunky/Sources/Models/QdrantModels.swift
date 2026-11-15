@@ -100,19 +100,23 @@ struct CollectionInfo: Sendable {
     let status: CollectionStatus
     /// Probed or stored dense vector width. Nil when the server did not report one.
     let vectorSize: Int?
+    /// Named dense vector. Nil for a single unnamed vector.
+    let vectorName: String?
 
     init(
         name: String,
         vectorsCount: UInt64,
         pointsCount: UInt64,
         status: CollectionStatus,
-        vectorSize: Int? = nil
+        vectorSize: Int? = nil,
+        vectorName: String? = nil
     ) {
         self.name = name
         self.vectorsCount = vectorsCount
         self.pointsCount = pointsCount
         self.status = status
         self.vectorSize = vectorSize
+        self.vectorName = vectorName
     }
 
     enum CollectionStatus: String, Sendable {

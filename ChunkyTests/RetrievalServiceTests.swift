@@ -177,6 +177,29 @@ struct RetrievalServiceTests {
         }
     }
 
+    @Test func devboxLocalDockerSearchesOnTheMac() {
+        let settings = IsolatedSettings.make()
+        settings.processingHost = .devbox
+        settings.devboxIngestTarget = .localDocker
+        settings.devboxWorkerURL = "http://10.0.0.8:8080"
+        settings.qdrantURL = "http://localhost:6334"
+        settings.qdrantCloudURL = "https://example.cloud.qdrant.io"
+        let request = RetrievalRequest.make(text: "revenue", collection: "documents", limit: 8, settings: settings)
+        #expect(request.route == .localQdrant)
+        #expect(request.qdrantURL == "http://localhost:6334")
+        #expect(request.workerJSON()["qdrant_url"] == nil)
+    }
+
+    @Test func namedDenseVectorIsPassedToSearch() async throws {
+        let index = FakeIndex(vectorSize: 3, hits: [
+            SearchResult(id: "p1", score: 0.2, text: "t", source: "s", page: nil, headings: [], metadata: [:])
+        ])
+        index.reportedName = "dense"
+        let service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]), worker: FakeWorker())
+        _ = try await service.search(localRequest(), index: index)
+        #expect(index.lastSeenName == "dense")
+    }
+
     @Test func invalidLimitIsRejected() async {
         let service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [1]), worker: FakeWorker())
         var request = localRequest()
@@ -335,9 +358,24 @@ private final class FakeIndex: RetrievalIndex {
         vectorSize
     }
 
-    func denseSearch(collection: String, vector: [Float], limit: Int, offset: Int, filter: RetrievalQueryFilter?) async throws -> [SearchResult] {
+    var reportedName: String?
+    var lastSeenName: String?
+
+    func vectorName(collection: String) async throws -> String? {
+        reportedName
+    }
+
+    func denseSearch(
+        collection: String,
+        vector: [Float],
+        limit: Int,
+        offset: Int,
+        filter: RetrievalQueryFilter?,
+        vectorName: String?
+    ) async throws -> [SearchResult] {
         searchCalls += 1
         lastOffset = offset
+        lastSeenName = vectorName
         _ = filter
         return hits
     }
