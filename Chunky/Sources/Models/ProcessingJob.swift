@@ -25,6 +25,12 @@ class ProcessingJob: ObservableObject, Identifiable {
     var analyticsStored = false
     var analyticsPending = false
     var analyticsRuntime: String?
+    var workerJobID: String?
+    var retainedChunks: [ChunkingService.DocumentChunk] = []
+    var ingestCollection: String?
+    var ingestCloud = false
+    @Published var verification: VerificationReport?
+    @Published var verificationNote: String?
 
     var timingSummary: String? {
         guard let total = totalTime else { return nil }

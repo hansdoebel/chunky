@@ -7,6 +7,7 @@ enum ViewMode: String, CaseIterable {
     case eval = "Eval"
     case analytics = "Analytics"
     case benchmark = "Benchmark"
+    case verification = "Verification"
 }
 
 enum ProcessingMode: String, CaseIterable {

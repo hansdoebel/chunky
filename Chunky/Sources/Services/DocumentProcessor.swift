@@ -46,6 +46,7 @@ class DocumentProcessor: ObservableObject {
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
         defer { appState?.storeFinishedRun(job, settings: settings) }
+        rememberIngestTarget(job: job, settings: settings)
         if settings.processingHost == .devbox {
             await processOnDevbox(job: job, settings: settings, mode: mode)
             return
@@ -406,6 +407,8 @@ class DocumentProcessor: ObservableObject {
             let timing = job.timingSummary ?? ""
             job.statusMessage = "\(chunks.count) chunks | \(timing)"
             job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+            job.retainedChunks = chunks
+            await refreshVerification(job: job, settings: settings, chunks: chunks)
             job.status = .completed
 
         } catch is CancellationError {
@@ -802,7 +805,10 @@ class DocumentProcessor: ObservableObject {
                 baseURL: settings.devboxWorkerURL,
                 token: settings.workerToken,
                 onCreated: { [weak self] id in
-                    Task { @MainActor in self?.activeDevboxJobID = id }
+                    job.workerJobID = id
+                    Task { @MainActor in
+                        self?.activeDevboxJobID = id
+                    }
                 },
                 onEvent: { [weak job] event in
                     Task { @MainActor in
@@ -851,6 +857,7 @@ class DocumentProcessor: ObservableObject {
             } else {
                 job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
             }
+            await refreshVerification(job: job, settings: settings, chunks: nil)
             job.status = .completed
         } catch is CancellationError {
             captureFailure(job: job, settings: settings, started: started)
@@ -862,6 +869,71 @@ class DocumentProcessor: ObservableObject {
             job.status = .failed
             job.error = error.localizedDescription
             job.statusMessage = "Failed: \(error.localizedDescription)"
+        }
+    }
+
+    private func rememberIngestTarget(job: ProcessingJob, settings: AppSettings) {
+        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        job.ingestCollection = settings.defaultCollection
+        job.ingestCloud = options.target == .qdrantCloud
+    }
+
+    func reverify(job: ProcessingJob, settings: AppSettings) async {
+        await refreshVerification(job: job, settings: settings, chunks: job.retainedChunks, rerun: true)
+    }
+
+    private func refreshVerification(
+        job: ProcessingJob,
+        settings: AppSettings,
+        chunks: [ChunkingService.DocumentChunk]?,
+        rerun: Bool = false
+    ) async {
+        let base = settings.devboxWorkerURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !base.isEmpty, !settings.workerToken.isEmpty else {
+            job.verificationNote = "Set the devbox worker URL to verify this document."
+            return
+        }
+        let target = VerificationPayload.qdrantTarget(
+            settings: settings,
+            collection: job.ingestCollection,
+            cloud: job.ingestCloud
+        )
+        do {
+            let report: VerificationReport
+            if let workerJobID = job.workerJobID, rerun {
+                report = try await devboxService.reverifyJob(
+                    jobID: workerJobID,
+                    baseURL: base,
+                    token: settings.workerToken,
+                    qdrantURL: "",
+                    qdrantKey: target.key,
+                    collection: ""
+                )
+            } else if let workerJobID = job.workerJobID {
+                report = try await devboxService.fetchVerification(
+                    jobID: workerJobID,
+                    baseURL: base,
+                    token: settings.workerToken
+                )
+            } else {
+                report = try await devboxService.verifyFile(
+                    fileURL: job.sourceURL,
+                    chunks: chunks ?? [],
+                    baseURL: base,
+                    token: settings.workerToken,
+                    qdrantURL: target.url,
+                    qdrantKey: target.key,
+                    collection: target.collection,
+                    embeddingModel: settings.embeddingModel
+                )
+            }
+            job.verification = report
+            job.verificationNote = nil
+        } catch {
+            job.verificationNote = VerificationPayload.redact(
+                error.localizedDescription,
+                secrets: [target.key, settings.workerToken]
+            )
         }
     }
 
@@ -889,6 +961,7 @@ class DocumentProcessor: ObservableObject {
         }
         let documentChunks: [ChunkingService.DocumentChunk] = parsed.chunks.enumerated().map { index, raw in
             ChunkingService.DocumentChunk(
+                id: raw["id"] as? String ?? UUID().uuidString,
                 text: raw["text"] as? String ?? "",
                 source: raw["source"] as? String ?? job.fileName,
                 page: (raw["page"] as? NSNumber)?.intValue,

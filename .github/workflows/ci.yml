@@ -112,8 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
-          rm -rf /tmp/chunky-chat-settings-screenshots
-          mkdir -p /tmp/chunky-chat-settings-screenshots
+          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots
+          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -153,4 +153,19 @@ jobs:
         with:
           name: chat-settings-screenshots
           path: chat-screenshots/*.png
+          if-no-files-found: error
+
+      - name: Stage verification screenshots
+        if: always()
+        run: |
+          mkdir -p verification-screenshots
+          cp -f /tmp/chunky-verification-screenshots/*.png verification-screenshots/ || true
+          ls -la verification-screenshots
+
+      - name: Upload verification screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: verification-screenshots
+          path: verification-screenshots/*.png
           if-no-files-found: error

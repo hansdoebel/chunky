@@ -58,6 +58,11 @@ struct SidebarView: View {
                 isSelected: appState.viewMode == .benchmark
             )
             .onTapGesture { appState.viewMode = .benchmark }
+            NavigationRow(
+                icon: "checkmark.seal", title: "Verification",
+                isSelected: appState.viewMode == .verification
+            )
+            .onTapGesture { appState.viewMode = .verification }
 
             Section {
                 HStack(spacing: 8) {
@@ -196,6 +201,8 @@ struct MainContentView: View {
                 RetrievalEvalScreen()
             } else if appState.viewMode == .analytics {
                 AnalyticsView(runs: appState.finishedRuns, warning: appState.historyWarning)
+            } else if appState.viewMode == .verification {
+                VerificationRoot(processor: processor)
             } else {
                 BenchmarkScreen(processor: processor)
             }
