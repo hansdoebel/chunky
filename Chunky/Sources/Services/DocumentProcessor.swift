@@ -5,7 +5,6 @@ import QdrantCore
 
 // MARK: - DocumentProcessor
 
-@available(macOS 15.0, *)
 class DocumentProcessor: ObservableObject {
     @Published var isProcessing: Bool = false
 

@@ -1,7 +1,6 @@
 import Foundation
 
 /// Service for chunking document content for embedding
-@available(macOS 15.0, *)
 actor ChunkingService {
 
     // MARK: - Errors
@@ -819,7 +818,6 @@ extension ChunkingService {
 
 // MARK: - Convenience
 
-@available(macOS 15.0, *)
 extension ChunkingService.DocumentChunk {
 
     /// Convert to ChunkPoint (without embeddings)
@@ -836,7 +834,6 @@ extension ChunkingService.DocumentChunk {
     }
 }
 
-@available(macOS 15.0, *)
 extension Array where Element == ChunkingService.DocumentChunk {
 
     /// Convert all chunks to ChunkPoints (without embeddings)

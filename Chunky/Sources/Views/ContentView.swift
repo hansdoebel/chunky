@@ -2,7 +2,6 @@ import Combine
 import SwiftUI
 import UniformTypeIdentifiers
 
-@available(macOS 15.0, *)
 struct ContentView: View {
     @EnvironmentObject var appState: AppState
     @StateObject private var processor = DocumentProcessor()
@@ -23,7 +22,6 @@ struct ContentView: View {
     }
 }
 
-@available(macOS 15.0, *)
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
@@ -156,7 +154,6 @@ struct StatRow: View {
     }
 }
 
-@available(macOS 15.0, *)
 struct MainContentView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var processor: DocumentProcessor
@@ -206,7 +203,6 @@ struct MainContentView: View {
     }
 }
 
-@available(macOS 15.0, *)
 struct DropZoneEmptyView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme
@@ -283,7 +279,6 @@ struct DropZoneEmptyView: View {
     }
 }
 
-@available(macOS 15.0, *)
 struct FileListView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var processor: DocumentProcessor
@@ -507,7 +502,6 @@ struct FileRowView: View {
     }
 }
 
-@available(macOS 15.0, *)
 struct BottomBarView: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var processor: DocumentProcessor

@@ -122,7 +122,7 @@ Both clients have identical APIs. Use gRPC for production, REST for simplicity.
 ## Running Qdrant
 
 ```bash
-docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
+docker run -p 6333:6333 -p 6334:6334 -v chunky-qdrant:/qdrant/storage qdrant/qdrant:v1.20.1
 ```
 
 ## Documentation

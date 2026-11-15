@@ -109,7 +109,7 @@ cd worker
 python3 -m venv .venv
 .venv/bin/pip install -e ".[dev]"
 # On the devbox, also install docling (not mlx-vlm):
-# .venv/bin/pip install docling
+# .venv/bin/pip install -r requirements-docling.txt
 .venv/bin/chunky-worker --host 127.0.0.1 --port 8080
 # On the devbox, bind the 10GbE address instead of loopback:
 # CHUNKY_WORKER_HOST=<devbox-10gbe-ip> .venv/bin/chunky-worker

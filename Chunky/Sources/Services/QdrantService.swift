@@ -4,7 +4,6 @@ import QdrantCore
 import QdrantGRPC
 
 /// Business logic layer for Qdrant operations
-@available(macOS 15.0, *)
 @MainActor
 class QdrantService: ObservableObject {
     @Published private(set) var isConnected: Bool = false
@@ -449,7 +448,6 @@ enum QdrantServiceError: LocalizedError, Sendable {
 
 // MARK: - Convenience factory
 
-@available(macOS 15.0, *)
 extension QdrantService {
     /// Create a configured and connected QdrantService
     static func create(url: String, apiKey: String?) async throws -> QdrantService {

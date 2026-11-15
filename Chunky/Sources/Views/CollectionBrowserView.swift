@@ -1,6 +1,5 @@
 import SwiftUI
 
-@available(macOS 15.0, *)
 struct CollectionBrowserView: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.colorScheme) var colorScheme

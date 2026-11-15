@@ -33,7 +33,7 @@ first-launch:
 	xcodebuild -runFirstLaunch
 
 qdrant:
-	docker run -p 6333:6333 -p 6334:6334 qdrant/qdrant
+	docker run -p 6333:6333 -p 6334:6334 -v chunky-qdrant:/qdrant/storage qdrant/qdrant:v1.20.1
 
 ollama:
 	ollama serve
@@ -42,4 +42,4 @@ services: qdrant ollama
 
 setup-venv:
 	python3 -m venv ~/.chunky-venv
-	~/.chunky-venv/bin/pip install docling mlx-vlm
+	~/.chunky-venv/bin/pip install -r requirements/macos-scripts.txt

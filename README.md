@@ -32,7 +32,11 @@ make first-launch
 make setup-venv
 ```
 
-The Python venv is created at `~/.chunky-venv` with Docling and MLX installed.
+The Python venv is created at `~/.chunky-venv`. Script packages are pinned in `requirements/macos-scripts.txt`. Worker packages are pinned in `worker/requirements.txt`; Docling on the worker is `worker/requirements-docling.txt`. To bump a pin, change the file, install into a fresh venv, and run the unit tests.
+
+`pyrightconfig.json` looks for a venv named `.chunky-venv` in the repo root. `make setup-venv` creates `~/.chunky-venv`. Symlink them (`ln -s ~/.chunky-venv .chunky-venv`) or set pyright's `venvPath` to your home directory.
+
+`Package.resolved` is committed for `LocalPackages/qdrant-swift`. It is no longer gitignored.
 
 > **Note:** The build disables code signing by default, so no Apple Developer account is required.
 
@@ -51,7 +55,7 @@ make open-xcode    # open in Xcode
 Start the required services:
 
 ```
-make qdrant        # start Qdrant on localhost:6333 (REST) / 6334 (gRPC)
+make qdrant        # Qdrant v1.20.1 on localhost:6333 / 6334, volume chunky-qdrant
 make ollama        # start Ollama
 make services      # start both
 ```
