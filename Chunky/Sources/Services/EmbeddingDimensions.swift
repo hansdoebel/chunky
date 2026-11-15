@@ -2,7 +2,10 @@ import Foundation
 
 /// Cached embedding width and the check against an existing Qdrant collection.
 /// Collection creation must use a probed size. A name-based guess is not used here.
-enum EmbeddingDimensionError: Error, LocalizedError, Equatable {
+///
+/// `nonisolated` opts out of the app target's default main-actor isolation so
+/// `OllamaService` can use the cache from its own actor.
+nonisolated enum EmbeddingDimensionError: Error, LocalizedError, Equatable {
     case mismatch(collection: String, existing: Int, probed: Int, model: String)
     case emptyProbe(String)
     case batchMismatch(model: String, probed: Int, actual: Int)
@@ -30,16 +33,21 @@ enum EmbeddingDimensionError: Error, LocalizedError, Equatable {
     }
 }
 
-struct EmbeddingDimensionCache {
+nonisolated final class EmbeddingDimensionCache: @unchecked Sendable {
     static let probeText = "chunky"
 
+    private let lock = NSLock()
     private var sizes: [String: Int] = [:]
 
     func cached(_ model: String) -> Int? {
-        sizes[model]
+        lock.lock()
+        defer { lock.unlock() }
+        return sizes[model]
     }
 
-    mutating func store(model: String, vector: [Float]) throws -> Int {
+    func store(model: String, vector: [Float]) throws -> Int {
+        lock.lock()
+        defer { lock.unlock() }
         if let existing = sizes[model] {
             return existing
         }

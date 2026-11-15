@@ -6,7 +6,7 @@ import Testing
 struct EmbeddingDimensionTests {
 
     @Test func cacheStoresTheProbedWidthOnce() {
-        var cache = EmbeddingDimensionCache()
+        let cache = EmbeddingDimensionCache()
         var probes = 0
         let first = try! cache.store(model: "qwen3-embedding", vector: [0, 1, 2])
         probes += 1
@@ -19,7 +19,7 @@ struct EmbeddingDimensionTests {
     }
 
     @Test func emptyProbeFails() {
-        var cache = EmbeddingDimensionCache()
+        let cache = EmbeddingDimensionCache()
         #expect(throws: EmbeddingDimensionError.emptyProbe("missing")) {
             try cache.store(model: "missing", vector: [])
         }
