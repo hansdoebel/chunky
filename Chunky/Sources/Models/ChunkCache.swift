@@ -186,7 +186,7 @@ struct ChunkCacheChunk: Equatable, Sendable {
     }
 }
 
-struct ChunkCacheManifestEntry: Equatable {
+struct ChunkCacheManifestEntry {
     var id: String
     var contentSHA256: String
     var doclingVersion: String
