@@ -30,10 +30,37 @@ Docling, Ollama, or a GPU.
 | `GET` | `/v1/health` | Docling import, embedding reachability, and the granite VLM engine plus GPU visibility. **No token.** |
 | `GET` | `/v1/models` | Embedding model names and known VLM ids. **Bearer token.** |
 | `POST` | `/v1/search` | Embed a query and search Qdrant. **Bearer token.** No web UI. |
+| `POST` | `/v1/cache/lookup` | Return cached chunks, and vectors when the model and dimension match. **Bearer token.** |
+| `PUT` | `/v1/cache` | Store a Docling document JSON and its chunk records. **Bearer token.** |
+| `PUT` | `/v1/cache/vectors` | Store vectors for one embedding model and dimension. **Bearer token.** |
+| `GET` | `/v1/cache` | Cache entry count and byte size. **Bearer token.** |
+| `DELETE` | `/v1/cache` | Remove every cached entry. **Bearer token.** |
 
 `settings.mode` is `chunk_only` (default) or `chunk_and_embed`. Other fields
 match the `docling_daemon.py` convert command (for example `vlm_model`,
 `accelerator`, `chunk_max_tokens`, `ollama_url`, `embedding_model`).
+
+## Chunk cache
+
+Cached conversions live under `CHUNKY_WORKER_CACHE_DIR` (default
+`$XDG_STATE_HOME/chunky/cache`, or `~/.local/state/chunky/cache`). The Mac app
+uses `~/Library/Application Support/Chunky/Cache` with the same layout.
+`CHUNKY_WORKER_CACHE_LIMIT_BYTES` evicts the least recently used entries when
+the directory is over that size. `0` means no limit.
+
+An entry is keyed by the SHA-256 of the PDF bytes, the Docling version, the
+pipeline or VLM preset, the chunk tokenizer, and `max_tokens`. The directory
+is `entries/<sha256 of that key>/`:
+
+| File | Contents |
+|------|----------|
+| `document.json` | The DoclingDocument JSON |
+| `chunks.json` | Chunk records, including `page`, `page_end`, `pages`, `page_labels`, `headings`, `bboxes`, `doc_title`, `authors`, `year`, `doi`, and `source` |
+| `vectors/<id>.json` | Vectors for one embedding model id and dimension |
+| `manifest.json` | Entry ids, byte sizes, and last-used times, written atomically |
+
+A lookup with a different embedding model still returns the chunks. Vectors
+are included only when `embedding_model` and `embedding_dim` match a stored set.
 
 ## Ingest targets
 

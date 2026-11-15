@@ -112,6 +112,7 @@ def tmp_settings(tmp_path: Path) -> Settings:
         port=8080,
         log_dir=tmp_path / "logs",
         work_dir=tmp_path / "work",
+        cache_dir=tmp_path / "cache",
         scripts_dir=tmp_path / "scripts",
         ollama_url="http://127.0.0.1:11434",
         vllm_url="http://127.0.0.1:8000",

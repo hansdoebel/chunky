@@ -62,6 +62,21 @@ def test_span_keeps_every_page_box_and_printed_label():
     assert record["headings"] == ["Methods", "Setup"]
 
 
+def test_document_identity_is_copied_onto_the_chunk():
+    item = SimpleNamespace(label="text", prov=[SimpleNamespace(page_no=1)], annotations=[])
+    doc = SimpleNamespace(
+        name="Fallback",
+        description=SimpleNamespace(title="Paper", authors=["Ada"], doi="10.1/abc"),
+        origin=SimpleNamespace(filename="paper.pdf"),
+    )
+    record = record_from_chunk(_chunk("Hello", "Hello", [item]), 0, Chunker(), doc)
+    assert record["doc_title"] == "Paper"
+    assert record["authors"] == ["Ada"]
+    assert record["doi"] == "10.1/abc"
+    assert record["source"] == "paper.pdf"
+    assert record["year"] is None
+
+
 def test_picture_keeps_description_and_class():
     annotation = SimpleNamespace(
         text="A bar chart of revenue.",

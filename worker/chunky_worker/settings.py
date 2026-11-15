@@ -21,6 +21,23 @@ def default_log_dir() -> Path:
         return Path(override)
     return default_state_dir() / "chunky" / "logs"
 
+def default_cache_dir() -> Path:
+    override = os.environ.get("CHUNKY_WORKER_CACHE_DIR")
+    if override:
+        return Path(override)
+    return default_state_dir() / "chunky" / "cache"
+
+
+def default_cache_limit_bytes() -> int:
+    raw = os.environ.get("CHUNKY_WORKER_CACHE_LIMIT_BYTES", "").strip()
+    if not raw:
+        return 0
+    try:
+        return max(0, int(raw))
+    except ValueError:
+        return 0
+
+
 def default_work_dir() -> Path:
     override = os.environ.get("CHUNKY_WORK_DIR")
     if override:
@@ -96,6 +113,8 @@ class Settings:
     port: int = 8080
     log_dir: Path = field(default_factory=default_log_dir)
     work_dir: Path = field(default_factory=default_work_dir)
+    cache_dir: Path = field(default_factory=default_cache_dir)
+    cache_limit_bytes: int = 0
     scripts_dir: Path = field(default_factory=default_scripts_dir)
     ollama_url: str = "http://127.0.0.1:11434"
     vllm_url: str = "http://127.0.0.1:8000"
@@ -118,6 +137,8 @@ class Settings:
             port=int(os.environ.get("CHUNKY_WORKER_PORT", "8080")),
             log_dir=default_log_dir(),
             work_dir=default_work_dir(),
+            cache_dir=default_cache_dir(),
+            cache_limit_bytes=default_cache_limit_bytes(),
             scripts_dir=default_scripts_dir(),
             ollama_url=os.environ.get("CHUNKY_OLLAMA_URL", "http://127.0.0.1:11434"),
             vllm_url=os.environ.get("CHUNKY_VLLM_URL", "http://127.0.0.1:8000"),

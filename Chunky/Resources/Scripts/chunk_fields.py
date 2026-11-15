@@ -214,6 +214,26 @@ def provenance(doc_items) -> dict:
         fields["bboxes"] = boxes
     return fields
 
+def document_identity(doc) -> dict:
+    description = getattr(doc, "description", None) if doc is not None else None
+    origin = getattr(doc, "origin", None) if doc is not None else None
+    title = _text(getattr(description, "title", None) if description is not None else None)
+    if title is None and doc is not None:
+        title = _text(getattr(doc, "name", None))
+    authors = getattr(description, "authors", None) if description is not None else None
+    if not isinstance(authors, list):
+        authors = []
+    else:
+        authors = [str(author) for author in authors if _text(author)]
+    return {
+        "doc_title": title,
+        "authors": authors,
+        "year": None,
+        "doi": _text(getattr(description, "doi", None) if description is not None else None),
+        "source": _text(getattr(origin, "filename", None) if origin is not None else None) or "",
+    }
+
+
 def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     """One chunk dict. ``text`` stays raw. ``embedding_text`` is the serialized form."""
     contextualized = chunker.serialize(chunk)
@@ -243,5 +263,6 @@ def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     for key in ("page_end", "pages", "page_labels", "bboxes"):
         if key in located:
             record[key] = located[key]
+    record.update(document_identity(doc))
     record.update(visual_fields(items, doc))
     return record

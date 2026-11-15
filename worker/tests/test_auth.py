@@ -44,6 +44,8 @@ def test_protected_routes_reject_missing_token(tmp_settings):
             json={"query": "revenue", "collection": "documents", "qdrant_url": "http://127.0.0.1:6333"},
         )
         assert search.status_code == 401
+        assert client.post("/v1/cache/lookup", json={}).status_code == 401
+        assert client.get("/v1/cache").status_code == 401
 
 def test_query_string_token_is_not_accepted(tmp_settings):
     with TestClient(_app(tmp_settings)) as client:
