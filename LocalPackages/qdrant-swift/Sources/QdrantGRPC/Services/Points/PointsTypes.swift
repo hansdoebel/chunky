@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// A search request for batch search operations.
 public struct SearchRequest: Sendable {
     public let vector: [Float]
     public let limit: UInt64
@@ -27,7 +26,6 @@ public struct SearchRequest: Sendable {
     }
 }
 
-/// A query request for batch query operations.
 public struct QueryRequest: Sendable {
     public let query: QueryInput?
     public let prefetch: [PrefetchQuery]
@@ -56,7 +54,6 @@ public struct QueryRequest: Sendable {
     }
 }
 
-/// A discover request for batch discover operations.
 public struct DiscoverRequest: Sendable {
     public let target: DiscoverTarget
     public let context: [ContextPair]
@@ -79,7 +76,6 @@ public struct DiscoverRequest: Sendable {
     }
 }
 
-/// A recommend request for batch recommend operations.
 public struct RecommendRequest: Sendable {
     public let positive: [PointID]
     public let negative: [PointID]
@@ -102,7 +98,6 @@ public struct RecommendRequest: Sendable {
     }
 }
 
-/// A group of points from grouped search.
 public struct PointGroup: Sendable {
     public let id: GroupId
     public let hits: [ScoredPoint]
@@ -113,7 +108,6 @@ public struct PointGroup: Sendable {
     }
 }
 
-/// Group identifier for grouped search results.
 public enum GroupId: Sendable, Hashable {
     case unsigned(UInt64)
     case integer(Int64)
@@ -130,13 +124,11 @@ public enum GroupId: Sendable, Hashable {
     }
 }
 
-/// Target for discover operations.
 public enum DiscoverTarget: Sendable {
     case vector([Float])
     case pointId(PointID)
 }
 
-/// A context pair for discover operations (positive and negative examples).
 public struct ContextPair: Sendable {
     public let positive: DiscoverTarget
     public let negative: DiscoverTarget
@@ -147,7 +139,6 @@ public struct ContextPair: Sendable {
     }
 }
 
-/// Input for query operations.
 public enum QueryInput: Sendable {
     case nearest([Float])
     case nearestSparse(SparseVector)
@@ -211,7 +202,6 @@ public enum QueryInput: Sendable {
     }
 }
 
-/// Vector input for query operations.
 public enum VectorInput: Sendable {
     case dense([Float])
     case id(PointID)
@@ -230,7 +220,6 @@ public enum VectorInput: Sendable {
     }
 }
 
-/// Context input pair for discover queries.
 public struct ContextInputPair: Sendable {
     public let positive: VectorInput
     public let negative: VectorInput
@@ -241,7 +230,6 @@ public struct ContextInputPair: Sendable {
     }
 }
 
-/// Order direction for ordering queries.
 public enum OrderDirection: Sendable {
     case ascending
     case descending
@@ -254,7 +242,6 @@ public enum OrderDirection: Sendable {
     }
 }
 
-/// Fusion type for combining prefetch results.
 public enum FusionType: Sendable {
     case rrf
 
@@ -265,7 +252,6 @@ public enum FusionType: Sendable {
     }
 }
 
-/// Sample type for random sampling.
 public enum SampleType: Sendable {
     case random
 
@@ -276,7 +262,6 @@ public enum SampleType: Sendable {
     }
 }
 
-/// A prefetch query for multi-stage queries.
 public struct PrefetchQuery: Sendable {
     public let prefetch: [PrefetchQuery]
     public let query: QueryInput?
@@ -323,7 +308,6 @@ public struct PrefetchQuery: Sendable {
     }
 }
 
-/// Result of a facet operation.
 public struct FacetResult: Sendable {
     public let hits: [FacetHit]
 
@@ -332,7 +316,6 @@ public struct FacetResult: Sendable {
     }
 }
 
-/// A single facet hit with value and count.
 public struct FacetHit: Sendable {
     public let value: FacetValue
     public let count: UInt64
@@ -343,7 +326,6 @@ public struct FacetHit: Sendable {
     }
 }
 
-/// A facet value.
 public enum FacetValue: Sendable {
     case string(String)
     case integer(Int64)
@@ -360,7 +342,6 @@ public enum FacetValue: Sendable {
     }
 }
 
-/// A pair of points with similarity score from matrix search.
 public struct SearchMatrixPair: Sendable {
     public let a: PointID
     public let b: PointID
@@ -373,7 +354,6 @@ public struct SearchMatrixPair: Sendable {
     }
 }
 
-/// Result of matrix search in pairs format.
 public struct SearchMatrixPairsResult: Sendable {
     public let pairs: [SearchMatrixPair]
 
@@ -382,7 +362,6 @@ public struct SearchMatrixPairsResult: Sendable {
     }
 }
 
-/// Result of matrix search in offsets format.
 public struct SearchMatrixOffsetsResult: Sendable {
     public let offsetsRow: [UInt64]
     public let offsetsCol: [UInt64]
@@ -397,7 +376,6 @@ public struct SearchMatrixOffsetsResult: Sendable {
     }
 }
 
-/// An operation for batch updates.
 public enum PointsUpdateOperation: Sendable {
     case upsert([Point])
     case deletePoints([PointID])
@@ -494,7 +472,6 @@ public enum PointsUpdateOperation: Sendable {
     }
 }
 
-/// Result of a batch update operation.
 public struct BatchUpdateResult: Sendable {
     public let statuses: [UpdateStatus]
 
@@ -503,7 +480,6 @@ public struct BatchUpdateResult: Sendable {
     }
 }
 
-/// Status of an update operation.
 public enum UpdateStatus: Sendable {
     case acknowledged
     case completed

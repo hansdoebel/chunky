@@ -789,7 +789,7 @@ struct PreferencesView: View {
         .formStyle(.grouped)
         .padding()
         .task {
-            // Auto-test on tab appear if URL is set
+
             if !appState.settings.qdrantURL.isEmpty && qdrantStatus == .unknown {
                 await testQdrantConnection()
             }
@@ -828,7 +828,6 @@ struct PreferencesView: View {
         }
     }
 
-    /// Display fallback used only when Ollama cannot be probed. Ingest does not use this guess.
     private func dimensionsForModel(_ modelName: String) -> Int {
         let name = modelName.lowercased()
 
@@ -845,15 +844,12 @@ struct PreferencesView: View {
             return 1024
         }
 
-        // 384-dimensional models
         if name.contains("minilm") || name.contains("small") || name.contains("e5-small")
             || name.contains("bge-small")
         {
             return 384
         }
 
-        // 768-dimensional models (default for most)
-        // nomic-embed-text, bge-base, e5-base, gte-base, etc.
         return 768
     }
 
@@ -994,7 +990,6 @@ struct PreferencesView: View {
         qdrantStatus = .checking
         appState.qdrantConnectionError = nil
 
-        // Reset existing connection to force reconnect with new settings
         appState.qdrantService = nil
 
         do {
@@ -1002,7 +997,7 @@ struct PreferencesView: View {
             await appState.fetchCollections()
             qdrantStatus = .connected
         } catch is CancellationError {
-            // Ignore cancellation - don't update status
+
             print("Qdrant connection cancelled")
         } catch {
             qdrantStatus = .failed
@@ -1117,7 +1112,6 @@ struct PreferencesView: View {
 
         let pipPath = "~/.chunky-venv/bin/pip".expandingTildeInPath
 
-        // Check if venv exists
         if !FileManager.default.fileExists(atPath: pipPath) {
             doclingVersion = "venv not found"
             isCheckingDocling = false
@@ -1125,7 +1119,6 @@ struct PreferencesView: View {
             return
         }
 
-        // Get installed version using pip show (more reliable than importing)
         do {
             let version = try await getDoclingVersionViaPip(pipPath: pipPath)
             doclingVersion = version
@@ -1133,7 +1126,6 @@ struct PreferencesView: View {
             doclingVersion = "Not installed"
         }
 
-        // Check PyPI for latest version
         await checkLatestDoclingVersion()
 
         isCheckingDocling = false
@@ -1154,7 +1146,6 @@ struct PreferencesView: View {
                 let data = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
                 let output = String(data: data, encoding: .utf8) ?? ""
 
-                // Parse "Version: x.x.x" from pip show output
                 if proc.terminationStatus == 0,
                     let versionLine = output.components(separatedBy: "\n").first(where: {
                         $0.hasPrefix("Version:")
@@ -1182,7 +1173,6 @@ struct PreferencesView: View {
             process.executableURL = URL(fileURLWithPath: pythonPath)
             process.arguments = ["-c", "import docling; print(docling.__version__)"]
 
-            // Set clean environment
             var env = ProcessInfo.processInfo.environment
             env["PYTHONDONTWRITEBYTECODE"] = "1"
             process.environment = env
@@ -1239,10 +1229,9 @@ struct PreferencesView: View {
             let result = try await runPipUpgrade(pipPath: pipPath)
 
             if result.success {
-                // Refresh version after a short delay to let pip finish cleanup
+
                 try? await Task.sleep(nanoseconds: 1_000_000_000)
 
-                // Try to get the new version using pip show
                 if let newVersion = try? await getDoclingVersionViaPip(pipPath: pipPath) {
                     doclingVersion = newVersion
                     latestDoclingVersion = newVersion
@@ -1288,9 +1277,9 @@ struct PreferencesView: View {
         do {
             let version = try await getDoclingVersionDirect(pythonPath: pythonPath)
             doclingVersion = version
-            latestDoclingVersion = version  // They're now the same after update
+            latestDoclingVersion = version
         } catch {
-            // Keep current version display
+
         }
     }
 

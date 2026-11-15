@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for query operations.
 internal final class QueryService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class QueryService: Sendable {
         self.base = base
     }
 
-    /// Universal query API - performs various types of queries.
     func query(
         collection: String,
         query: QueryInput?,
@@ -70,7 +68,6 @@ internal final class QueryService: Sendable {
         }
     }
 
-    /// Performs multiple queries in a single batch request.
     func queryBatch(
         collection: String,
         queries: [QueryRequest]
@@ -120,7 +117,6 @@ internal final class QueryService: Sendable {
         }
     }
 
-    /// Performs a grouped query.
     func queryGroups(
         collection: String,
         query: QueryInput?,

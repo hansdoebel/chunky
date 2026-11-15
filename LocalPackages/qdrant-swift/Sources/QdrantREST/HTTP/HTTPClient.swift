@@ -1,18 +1,14 @@
 import Foundation
 
-// MARK: - CharacterSet Extension for URL Path Components
-
 extension CharacterSet {
-    /// Characters allowed in a single URL path component (segment).
-    /// This is more restrictive than `.urlPathAllowed` as it excludes `/`.
+
     static let urlPathComponentAllowed: CharacterSet = {
         var allowed = CharacterSet.urlPathAllowed
-        allowed.remove(charactersIn: "/")  // Don't allow path separators in segments
+        allowed.remove(charactersIn: "/")
         return allowed
     }()
 }
 
-/// HTTP client wrapper for Qdrant REST API using URLSession.
 public actor HTTPClient {
     private let session: URLSession
     private let baseURL: URL
@@ -20,13 +16,6 @@ public actor HTTPClient {
     private let encoder: JSONEncoder
     private let decoder: JSONDecoder
 
-    /// Creates a new HTTP client.
-    /// - Parameters:
-    ///   - host: The hostname of the Qdrant server.
-    ///   - port: The REST API port (default 6333).
-    ///   - useTLS: Whether to use HTTPS.
-    ///   - apiKey: Optional API key for authentication.
-    ///   - session: URLSession to use (default shared session).
     public init(
         host: String,
         port: Int = 6333,
@@ -50,13 +39,6 @@ public actor HTTPClient {
         self.decoder.keyDecodingStrategy = .convertFromSnakeCase
     }
 
-    // MARK: - Request Methods
-
-    /// Performs a GET request.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The decoded response.
     public func get<T: Decodable>(
         path: String,
         queryItems: [URLQueryItem]? = nil
@@ -65,11 +47,6 @@ public actor HTTPClient {
         return try await execute(request)
     }
 
-    /// Performs a GET request and returns raw text.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The response body as a string.
     public func getText(
         path: String,
         queryItems: [URLQueryItem]? = nil
@@ -87,12 +64,6 @@ public actor HTTPClient {
         return text
     }
 
-    /// Performs a POST request.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - body: The request body.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The decoded response.
     public func post<T: Decodable, B: Encodable>(
         path: String,
         body: B,
@@ -104,11 +75,6 @@ public actor HTTPClient {
         return try await execute(request)
     }
 
-    /// Performs a POST request without a response body.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - body: The request body.
-    ///   - queryItems: Optional query parameters.
     public func post<B: Encodable>(
         path: String,
         body: B,
@@ -120,12 +86,6 @@ public actor HTTPClient {
         try await executeVoid(request)
     }
 
-    /// Performs a PUT request.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - body: The request body.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The decoded response.
     public func put<T: Decodable, B: Encodable>(
         path: String,
         body: B,
@@ -137,11 +97,6 @@ public actor HTTPClient {
         return try await execute(request)
     }
 
-    /// Performs a PUT request without a response body.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - body: The request body.
-    ///   - queryItems: Optional query parameters.
     public func put<B: Encodable>(
         path: String,
         body: B,
@@ -153,12 +108,6 @@ public actor HTTPClient {
         try await executeVoid(request)
     }
 
-    /// Performs a PATCH request.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - body: The request body.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The decoded response.
     public func patch<T: Decodable, B: Encodable>(
         path: String,
         body: B,
@@ -170,11 +119,6 @@ public actor HTTPClient {
         return try await execute(request)
     }
 
-    /// Performs a DELETE request.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The decoded response.
     public func delete<T: Decodable>(
         path: String,
         queryItems: [URLQueryItem]? = nil
@@ -183,10 +127,6 @@ public actor HTTPClient {
         return try await execute(request)
     }
 
-    /// Performs a DELETE request without a response body.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - queryItems: Optional query parameters.
     public func delete(
         path: String,
         queryItems: [URLQueryItem]? = nil
@@ -195,12 +135,6 @@ public actor HTTPClient {
         try await executeVoid(request)
     }
 
-    /// Performs a DELETE request with a body.
-    /// - Parameters:
-    ///   - path: The API path.
-    ///   - body: The request body.
-    ///   - queryItems: Optional query parameters.
-    /// - Returns: The decoded response.
     public func delete<T: Decodable, B: Encodable>(
         path: String,
         body: B,
@@ -212,10 +146,6 @@ public actor HTTPClient {
         return try await execute(request)
     }
 
-    /// Downloads a file to a local path.
-    /// - Parameters:
-    ///   - path: The API path to download from.
-    ///   - destination: The local file URL to save to.
     public func download(
         path: String,
         to destination: URL
@@ -238,14 +168,12 @@ public actor HTTPClient {
         try fileManager.moveItem(at: tempURL, to: destination)
     }
 
-    // MARK: - Private Helpers
-
     private func buildRequest(
         method: String,
         path: String,
         queryItems: [URLQueryItem]?
     ) throws -> URLRequest {
-        // Encode each path segment to prevent URL injection attacks
+
         let encodedPath = encodePathSegments(path)
 
         var components = URLComponents(
@@ -266,14 +194,11 @@ public actor HTTPClient {
         return request
     }
 
-    /// Encodes each segment of a URL path to prevent injection attacks.
-    /// This ensures characters like `/`, `?`, `#`, `%` in user input are properly escaped.
     private func encodePathSegments(_ path: String) -> String {
-        // Split by `/`, encode each segment, rejoin
+
         let segments = path.split(separator: "/", omittingEmptySubsequences: false)
         let encodedSegments = segments.map { segment -> String in
-            // Use percent encoding for path components
-            // This encodes special characters but preserves alphanumerics and some safe chars
+
             let segmentString = String(segment)
             return segmentString.addingPercentEncoding(
                 withAllowedCharacters: .urlPathComponentAllowed) ?? segmentString

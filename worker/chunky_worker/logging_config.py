@@ -5,7 +5,6 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 
-
 def configure_logging(log_dir: Path, level: int = logging.INFO) -> Path:
     log_dir.mkdir(parents=True, exist_ok=True)
     log_file = log_dir / "chunky-worker.log"
@@ -19,7 +18,6 @@ def configure_logging(log_dir: Path, level: int = logging.INFO) -> Path:
     stream_handler = logging.StreamHandler()
     stream_handler.setFormatter(formatter)
 
-    # Replace previous handlers so tests and repeated create_app calls stay quiet.
     root.handlers.clear()
     root.addHandler(file_handler)
     root.addHandler(stream_handler)

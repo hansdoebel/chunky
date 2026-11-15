@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Protocol providing access to the gRPC client and common metadata.
 internal protocol GRPCPointsClientProvider: Sendable {
     var grpcClient: GRPCClient<HTTP2ClientTransport.Posix> { get }
     var apiKey: String? { get }
@@ -20,7 +19,6 @@ extension GRPCPointsClientProvider {
     }
 }
 
-/// Base class for internal points services.
 internal final class PointsServiceBase: GRPCPointsClientProvider, Sendable {
     let grpcClient: GRPCClient<HTTP2ClientTransport.Posix>
     let apiKey: String?

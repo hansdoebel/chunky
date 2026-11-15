@@ -36,14 +36,11 @@ final class MemorySecretStore: SettingsSecretStore {
     }
 }
 
-// MARK: - AppSettings
-
 class AppSettings: ObservableObject {
     let defaults: UserDefaults
     private let secrets: SettingsSecretStore
     private let prefix = "chunky."
 
-    /// Ollama URL - stored in Keychain for persistence across rebuilds
     var ollamaURL: String {
         get { secret(KeychainService.ollamaURLKey, default: "http://localhost:11434") }
         set { setSecret(KeychainService.ollamaURLKey, newValue) }
@@ -67,7 +64,6 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(embeddingConcurrency, forKey: prefix + "embeddingConcurrency") }
     }
 
-    /// Qdrant URL - stored in Keychain for persistence across rebuilds
     var qdrantURL: String {
         get { secret(KeychainService.qdrantURLKey, default: "http://localhost:6334") }
         set { setSecret(KeychainService.qdrantURLKey, newValue) }
@@ -91,7 +87,6 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(qdrantCompression, forKey: prefix + "qdrantCompression") }
     }
 
-    // Metadata options
     @Published var metadataIncludeFilename: Bool {
         didSet { defaults.set(metadataIncludeFilename, forKey: prefix + "metadataIncludeFilename") }
     }
@@ -207,7 +202,6 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(ocrLanguage, forKey: prefix + "ocrLanguage") }
     }
 
-    // Docling enrichment options
     @Published var imageExportMode: String {
         didSet { defaults.set(imageExportMode, forKey: prefix + "imageExportMode") }
     }
@@ -284,7 +278,6 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.chatAPIKeyKey, newValue) }
     }
 
-    /// Bearer token for the devbox worker. Stored in the Keychain.
     var workerToken: String {
         get { secret(KeychainService.workerTokenKey) }
         set { setSecret(KeychainService.workerTokenKey, newValue) }
@@ -326,13 +319,11 @@ class AppSettings: ObservableObject {
         workerToken = workerEndpointToken(id: endpoint.id)
     }
 
-    /// Qdrant Cloud URL sent with a devbox job. Local Docker stays in `qdrantURL`.
     var qdrantCloudURL: String {
         get { secret(KeychainService.qdrantCloudURLKey) }
         set { setSecret(KeychainService.qdrantCloudURLKey, newValue) }
     }
 
-    /// Qdrant API Key - stored in Keychain, not in UserDefaults
     var qdrantAPIKey: String {
         get { secret(KeychainService.qdrantAPIKeyKey) }
         set { setSecret(KeychainService.qdrantAPIKeyKey, newValue) }
@@ -341,8 +332,7 @@ class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) {
         self.defaults = defaults
         self.secrets = secrets
-        // Load saved values or use defaults
-        // Note: ollamaURL and qdrantURL are stored in Keychain (computed properties)
+
         self.embeddingBackend = defaults.string(forKey: prefix + "embeddingBackend") ?? EmbeddingBackendKind.ollama.rawValue
         self.embeddingAPIURL = defaults.string(forKey: prefix + "embeddingAPIURL") ?? ""
         self.embeddingModel = defaults.string(forKey: prefix + "embeddingModel") ?? "qwen3-embedding"
@@ -357,7 +347,6 @@ class AppSettings: ObservableObject {
         self.hybridSearch = defaults.object(forKey: prefix + "hybridSearch") as? Bool ?? false
         self.qdrantCompression = defaults.string(forKey: prefix + "qdrantCompression") ?? Compression.none.rawValue
 
-        // Metadata options - all enabled by default
         self.metadataIncludeFilename = defaults.object(forKey: prefix + "metadataIncludeFilename") as? Bool ?? true
         self.metadataIncludePageNumber = defaults.object(forKey: prefix + "metadataIncludePageNumber") as? Bool ?? true
         self.metadataIncludeHeadings = defaults.object(forKey: prefix + "metadataIncludeHeadings") as? Bool ?? true
@@ -395,7 +384,6 @@ class AppSettings: ObservableObject {
         self.doOCR = defaults.object(forKey: prefix + "doOCR") as? Bool ?? false
         self.ocrLanguage = defaults.string(forKey: prefix + "ocrLanguage") ?? OCRLanguage.german.rawValue
 
-        // Docling enrichment options
         self.imageExportMode = defaults.string(forKey: prefix + "imageExportMode") ?? ImageExportMode.embedded.rawValue
         self.doFormulaEnrichment = defaults.object(forKey: prefix + "doFormulaEnrichment") as? Bool ?? false
         self.doCodeEnrichment = defaults.object(forKey: prefix + "doCodeEnrichment") as? Bool ?? false
@@ -421,7 +409,7 @@ class AppSettings: ObservableObject {
         self.exportFolder = defaults.string(forKey: prefix + "exportFolder")
             ?? FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first?.path
             ?? ""
-        // Migrate old docling_images format to docling, default to markdown
+
         let savedFormat = defaults.string(forKey: prefix + "exportFormat") ?? ExportFormat.docling.rawValue
         self.exportFormat = savedFormat == "docling_images" ? ExportFormat.docling.rawValue : savedFormat
         self.devboxWorkerURL = defaults.string(forKey: prefix + "devboxWorkerURL") ?? ""
@@ -436,7 +424,7 @@ class AppSettings: ObservableObject {
     }
 
     func save() {
-        // Settings are now auto-saved via didSet, but this can force a sync
+
         defaults.synchronize()
     }
 

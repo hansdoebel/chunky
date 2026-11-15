@@ -1,15 +1,7 @@
 import Foundation
 import QdrantCore
 
-/// A mock implementation of `PointsServiceProtocol` for unit testing.
-///
-/// This mock allows you to:
-/// - Track which methods were called and with what arguments
-/// - Configure return values and errors for each method
-/// - Verify interactions in your tests
 public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable {
-
-    // MARK: - Call Tracking
 
     public private(set) var upsertCallCount = 0
     public private(set) var upsertCalls: [(collection: String, points: [Point], wait: Bool)] = []
@@ -71,8 +63,6 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
     public private(set) var deleteFieldIndexCalls:
         [(collection: String, fieldName: String, wait: Bool)] = []
 
-    // MARK: - Stubbed Results
-
     public var upsertResult: Result<Void, Error> = .success(())
     public var getResult: Result<[RetrievedPoint], Error> = .success([])
     public var deleteByIdsResult: Result<Void, Error> = .success(())
@@ -88,11 +78,7 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
     public var createFieldIndexResult: Result<Void, Error> = .success(())
     public var deleteFieldIndexResult: Result<Void, Error> = .success(())
 
-    // MARK: - Initialization
-
     public init() {}
-
-    // MARK: - Reset
 
     public func reset() {
         upsertCallCount = 0
@@ -122,8 +108,6 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
         deleteFieldIndexCallCount = 0
         deleteFieldIndexCalls = []
     }
-
-    // MARK: - PointsServiceProtocol
 
     public func upsert(
         collection: String,

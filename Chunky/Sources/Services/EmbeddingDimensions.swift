@@ -1,10 +1,5 @@
 import Foundation
 
-/// Cached embedding width and the check against an existing Qdrant collection.
-/// Collection creation must use a probed size. A name-based guess is not used here.
-///
-/// `nonisolated` opts out of the app target's default main-actor isolation so
-/// `OllamaService` can use the cache from its own actor.
 nonisolated enum EmbeddingDimensionError: Error, LocalizedError, Equatable {
     case mismatch(collection: String, existing: Int, probed: Int, model: String)
     case emptyProbe(String)

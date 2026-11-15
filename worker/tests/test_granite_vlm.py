@@ -17,7 +17,6 @@ from chunky_worker.vlm import (
     normalize_vlm_engine,
 )
 
-
 def test_vllm_plan_uses_doctags_preset_and_leaves_flash_attention_off():
     plan = granite_plan("vllm", "http://127.0.0.1:8000", "mps")
     assert plan["preset"] == "granite_docling"
@@ -32,7 +31,6 @@ def test_vllm_plan_uses_doctags_preset_and_leaves_flash_attention_off():
     assert chat_completions_url("http://127.0.0.1:8000/v1") == plan["url"]
     assert chat_completions_url(plan["url"]) == plan["url"]
 
-
 def test_transformers_fallback_is_cuda_without_flash_attention():
     plan = granite_plan("transformers", "http://127.0.0.1:8000", "cuda")
     assert plan["engine"] == "transformers"
@@ -43,7 +41,6 @@ def test_transformers_fallback_is_cuda_without_flash_attention():
     assert cpu["device"] == "cpu"
     assert cpu["cuda_use_flash_attention2"] is False
 
-
 def test_mlx_granite_selects_the_configured_engine_and_other_models_do_not():
     assert granite_engine_for("granite-docling-mlx", "vllm") == "vllm"
     assert granite_engine_for("granite-docling-transformers", "transformers") == "transformers"
@@ -51,7 +48,6 @@ def test_mlx_granite_selects_the_configured_engine_and_other_models_do_not():
     assert granite_engine_for("standard", "vllm") is None
     with pytest.raises(ValueError, match="vllm"):
         normalize_vlm_engine("mlx")
-
 
 def test_preset_builder_calls_from_preset_and_pins_the_accelerator():
     plan = granite_plan("vllm", "http://127.0.0.1:8000/", "auto")
@@ -93,7 +89,6 @@ def test_preset_builder_calls_from_preset_and_pins_the_accelerator():
     assert seen["accel"] == {"device": "cuda", "cuda_use_flash_attention2": False}
     assert seen["pipeline"]["enable_remote_services"] is True
 
-
 def test_transformers_falls_back_to_the_spec_when_the_preset_api_is_missing():
     plan = granite_plan("transformers", "http://127.0.0.1:8000", "cuda")
     seen: dict = {}
@@ -126,7 +121,6 @@ def test_transformers_falls_back_to_the_spec_when_the_preset_api_is_missing():
     assert seen["pipeline"]["enable_remote_services"] is False
     assert seen["accel"]["cuda_use_flash_attention2"] is False
 
-
 def test_vllm_does_not_hide_a_missing_preset_api():
     plan = granite_plan("vllm", "http://127.0.0.1:8000", "cuda")
 
@@ -152,7 +146,6 @@ def test_vllm_does_not_hide_a_missing_preset_api():
             },
         )
 
-
 def test_non_granite_jobs_do_not_select_the_vllm_preset(tmp_path: Path):
     seen: dict = {}
 
@@ -174,4 +167,3 @@ def test_non_granite_jobs_do_not_select_the_vllm_preset(tmp_path: Path):
     assert seen["chart_engine"] == "vllm"
     assert seen["chart_vllm_url"] == ""
     assert seen["accelerator"] == "cuda"
-

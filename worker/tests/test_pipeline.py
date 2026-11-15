@@ -10,7 +10,6 @@ from chunky_worker.exceptions import JobCanceled
 from chunky_worker.models import JobSettings
 from chunky_worker.pipeline import DoclingPipeline
 
-
 def test_docling_pipeline_calls_convert_document(tmp_path, monkeypatch):
     scripts = tmp_path / "scripts"
     scripts.mkdir()
@@ -43,7 +42,6 @@ def test_docling_pipeline_calls_convert_document(tmp_path, monkeypatch):
     assert seen["chunk_max_tokens"] == 128
     assert seen["on_progress"] is not None
     assert progress == [("Converting document...", 10)]
-
 
 def test_docling_pipeline_honors_pre_cancel(tmp_path):
     pipeline = DoclingPipeline(tmp_path)

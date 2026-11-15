@@ -1,9 +1,6 @@
 import Foundation
 import QdrantCore
 
-// MARK: - Domain Types
-
-/// A point to be stored in Qdrant with its embedding vector and metadata
 struct ChunkPoint: Identifiable, Sendable {
     let id: String
     let vector: [Float]
@@ -38,7 +35,6 @@ struct ChunkPoint: Identifiable, Sendable {
     }
 }
 
-/// A point retrieved from Qdrant
 struct QdrantPoint: Identifiable, Sendable {
     let id: String
     let text: String
@@ -92,15 +88,14 @@ struct SearchResult: Identifiable, Sendable {
     }
 }
 
-/// Collection information
 struct CollectionInfo: Sendable {
     let name: String
     let vectorsCount: UInt64
     let pointsCount: UInt64
     let status: CollectionStatus
-    /// Probed or stored dense vector width. Nil when the server did not report one.
+
     let vectorSize: Int?
-    /// Named dense vector. Nil for a single unnamed vector.
+
     let vectorName: String?
 
     init(
@@ -126,8 +121,6 @@ struct CollectionInfo: Sendable {
         case unknown
     }
 }
-
-// MARK: - Errors
 
 enum QdrantError: LocalizedError, Sendable {
     case connectionFailed(String)
@@ -164,8 +157,6 @@ enum QdrantError: LocalizedError, Sendable {
     }
 }
 
-// MARK: - Progress
-
 struct UploadProgress: Sendable {
     let completed: Int
     let total: Int
@@ -181,8 +172,6 @@ struct UploadProgress: Sendable {
         Int(fraction * 100)
     }
 }
-
-// MARK: - QdrantCore Conversions
 
 extension ChunkPoint {
     func toQdrantPoint() -> Point {

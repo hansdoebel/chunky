@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for vector operations.
 internal final class VectorService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class VectorService: Sendable {
         self.base = base
     }
 
-    /// Updates vectors for specific points.
     func updateVectors(
         collection: String,
         points: [(id: PointID, vector: VectorData)],
@@ -47,7 +45,6 @@ internal final class VectorService: Sendable {
         }
     }
 
-    /// Deletes specific named vectors from points.
     func deleteVectors(
         collection: String,
         ids: [PointID],

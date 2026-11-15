@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Service for managing Qdrant snapshots.
 public final class SnapshotsService: Sendable {
     private let grpcClient: GRPCClient<HTTP2ClientTransport.Posix>
     private let apiKey: String?
@@ -22,9 +21,6 @@ public final class SnapshotsService: Sendable {
         return metadata
     }
 
-    /// Creates a snapshot of a collection.
-    /// - Parameter collection: The collection name.
-    /// - Returns: Description of the created snapshot.
     public func create(collection: String) async throws -> SnapshotDescription {
         let client = Qdrant_Snapshots.Client(wrapping: grpcClient)
 
@@ -41,9 +37,6 @@ public final class SnapshotsService: Sendable {
         }
     }
 
-    /// Lists all snapshots of a collection.
-    /// - Parameter collection: The collection name.
-    /// - Returns: An array of snapshot descriptions.
     public func list(collection: String) async throws -> [SnapshotDescription] {
         let client = Qdrant_Snapshots.Client(wrapping: grpcClient)
 
@@ -60,10 +53,6 @@ public final class SnapshotsService: Sendable {
         }
     }
 
-    /// Deletes a snapshot of a collection.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - snapshot: The snapshot name to delete.
     public func delete(collection: String, snapshot: String) async throws {
         let client = Qdrant_Snapshots.Client(wrapping: grpcClient)
 
@@ -80,8 +69,6 @@ public final class SnapshotsService: Sendable {
         }
     }
 
-    /// Creates a full snapshot of all collections.
-    /// - Returns: Description of the created snapshot.
     public func createFull() async throws -> SnapshotDescription {
         let client = Qdrant_Snapshots.Client(wrapping: grpcClient)
 
@@ -97,8 +84,6 @@ public final class SnapshotsService: Sendable {
         }
     }
 
-    /// Lists all full snapshots.
-    /// - Returns: An array of snapshot descriptions.
     public func listFull() async throws -> [SnapshotDescription] {
         let client = Qdrant_Snapshots.Client(wrapping: grpcClient)
 
@@ -113,8 +98,6 @@ public final class SnapshotsService: Sendable {
         }
     }
 
-    /// Deletes a full snapshot.
-    /// - Parameter snapshot: The snapshot name to delete.
     public func deleteFull(snapshot: String) async throws {
         let client = Qdrant_Snapshots.Client(wrapping: grpcClient)
 

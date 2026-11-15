@@ -1,7 +1,6 @@
 import Foundation
 import QdrantCore
 
-// Re-export types from QdrantCore
 public typealias PointID = QdrantCore.PointID
 public typealias VectorData = QdrantCore.VectorData
 public typealias Point = QdrantCore.Point
@@ -112,7 +111,7 @@ extension FieldCondition: Codable {
         } else if let range = range {
             self.init(key: key, range: range)
         } else {
-            // Default to match with empty keyword if nothing else
+
             self.init(key: key, match: .keyword(""))
         }
     }
@@ -144,7 +143,7 @@ extension Match: Codable {
         } else if let except = try? container.decode([Int64].self, forKey: .except) {
             self = .exceptInteger(except)
         } else if let value = try? container.decode(PayloadValue.self, forKey: .value) {
-            // Convert PayloadValue to appropriate Match type
+
             self =
                 switch value {
                 case .string(let s): .keyword(s)
@@ -330,8 +329,7 @@ extension CollectionInfo: Codable {
 }
 
 extension AliasDescription: Codable {
-    // Note: HTTPClient uses .convertFromSnakeCase, so we use default CodingKeys
-    // The decoder automatically converts alias_name -> aliasName
+
     enum CodingKeys: String, CodingKey {
         case aliasName
         case collectionName
@@ -363,7 +361,7 @@ extension SnapshotDescription: Codable {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         let name = try container.decode(String.self, forKey: .name)
         let creationTimeString = try container.decodeIfPresent(String.self, forKey: .creationTime)
-        let creationTime: Date? = nil  // Simplified - would need proper date parsing
+        let creationTime: Date? = nil
         let size = try container.decodeIfPresent(Int64.self, forKey: .size) ?? 0
         let checksum = try container.decodeIfPresent(String.self, forKey: .checksum)
         self.init(name: name, creationTime: creationTime, size: size, checksum: checksum)
@@ -372,7 +370,7 @@ extension SnapshotDescription: Codable {
     public func encode(to encoder: Encoder) throws {
         var container = encoder.container(keyedBy: CodingKeys.self)
         try container.encode(name, forKey: .name)
-        // Skip creationTime for now - would need proper date formatting
+
         try container.encode(size, forKey: .size)
         try container.encodeIfPresent(checksum, forKey: .checksum)
     }
@@ -400,15 +398,12 @@ extension HealthCheckResult: Codable {
     }
 }
 
-/// A query for the universal query API.
 public enum RestQuery: Codable, Sendable {
-    /// Find nearest neighbors to a vector.
+
     case nearest([Float])
 
-    /// Find nearest neighbors to a point ID.
     case nearestId(PointID)
 
-    /// Fusion of prefetch results.
     case fusion(RestFusion)
 
     enum CodingKeys: String, CodingKey {
@@ -451,26 +446,20 @@ public enum RestQuery: Codable, Sendable {
     }
 }
 
-/// Fusion type for combining results.
 public enum RestFusion: String, Codable, Sendable {
     case rrf
 }
 
-/// A prefetch query for multi-stage queries.
 public struct RestPrefetchQuery: Codable, Sendable {
-    /// Nested prefetches.
+
     public let prefetch: [RestPrefetchQuery]?
 
-    /// The query to perform.
     public let query: RestQuery?
 
-    /// Vector name to use.
     public let using: String?
 
-    /// Filter conditions.
     public let filter: Filter?
 
-    /// Maximum results.
     public let limit: Int?
 
     public init(
@@ -488,7 +477,6 @@ public struct RestPrefetchQuery: Codable, Sendable {
     }
 }
 
-/// Vector query for search operations.
 public enum RestVectorQuery: Encodable, Sendable {
     case unnamed([Float])
     case named(String, [Float])
@@ -603,7 +591,6 @@ extension FieldType: Codable {
     }
 }
 
-/// Point with vector update data.
 public struct PointVectorUpdate: Codable, Sendable {
     public let id: PointID
     public let vector: VectorData
@@ -614,7 +601,6 @@ public struct PointVectorUpdate: Codable, Sendable {
     }
 }
 
-/// A single search request in a batch.
 public struct SearchBatchQuery: Codable, Sendable {
     public let vector: [Float]
     public let filter: Filter?
@@ -650,7 +636,6 @@ public struct SearchBatchQuery: Codable, Sendable {
     }
 }
 
-/// A single query request in a batch.
 public struct QueryBatchQuery: Codable, Sendable {
     public let query: RestQuery?
     public let prefetch: [RestPrefetchQuery]?
@@ -685,7 +670,6 @@ public struct QueryBatchQuery: Codable, Sendable {
     }
 }
 
-/// A single recommend request in a batch.
 public struct RecommendBatchQuery: Codable, Sendable {
     public let positive: [PointID]
     public let negative: [PointID]?
@@ -724,7 +708,6 @@ public struct RecommendBatchQuery: Codable, Sendable {
     }
 }
 
-/// Target for discover operation.
 public enum RestDiscoverTarget: Codable, Sendable {
     case id(PointID)
     case vector([Float])
@@ -753,7 +736,6 @@ public enum RestDiscoverTarget: Codable, Sendable {
     }
 }
 
-/// Context pair for discover operation.
 public struct RestContextPair: Codable, Sendable {
     public let positive: RestDiscoverTarget
     public let negative: RestDiscoverTarget
@@ -764,7 +746,6 @@ public struct RestContextPair: Codable, Sendable {
     }
 }
 
-/// A single discover request in a batch.
 public struct DiscoverBatchQuery: Codable, Sendable {
     public let target: RestDiscoverTarget
     public let context: [RestContextPair]?
@@ -799,7 +780,6 @@ public struct DiscoverBatchQuery: Codable, Sendable {
     }
 }
 
-/// Operation for batch updates.
 public enum RestPointsUpdateOperation: Encodable, Sendable {
     case upsert(points: [Point])
     case deletePoints(ids: [PointID])
@@ -875,7 +855,6 @@ public enum RestPointsUpdateOperation: Encodable, Sendable {
     }
 }
 
-/// Result of a grouped search.
 public struct RestSearchGroupsResult: Codable, Sendable {
     public let groups: [RestPointGroup]
 
@@ -884,7 +863,6 @@ public struct RestSearchGroupsResult: Codable, Sendable {
     }
 }
 
-/// A group of points.
 public struct RestPointGroup: Codable, Sendable {
     public let id: RestGroupId
     public let hits: [ScoredPoint]
@@ -895,7 +873,6 @@ public struct RestPointGroup: Codable, Sendable {
     }
 }
 
-/// Group identifier.
 public enum RestGroupId: Codable, Sendable {
     case string(String)
     case integer(Int64)
@@ -924,7 +901,6 @@ public enum RestGroupId: Codable, Sendable {
     }
 }
 
-/// Result of a facet operation.
 public struct RestFacetResult: Codable, Sendable {
     public let hits: [RestFacetHit]
 
@@ -933,7 +909,6 @@ public struct RestFacetResult: Codable, Sendable {
     }
 }
 
-/// A facet hit.
 public struct RestFacetHit: Codable, Sendable {
     public let value: RestFacetValue
     public let count: Int
@@ -944,7 +919,6 @@ public struct RestFacetHit: Codable, Sendable {
     }
 }
 
-/// Facet value.
 public enum RestFacetValue: Codable, Sendable {
     case string(String)
     case integer(Int64)
@@ -973,7 +947,6 @@ public enum RestFacetValue: Codable, Sendable {
     }
 }
 
-/// Result of search matrix pairs operation.
 public struct RestSearchMatrixPairsResult: Codable, Sendable {
     public let pairs: [RestSearchMatrixPair]
 
@@ -982,7 +955,6 @@ public struct RestSearchMatrixPairsResult: Codable, Sendable {
     }
 }
 
-/// A pair in search matrix.
 public struct RestSearchMatrixPair: Codable, Sendable {
     public let a: PointID
     public let b: PointID
@@ -995,7 +967,6 @@ public struct RestSearchMatrixPair: Codable, Sendable {
     }
 }
 
-/// Result of search matrix offsets operation.
 public struct RestSearchMatrixOffsetsResult: Codable, Sendable {
     public let ids: [PointID]
     public let offsetsRow: [Int]
@@ -1010,7 +981,6 @@ public struct RestSearchMatrixOffsetsResult: Codable, Sendable {
     }
 }
 
-/// Result of an update operation.
 public struct UpdateResult: Codable, Sendable {
     public let operationId: UInt64?
     public let status: UpdateStatus
@@ -1026,13 +996,11 @@ public struct UpdateResult: Codable, Sendable {
     }
 }
 
-/// Status of an update operation.
 public enum UpdateStatus: String, Codable, Sendable {
     case acknowledged
     case completed
 }
 
-/// Optimizers configuration diff for collection update.
 public struct RestOptimizersConfigDiff: Codable, Sendable {
     public let indexingThreshold: Int?
     public let memmapThreshold: Int?
@@ -1048,7 +1016,6 @@ public struct RestOptimizersConfigDiff: Codable, Sendable {
     }
 }
 
-/// Collection parameters diff for update.
 public struct RestCollectionParamsDiff: Codable, Sendable {
     public let replicationFactor: Int?
     public let writeConsistencyFactor: Int?
@@ -1064,7 +1031,6 @@ public struct RestCollectionParamsDiff: Codable, Sendable {
     }
 }
 
-/// Shard key for distributed collections.
 public enum RestShardKey: Codable, Sendable {
     case keyword(String)
     case number(Int64)
@@ -1093,7 +1059,6 @@ public enum RestShardKey: Codable, Sendable {
     }
 }
 
-/// Cluster information for a collection.
 public struct RestCollectionClusterInfo: Codable, Sendable {
     public let peerId: Int
     public let shardCount: Int
@@ -1118,7 +1083,6 @@ public struct RestCollectionClusterInfo: Codable, Sendable {
     }
 }
 
-/// Local shard information.
 public struct RestLocalShardInfo: Codable, Sendable {
     public let shardId: Int
     public let pointsCount: Int
@@ -1137,7 +1101,6 @@ public struct RestLocalShardInfo: Codable, Sendable {
     }
 }
 
-/// Remote shard information.
 public struct RestRemoteShardInfo: Codable, Sendable {
     public let shardId: Int
     public let peerId: Int
@@ -1156,7 +1119,6 @@ public struct RestRemoteShardInfo: Codable, Sendable {
     }
 }
 
-/// Shard key information.
 public struct RestShardKeyInfo: Codable, Sendable {
     public let shardKey: RestShardKey?
     public let pointsCount: Int?
@@ -1175,7 +1137,6 @@ public struct RestShardKeyInfo: Codable, Sendable {
     }
 }
 
-/// Operation for updating cluster setup.
 public enum RestClusterOperation: Encodable, Sendable {
     case moveShard(shardId: Int, toPeerId: Int, fromPeerId: Int)
     case replicateShard(shardId: Int, toPeerId: Int, fromPeerId: Int)
@@ -1229,7 +1190,6 @@ public enum RestClusterOperation: Encodable, Sendable {
     }
 }
 
-/// A Qdrant issue.
 public struct QdrantIssue: Codable, Sendable {
     public let code: String?
     public let description: String?

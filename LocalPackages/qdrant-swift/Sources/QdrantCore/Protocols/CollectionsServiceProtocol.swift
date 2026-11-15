@@ -19,10 +19,8 @@ public struct CollectionInfo: Sendable {
 
     public let segmentsCount: UInt64?
 
-    /// Dense vector width, or the `dense` named vector when the collection is hybrid.
     public let vectorSize: UInt64?
 
-    /// Named dense vector, or nil when the collection has one unnamed vector.
     public let vectorName: String?
 
     public init(

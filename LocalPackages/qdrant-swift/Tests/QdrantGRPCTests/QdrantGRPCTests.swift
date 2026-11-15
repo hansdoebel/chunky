@@ -5,8 +5,6 @@ import Testing
 @Suite("QdrantGRPC Tests")
 struct QdrantGRPCTests {
 
-    // MARK: - PointID Tests
-
     @Test("PointID Integer")
     func pointIDInteger() {
         let id: PointID = .integer(42)
@@ -30,8 +28,6 @@ struct QdrantGRPCTests {
         let id: PointID = "test-uuid"
         #expect(id.description == "test-uuid")
     }
-
-    // MARK: - PayloadValue Tests
 
     @Test("PayloadValue String")
     func payloadValueString() {
@@ -71,8 +67,6 @@ struct QdrantGRPCTests {
         #expect(value["num"]?.integerValue == 42)
     }
 
-    // MARK: - Filter Tests
-
     @Test("Filter Creation")
     func filterCreation() {
         let filter = Filter(
@@ -86,8 +80,6 @@ struct QdrantGRPCTests {
         #expect(filter.mustNot.count == 1)
     }
 
-    // MARK: - Range Tests
-
     @Test("Range Creation")
     func rangeCreation() {
         let range = Range.between(10.0, 100.0)
@@ -95,16 +87,12 @@ struct QdrantGRPCTests {
         #expect(range.lte == 100.0)
     }
 
-    // MARK: - GeoPoint Tests
-
     @Test("GeoPoint Creation")
     func geoPointCreation() {
         let point = GeoPoint(lat: 40.7128, lon: -74.0060)
         #expect(point.lat == 40.7128)
         #expect(point.lon == -74.0060)
     }
-
-    // MARK: - Distance Tests
 
     @Test("Distance enum values")
     func distanceEnumValues() {
@@ -114,15 +102,11 @@ struct QdrantGRPCTests {
         #expect(Distance.manhattan == .manhattan)
     }
 
-    // MARK: - VectorConfig Tests
-
     @Test("VectorConfig Creation")
     func vectorConfigCreation() {
         let config = VectorConfig(size: 384, distance: .cosine)
         #expect(config.size == 384)
     }
-
-    // MARK: - QdrantConfiguration Tests
 
     @Test("Configuration Defaults")
     func configurationDefaults() throws {
@@ -150,17 +134,15 @@ struct QdrantGRPCTests {
 
     @Test("Configuration TLS Required For Remote Host")
     func configurationTLSRequired() {
-        // Disabling TLS for remote host should throw
+
         #expect(throws: QdrantError.self) {
             _ = try QdrantConfiguration(host: "cloud.qdrant.io", useTLS: false)
         }
 
-        // Disabling TLS for localhost should be allowed
         #expect(throws: Never.self) {
             _ = try QdrantConfiguration(host: "localhost", useTLS: false)
         }
 
-        // Disabling TLS for 127.0.0.1 should be allowed
         #expect(throws: Never.self) {
             _ = try QdrantConfiguration(host: "127.0.0.1", useTLS: false)
         }

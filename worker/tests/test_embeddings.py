@@ -12,7 +12,6 @@ from chunky_worker.embeddings import (
     tokenizer_for_embedding,
 )
 
-
 def test_ollama_health_and_models(monkeypatch):
     def fake_get(url, timeout=None):
         request = httpx.Request("GET", url)
@@ -29,7 +28,6 @@ def test_ollama_health_and_models(monkeypatch):
     names, err = backend.list_models()
     assert err is None
     assert names == ["qwen3-embedding:latest", "llama3"]
-
 
 def test_ollama_embed_posts_input(monkeypatch):
     captured = {}
@@ -54,7 +52,6 @@ def test_ollama_embed_posts_input(monkeypatch):
     assert captured["json"]["keep_alive"] == -1
     assert captured["json"]["options"]["num_ctx"] == 8192
 
-
 def test_dimension_cache_probes_once_per_model():
     class Counting:
         def __init__(self):
@@ -77,7 +74,6 @@ def test_dimension_cache_probes_once_per_model():
     assert cache.dimension(backend, "qwen3-embedding") == 2
     assert cache.dimension(backend, "wide") == 4
     assert backend.calls == [([PROBE_TEXT], "qwen3-embedding"), ([PROBE_TEXT], "wide")]
-
 
 def test_openai_embeddings_and_health(monkeypatch):
     def fake_get(url, timeout=None):
@@ -108,7 +104,6 @@ def test_openai_embeddings_and_health(monkeypatch):
     assert backend.embed(["chunky"], "Qwen/Qwen3-Embedding-0.6B") == [[0.5, 0.25, 0.0]]
     assert DimensionCache().dimension(backend, "Qwen/Qwen3-Embedding-0.6B") == 3
 
-
 def test_dimension_cache_keeps_endpoints_apart():
     class Counting:
         def __init__(self):
@@ -128,13 +123,11 @@ def test_dimension_cache_keeps_endpoints_apart():
     assert again == 1
     assert backend.calls == 2
 
-
 def test_tokenizer_follows_the_embedding_model():
     assert tokenizer_for_embedding("qwen3-embedding") == "Qwen/Qwen3-Embedding-0.6B"
     assert tokenizer_for_embedding("Qwen/Qwen3-Embedding-0.6B") == "Qwen/Qwen3-Embedding-0.6B"
     assert tokenizer_for_embedding("") == "Qwen/Qwen3-Embedding-0.6B"
     assert "MiniLM" not in tokenizer_for_embedding(None)
-
 
 def test_ollama_health_false_when_down(monkeypatch):
     def fake_get(url, timeout=None):

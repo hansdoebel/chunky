@@ -21,14 +21,12 @@ from tests.conftest import FakeEmbeddings, FakePipeline, auth_headers, wait_for_
 
 API_KEY = "super-secret-cloud-key"
 
-
 def _upload(client, settings):
     return client.post(
         "/v1/jobs",
         files={"file": ("paper.txt", b"hello", "text/plain")},
         data={"settings": json.dumps(settings)},
     )
-
 
 class RecordingIngestor:
     def __init__(self, fail_message: str | None = None, existing_size: int | None = None) -> None:
@@ -46,7 +44,6 @@ class RecordingIngestor:
         if self.fail_message:
             raise RuntimeError(self.fail_message)
         return len(kwargs["points"])
-
 
 def test_payload_matches_mac_field_names():
     settings = JobSettings()
@@ -94,7 +91,6 @@ def test_payload_matches_mac_field_names():
     assert isinstance(payload["page"], int)
     assert isinstance(payload["chunk_index"], str)
 
-
 def test_picture_and_table_payloads_keep_serialized_text():
     settings = JobSettings()
     picture = {
@@ -131,7 +127,6 @@ def test_picture_and_table_payloads_keep_serialized_text():
     assert "picture_description" not in table_payload
     assert "picture_class" not in table_payload
 
-
 def test_disabled_metadata_flags_omit_fields():
     settings = JobSettings(
         metadata_include_page=False,
@@ -156,7 +151,6 @@ def test_disabled_metadata_flags_omit_fields():
     assert payload["text"] == "x"
     assert payload["source"] == "a.txt"
 
-
 def test_return_vectors_includes_chunks_and_vectors(tmp_settings, pipeline, embeddings):
     ingestor = RecordingIngestor()
     app = create_app(
@@ -175,7 +169,6 @@ def test_return_vectors_includes_chunks_and_vectors(tmp_settings, pipeline, embe
     assert result["ingest"]["target"] == "return_vectors"
     assert result["embedding_dim"] == 3
     assert ingestor.calls == []
-
 
 def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, embeddings):
     ingestor = RecordingIngestor()
@@ -224,7 +217,6 @@ def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, 
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
 
-
 def test_dimension_mismatch_fails_before_upsert(tmp_settings, pipeline, embeddings):
     ingestor = RecordingIngestor(existing_size=1024)
     app = create_app(
@@ -251,9 +243,8 @@ def test_dimension_mismatch_fails_before_upsert(tmp_settings, pipeline, embeddin
     assert "size 3" in body["error"]
     assert API_KEY not in body["error"]
     assert ingestor.calls == []
-    # Probe ran; the full chunk batch did not.
-    assert embeddings.embed_calls == [(["chunky"], "qwen3-embedding")]
 
+    assert embeddings.embed_calls == [(["chunky"], "qwen3-embedding")]
 
 def test_cloud_failure_redacts_key(tmp_settings, pipeline, embeddings):
     ingestor = RecordingIngestor(fail_message=f"upstream rejected {API_KEY}")
@@ -280,13 +271,11 @@ def test_cloud_failure_redacts_key(tmp_settings, pipeline, embeddings):
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
 
-
 def test_sparse_vectors_follow_term_frequency():
     rows = sparse_vectors(["alpha beta", "alpha alpha"])
     assert rows[0][0]
     assert rows[1][0]
     assert len(rows[0][0]) == len(rows[0][1])
-
 
 def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
     created: dict = {}
@@ -334,7 +323,6 @@ def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
     assert point.vector == {"dense": [0.1, 0.2]}
     bm25 = next(item for item in created["indexes"] if item["field_name"] == "text")
     assert bm25["field_schema"].scoring.type.value == "bm25"
-
 
 def test_cloud_client_creates_collection_and_batches(monkeypatch):
     created: dict = {}
@@ -389,7 +377,6 @@ def test_cloud_client_creates_collection_and_batches(monkeypatch):
     assert indexed["embedding_text"].value == "text"
     assert API_KEY not in repr(vars(ingestor))
 
-
 def test_existing_collection_dimension_mismatch(monkeypatch):
     class Vectors:
         size = 4
@@ -435,7 +422,6 @@ def test_existing_collection_dimension_mismatch(monkeypatch):
         assert API_KEY not in str(exc)
     else:
         raise AssertionError("expected DimensionMismatch")
-
 
 def test_named_dense_vector_size_is_read(monkeypatch):
     class Named:

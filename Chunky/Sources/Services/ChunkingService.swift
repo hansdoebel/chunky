@@ -1,9 +1,6 @@
 import Foundation
 
-/// Service for chunking document content for embedding
 actor ChunkingService {
-
-    // MARK: - Errors
 
     enum ChunkingError: Error, LocalizedError {
         case fileNotFound(URL)
@@ -21,8 +18,6 @@ actor ChunkingService {
             }
         }
     }
-
-    // MARK: - Types
 
     struct ChunkingOptions: Sendable {
         var maxTokensPerChunk: Int = 512
@@ -213,7 +208,6 @@ struct CleanupService {
 }
 
 extension ChunkingService {
-    // MARK: - Docling JSON Structures
 
     struct DoclingDocument: Codable {
         let name: String?
@@ -346,16 +340,12 @@ extension ChunkingService {
         let height: Double?
     }
 
-    // MARK: - Public Methods
-
-    /// Chunk a docling JSON file
     func chunkDoclingJSON(
         fileURL: URL,
         source: String? = nil,
         options: ChunkingOptions = ChunkingOptions()
     ) async throws -> [DocumentChunk] {
 
-        // Validate file exists
         guard FileManager.default.fileExists(atPath: fileURL.path) else {
             throw ChunkingError.fileNotFound(fileURL)
         }
@@ -367,12 +357,10 @@ extension ChunkingService {
             throw ChunkingError.fileNotFound(fileURL)
         }
 
-        // Validate JSON is not empty
         guard !data.isEmpty else {
             throw ChunkingError.invalidJSON("File is empty")
         }
 
-        // Parse JSON with detailed error handling
         let document: DoclingDocument
         do {
             document = try JSONDecoder().decode(DoclingDocument.self, from: data)
@@ -399,7 +387,6 @@ extension ChunkingService {
 
         let chunks = chunkDocument(document, source: sourceName, options: options)
 
-        // Validate we got some content
         guard !chunks.isEmpty else {
             throw ChunkingError.emptyDocument
         }
@@ -407,14 +394,12 @@ extension ChunkingService {
         return chunks
     }
 
-    /// Chunk a docling document structure
     func chunkDocument(
         _ document: DoclingDocument,
         source: String,
         options: ChunkingOptions = ChunkingOptions()
     ) -> [DocumentChunk] {
 
-        // Build lookup dictionaries for texts and tables by their self_ref
         var textsById: [String: DoclingTextItem] = [:]
         if let texts = document.texts {
             for item in texts {
@@ -505,7 +490,6 @@ extension ChunkingService {
             let label = item.label ?? ""
             let tokenCount = estimateTokenCount(text)
 
-            // Update current page from provenance
             if let prov = item.prov?.first, let pageNo = prov.pageNo {
                 if currentPage != pageNo {
                     flushBuffer()
@@ -525,12 +509,11 @@ extension ChunkingService {
             default: currentContentType = "text"
             }
 
-            // Handle headings (docling uses "section_header", "title", or labels containing "heading")
             let isHeading = label == "section_header" || label.lowercased().contains("heading") || label.lowercased().contains("title")
             if isHeading {
                 if options.preserveHeadings {
                     flushBuffer()
-                    // Determine heading level - use docling's level if available, otherwise infer
+
                     let headingLevel = item.level ?? inferHeadingLevel(text: text, label: label)
                     switch headingLevel {
                     case 1:
@@ -550,8 +533,8 @@ extension ChunkingService {
                             currentHeadings = Array(currentHeadings.suffix(3))
                         }
                     }
-                    // Add heading to formatted buffer with proper markdown syntax
-                    let mdPrefix = String(repeating: "#", count: min(headingLevel + 1, 6)) // H2-H6 (H1 reserved for doc title)
+
+                    let mdPrefix = String(repeating: "#", count: min(headingLevel + 1, 6))
                     formattedBuffer.append("\(mdPrefix) \(text)")
                     buffer.append(text)
                     bufferTokenCount += tokenCount
@@ -559,15 +542,13 @@ extension ChunkingService {
                 return
             }
 
-            // Check if adding this would exceed limit
             if bufferTokenCount + tokenCount > options.maxTokensPerChunk {
                 flushBuffer()
             }
 
-            // Format list items properly
             let isListItemLabel = label == "list_item" || isListItem
             if isListItemLabel {
-                // Clean up the text - docling sometimes includes the bullet/dash
+
                 var cleanText = text
                 if cleanText.hasPrefix("-") || cleanText.hasPrefix("•") {
                     cleanText = String(cleanText.dropFirst()).trimmingCharacters(in: .whitespaces)
@@ -588,7 +569,6 @@ extension ChunkingService {
 
             let tokenCount = estimateTokenCount(tableText)
 
-            // Update page from provenance
             if let prov = table.prov?.first, let pageNo = prov.pageNo {
                 if currentPage != pageNo {
                     flushBuffer()
@@ -613,7 +593,7 @@ extension ChunkingService {
                     processTable(table)
                 }
             } else if let group = groupsById[ref] {
-                // Process group children - check if this is a list
+
                 let isList = group.label == "list"
                 if let children = group.children {
                     for child in children {
@@ -623,10 +603,9 @@ extension ChunkingService {
                     }
                 }
             }
-            // pictures and other refs are skipped
+
         }
 
-        // Process body children in document order if body is available
         if let bodyChildren = document.body?.children, !bodyChildren.isEmpty {
             for child in bodyChildren {
                 if let ref = child.ref {
@@ -634,7 +613,7 @@ extension ChunkingService {
                 }
             }
         } else {
-            // Fallback: process texts then tables (old behavior) if no body
+
             if let texts = document.texts {
                 for item in texts {
                     processTextItem(item)
@@ -649,103 +628,27 @@ extension ChunkingService {
 
         flushBuffer()
 
-        // Filter out chunks that are too small
         return chunks.filter { $0.tokenCount >= options.minChunkSize || $0.text.count >= 50 }
     }
 
-    /// Infer heading level from the section numbering in the text
     private func inferHeadingLevel(text: String, label: String) -> Int {
-        // Check label first for explicit levels
+
         if label.lowercased().contains("title") { return 1 }
 
-        // Infer from section numbering pattern: "1." = level 1, "2.1." = level 2, "2.1.3" = level 3
         let trimmed = text.trimmingCharacters(in: .whitespaces)
-        // Match patterns like "1.", "1.2", "1.2.", "1.2.3", etc. at the start
+
         let numberPattern = /^(\d+)(\.(\d+))?(\.(\d+))?\.?\s/
         if let match = trimmed.firstMatch(of: numberPattern) {
-            if match.5 != nil { return 3 }  // e.g. "1.2.3 ..."
-            if match.3 != nil { return 2 }  // e.g. "2.1. ..."
-            return 1                          // e.g. "1. ..."
+            if match.5 != nil { return 3 }
+            if match.3 != nil { return 2 }
+            return 1
         }
 
-        // Default: treat as level 1
         return 1
     }
 
-    /// Chunk plain text content
-    func chunkText(
-        _ text: String,
-        source: String,
-        options: ChunkingOptions = ChunkingOptions()
-    ) -> [DocumentChunk] {
-
-        let paragraphs = text.components(separatedBy: "\n\n")
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-
-        var chunks: [DocumentChunk] = []
-        var buffer: [String] = []
-        var bufferTokenCount = 0
-        var overlapText: String?
-
-        func flushBuffer() {
-            guard !buffer.isEmpty else { return }
-
-            let text = buffer.joined(separator: "\n\n")
-            let chunk = DocumentChunk(
-                text: text,
-                source: source,
-                tokenCount: bufferTokenCount
-            )
-            chunks.append(chunk)
-
-            if options.overlapTokens > 0 {
-                let overlapChars = options.overlapTokens * 4
-                overlapText = String(text.suffix(overlapChars))
-            }
-
-            buffer = []
-            bufferTokenCount = 0
-
-            if let ot = overlapText, !ot.isEmpty {
-                buffer.append(ot)
-                bufferTokenCount = estimateTokenCount(ot)
-            }
-        }
-
-        for paragraph in paragraphs {
-            let tokenCount = estimateTokenCount(paragraph)
-
-            if bufferTokenCount + tokenCount > options.maxTokensPerChunk && !buffer.isEmpty {
-                flushBuffer()
-            }
-
-            // Handle very long paragraphs
-            if tokenCount > options.maxTokensPerChunk {
-                flushBuffer()
-                let subChunks = splitLongText(paragraph, maxTokens: options.maxTokensPerChunk)
-                for subChunk in subChunks {
-                    chunks.append(DocumentChunk(
-                        text: subChunk,
-                        source: source,
-                        tokenCount: estimateTokenCount(subChunk)
-                    ))
-                }
-            } else {
-                buffer.append(paragraph)
-                bufferTokenCount += tokenCount
-            }
-        }
-
-        flushBuffer()
-
-        return chunks
-    }
-
-    // MARK: - Private Methods
-
     private func estimateTokenCount(_ text: String) -> Int {
-        // Rough estimate: ~4 characters per token for English
+
         return max(1, text.count / 4)
     }
 
@@ -754,11 +657,10 @@ extension ChunkingService {
             return ""
         }
 
-        // Calculate column widths for alignment
         let numCols = grid.map { $0.count }.max() ?? 0
         guard numCols > 0 else { return "" }
 
-        var colWidths = Array(repeating: 3, count: numCols) // minimum width of 3 for "---"
+        var colWidths = Array(repeating: 3, count: numCols)
         for row in grid {
             for (col, cell) in row.enumerated() where col < numCols {
                 let cellText = cell.text ?? ""
@@ -766,7 +668,6 @@ extension ChunkingService {
             }
         }
 
-        // Determine header row: use column_header metadata from first row
         let firstRowIsHeader = grid[0].contains { $0.columnHeader == true }
 
         var lines: [String] = []
@@ -780,76 +681,17 @@ extension ChunkingService {
             }
             lines.append("| " + cells.joined(separator: " | ") + " |")
 
-            // Add separator after header row
             if rowIdx == 0 && firstRowIsHeader {
                 let separator = colWidths.map { String(repeating: "-", count: $0) }
                 lines.append("| " + separator.joined(separator: " | ") + " |")
             }
         }
 
-        // If no header was detected, still add a separator after the first row
-        // to make it a valid markdown table
         if !firstRowIsHeader && lines.count > 1 {
             let separator = colWidths.map { String(repeating: "-", count: $0) }
             lines.insert("| " + separator.joined(separator: " | ") + " |", at: 1)
         }
 
         return lines.joined(separator: "\n")
-    }
-
-    private func splitLongText(_ text: String, maxTokens: Int) -> [String] {
-        let sentences = text.components(separatedBy: CharacterSet(charactersIn: ".!?"))
-            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
-            .filter { !$0.isEmpty }
-            .map { $0 + "." }
-
-        var chunks: [String] = []
-        var buffer: [String] = []
-        var bufferTokenCount = 0
-
-        for sentence in sentences {
-            let tokenCount = estimateTokenCount(sentence)
-
-            if bufferTokenCount + tokenCount > maxTokens && !buffer.isEmpty {
-                chunks.append(buffer.joined(separator: " "))
-                buffer = []
-                bufferTokenCount = 0
-            }
-
-            buffer.append(sentence)
-            bufferTokenCount += tokenCount
-        }
-
-        if !buffer.isEmpty {
-            chunks.append(buffer.joined(separator: " "))
-        }
-
-        return chunks
-    }
-}
-
-// MARK: - Convenience
-
-extension ChunkingService.DocumentChunk {
-
-    /// Convert to ChunkPoint (without embeddings)
-    func toChunkPoint() -> ChunkPoint {
-        ChunkPoint(
-            id: id,
-            vector: [],  // Embeddings will be added later
-            text: text,
-            source: source,
-            page: page,
-            headings: headings,
-            metadata: metadata
-        )
-    }
-}
-
-extension Array where Element == ChunkingService.DocumentChunk {
-
-    /// Convert all chunks to ChunkPoints (without embeddings)
-    func toChunkPoints() -> [ChunkPoint] {
-        map { $0.toChunkPoint() }
     }
 }

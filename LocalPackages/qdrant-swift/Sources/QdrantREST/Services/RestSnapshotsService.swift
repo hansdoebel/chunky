@@ -1,7 +1,6 @@
 import Foundation
 import QdrantCore
 
-/// Service for managing Qdrant snapshots via REST API.
 public final class RestSnapshotsService: Sendable {
     private let client: HTTPClient
 
@@ -9,9 +8,6 @@ public final class RestSnapshotsService: Sendable {
         self.client = client
     }
 
-    /// Lists snapshots for a collection.
-    /// - Parameter collection: The collection name.
-    /// - Returns: An array of snapshot descriptions.
     public func list(collection: String) async throws -> [SnapshotDescription] {
         let response: SnapshotListResponse = try await client.get(
             path: "/collections/\(collection)/snapshots"
@@ -19,11 +15,6 @@ public final class RestSnapshotsService: Sendable {
         return response.result ?? []
     }
 
-    /// Creates a new snapshot for a collection.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - wait: Whether to wait for the operation to complete.
-    /// - Returns: Information about the created snapshot.
     public func create(
         collection: String,
         wait: Bool = true
@@ -40,11 +31,6 @@ public final class RestSnapshotsService: Sendable {
         return result
     }
 
-    /// Deletes a snapshot for a collection.
-    /// - Parameters:
-    ///   - collection: The collection name.
-    ///   - snapshot: The name of the snapshot to delete.
-    ///   - wait: Whether to wait for the operation to complete.
     public func delete(
         collection: String,
         snapshot: String,
@@ -57,16 +43,11 @@ public final class RestSnapshotsService: Sendable {
         )
     }
 
-    /// Lists full storage snapshots.
-    /// - Returns: An array of snapshot descriptions.
     public func listFull() async throws -> [SnapshotDescription] {
         let response: SnapshotListResponse = try await client.get(path: "/snapshots")
         return response.result ?? []
     }
 
-    /// Creates a full storage snapshot.
-    /// - Parameter wait: Whether to wait for the operation to complete.
-    /// - Returns: Information about the created snapshot.
     public func createFull(wait: Bool = true) async throws -> SnapshotDescription {
         let queryItems = [URLQueryItem(name: "wait", value: wait ? "true" : "false")]
         let response: SnapshotResponse = try await client.post(
@@ -80,10 +61,6 @@ public final class RestSnapshotsService: Sendable {
         return result
     }
 
-    /// Deletes a full storage snapshot.
-    /// - Parameters:
-    ///   - snapshot: The name of the snapshot to delete.
-    ///   - wait: Whether to wait for the operation to complete.
     public func deleteFull(
         snapshot: String,
         wait: Bool = true

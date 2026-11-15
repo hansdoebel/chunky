@@ -14,7 +14,7 @@ public enum QdrantError: Error, Sendable {
     case permissionDenied(String)
     case internalError(String)
     case unknown(String)
-    /// TLS is required for connections to remote (non-localhost) hosts
+
     case tlsRequiredForRemoteHost(String)
 
     public static func from(_ error: Error) -> QdrantError {

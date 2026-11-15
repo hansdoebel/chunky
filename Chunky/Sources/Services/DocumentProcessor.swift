@@ -3,8 +3,6 @@ import Combine
 import CryptoKit
 import QdrantCore
 
-// MARK: - DocumentProcessor
-
 class DocumentProcessor: ObservableObject {
     @Published var isProcessing: Bool = false
 
@@ -38,8 +36,7 @@ class DocumentProcessor: ObservableObject {
         if let service = ollamaService, ollamaServiceURL == baseURL {
             return service
         }
-        // Drop the previous client. A call that already holds it can finish;
-        // later work uses the new URL instead of the stale host.
+
         let service = try OllamaService(baseURL: baseURL)
         ollamaService = service
         ollamaServiceURL = baseURL
@@ -72,11 +69,11 @@ class DocumentProcessor: ObservableObject {
             doclingOptions.ocrLanguage = settings.ocrLanguage
             doclingOptions.doTableExtraction = settings.doTableExtraction
             doclingOptions.tableMode = settings.tableMode == "accurate" ? .accurate : .fast
-            // Map accelerator setting - default to CPU to avoid Metal/GPU crashes
+
             doclingOptions.accelerator = DoclingService.Accelerator(rawValue: settings.doclingAccelerator) ?? .cpu
             doclingOptions.vlmModel = settings.doclingModel
             doclingOptions.ollamaURL = settings.ollamaURL
-            // Enrichment options
+
             doclingOptions.imageExportMode = DoclingService.ImageExportMode(rawValue: settings.imageExportMode) ?? .embedded
             doclingOptions.doFormulaEnrichment = settings.doFormulaEnrichment
             doclingOptions.doCodeEnrichment = settings.doCodeEnrichment
@@ -178,10 +175,9 @@ class DocumentProcessor: ObservableObject {
             try Task.checkCancellation()
 
             if mode == .chunkOnly {
-                // Export chunks to the user's selected export folder
+
                 let format = ExportFormat(rawValue: settings.exportFormat) ?? .json
 
-                // Skip export if format is none
                 if format == .none {
                     try? FileManager.default.removeItem(at: tempDir)
                     finishChunkOnly(job: job, settings: settings, started: jobStart, message: "Chunked \(chunks.count) chunks (no export)")
@@ -194,21 +190,19 @@ class DocumentProcessor: ObservableObject {
                 if !settings.exportFolder.isEmpty {
                     exportDir = URL(fileURLWithPath: settings.exportFolder)
                 } else {
-                    // Fallback to Desktop if no export folder set
+
                     exportDir = FileManager.default.urls(for: .desktopDirectory, in: .userDomainMask).first ?? tempDir
                 }
 
-                // Ensure export directory exists
                 try FileManager.default.createDirectory(at: exportDir, withIntermediateDirectories: true)
 
-                // Export in the selected format, respecting metadata settings
                 let fileExtension: String
                 let exportData: Data
                 let timestamp = ISO8601DateFormatter().string(from: Date())
 
                 switch format {
                 case .none:
-                    // Already handled above, but needed for exhaustive switch
+
                     fatalError("Unreachable")
 
                 case .docling:
@@ -354,14 +348,12 @@ class DocumentProcessor: ObservableObject {
                 let exportURL = exportDir.appendingPathComponent("\(job.fileName)_chunks.\(fileExtension)")
                 try exportData.write(to: exportURL)
 
-                // Cleanup temp directory
                 try? FileManager.default.removeItem(at: tempDir)
 
                 finishChunkOnly(job: job, settings: settings, started: jobStart, message: "Exported \(chunks.count) chunks to \(exportDir.lastPathComponent)")
                 return
             }
 
-            // Step 3+4: Embed and upload
             job.status = .embedding
             job.statusMessage = "Generating embeddings..."
 
@@ -905,7 +897,6 @@ class DocumentProcessor: ObservableObject {
         job.statusMessage = "\(points.count) chunks written to local Qdrant"
     }
 
-    /// Probe the embedding model once and refuse a collection whose width differs.
     @MainActor
     private func probedVectorSize(settings: AppSettings, ollama: OllamaService) async throws -> Int {
         let probed = try await ollama.probeDimension(model: settings.embeddingModel)
@@ -924,7 +915,6 @@ class DocumentProcessor: ObservableObject {
         return probed
     }
 
-    /// Upload embedded chunks to Qdrant
     @MainActor
     func sparseVectors(for chunks: [ChunkingService.DocumentChunk], hybrid: Bool) -> [SparseVector?] {
         if hybrid {
@@ -1000,8 +990,6 @@ class DocumentProcessor: ObservableObject {
         )
     }
 }
-
-// MARK: - ChunkExport
 
 struct ChunkExport: Codable {
     let id: String

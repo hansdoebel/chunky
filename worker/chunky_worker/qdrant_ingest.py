@@ -17,24 +17,20 @@ from typing import Any, Callable, Protocol
 
 from chunky_worker.models import IngestTarget, JobMode, JobSettings
 
-
 class IngestError(Exception):
     def __init__(self, message: str, error_type: str = "ingest_error") -> None:
         super().__init__(message)
         self.error_type = error_type
 
-
 class DimensionMismatch(IngestError):
     def __init__(self, message: str) -> None:
         super().__init__(message, error_type="dimension_mismatch")
-
 
 @dataclass
 class PreparedPoint:
     id: str
     vector: list[float]
     payload: dict[str, Any]
-
 
 class QdrantIngestor(Protocol):
     def collection_vector_size(self, *, url: str, api_key: str, collection: str) -> int | None:
@@ -57,12 +53,10 @@ class QdrantIngestor(Protocol):
     ) -> int:
         """Create the collection when missing and upsert. Returns the point count."""
 
-
 def redact(text: str, secret: str | None) -> str:
     if not secret or secret not in text:
         return text
     return text.replace(secret, "[redacted]")
-
 
 def normalize_distance(value: str) -> str:
     key = value.strip().lower()
@@ -76,7 +70,6 @@ def normalize_distance(value: str) -> str:
     if key not in aliases:
         raise IngestError(f"Unsupported Qdrant distance: {value}")
     return aliases[key]
-
 
 def sparse_vectors(texts: list[str]) -> list[tuple[list[int], list[float]]]:
     tokenized = [_tokenize(text) for text in texts]
@@ -104,10 +97,8 @@ def sparse_vectors(texts: list[str]) -> list[tuple[list[int], list[float]]]:
         rows.append(([index for index, _ in pairs], [score for _, score in pairs]))
     return rows
 
-
 def _tokenize(text: str) -> list[str]:
     return re.findall(r"[0-9A-Za-z_]{2,}", text.lower())
-
 
 def _quantization_config(name: str, *, on_disk: bool):
     key = (name or "none").strip().lower()
@@ -131,12 +122,10 @@ def _quantization_config(name: str, *, on_disk: bool):
         return BinaryQuantization(binary=BinaryQuantizationConfig(always_ram=always_ram))
     raise IngestError(f"Unsupported Qdrant quantization: {name}")
 
-
 def content_hash(text: str, model: str) -> str:
     """Same SHA-256 as ``DocumentProcessor.contentHash`` (text + '|' + model)."""
     digest = hashlib.sha256(f"{text}|{model}".encode("utf-8")).hexdigest()
     return digest
-
 
 def build_points(
     chunks: list[dict[str, Any]],
@@ -177,7 +166,6 @@ def build_points(
         points.append(PreparedPoint(id=point_id, vector=list(vector), payload=payload))
     return points
 
-
 KEYWORD_PAYLOAD_INDEXES = (
     "source",
     "doc_title",
@@ -193,7 +181,6 @@ TEXT_PAYLOAD_INDEXES = (
     "embedding_text",
 )
 
-
 def stored_chunk_text(chunk: dict[str, Any]) -> str:
     """Payload text matches the string that was embedded."""
     serialized = chunk.get("embedding_text")
@@ -201,9 +188,7 @@ def stored_chunk_text(chunk: dict[str, Any]) -> str:
         return serialized
     return str(chunk.get("text") or "")
 
-
 BM25_TEXT_FIELD = "text"
-
 
 def ensure_bm25_text_index(client, collection: str, field_name: str = BM25_TEXT_FIELD) -> None:
     from qdrant_client.models import TextIndexParams, TextIndexType, TextScoringParams, TextScoringType
@@ -223,7 +208,6 @@ def ensure_bm25_text_index(client, collection: str, field_name: str = BM25_TEXT_
             return
         raise
 
-
 def ensure_payload_indexes(client, collection: str) -> None:
     from qdrant_client.models import PayloadSchemaType
 
@@ -241,7 +225,6 @@ def ensure_payload_indexes(client, collection: str) -> None:
             if "already exists" in message or "already_exists" in message:
                 continue
             raise
-
 
 def _payload(
     chunk: dict[str, Any],
@@ -316,7 +299,6 @@ def _payload(
         payload["content_hash"] = content_hash(str(embed_text), embedding_model)
     return payload
 
-
 def dense_vector_name(info: Any) -> str | None:
     config = getattr(info, "config", None)
     params = getattr(config, "params", None)
@@ -330,7 +312,6 @@ def dense_vector_name(info: Any) -> str | None:
     if len(vectors) == 1:
         return next(iter(vectors))
     return None
-
 
 def _collection_vector_size(info: Any) -> int | None:
     config = getattr(info, "config", None)
@@ -353,7 +334,6 @@ def _collection_vector_size(info: Any) -> int | None:
         if isinstance(chosen, dict) and "size" in chosen:
             return int(chosen["size"])
     return None
-
 
 class QdrantCloudIngestor:
     """Upserts with ``qdrant_client``. The API key is a function argument only."""
@@ -479,7 +459,6 @@ class QdrantCloudIngestor:
             close = getattr(client, "close", None)
             if callable(close):
                 close()
-
 
 def needs_embeddings(settings: JobSettings) -> bool:
     if settings.ingest_target in {IngestTarget.QDRANT_CLOUD, IngestTarget.RETURN_VECTORS}:

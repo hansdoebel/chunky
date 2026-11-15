@@ -11,11 +11,9 @@ sys.path.insert(0, str(SCRIPTS))
 
 from chunk_fields import record_from_chunk, visual_fields  # noqa: E402
 
-
 class Tokenizer:
     def count_tokens(self, text: str) -> int:
         return len(text.split())
-
 
 class Chunker:
     tokenizer = Tokenizer()
@@ -23,14 +21,12 @@ class Chunker:
     def serialize(self, chunk) -> str:
         return chunk.serialized
 
-
 def _chunk(text, serialized, items, headings=None):
     return SimpleNamespace(
         text=text,
         serialized=serialized,
         meta=SimpleNamespace(doc_items=items, headings=headings or []),
     )
-
 
 def test_plain_text_has_no_visual_fields():
     item = SimpleNamespace(label="text", prov=[SimpleNamespace(page_no=2)], annotations=[])
@@ -42,7 +38,6 @@ def test_plain_text_has_no_visual_fields():
     assert record["headings"] == ["Intro"]
     assert "picture_description" not in record
     assert "table_markdown" not in record
-
 
 def test_picture_keeps_description_and_class():
     annotation = SimpleNamespace(
@@ -64,7 +59,6 @@ def test_picture_keeps_description_and_class():
     assert record["picture_description"] == "A bar chart of revenue."
     assert record["picture_class"] == "bar_chart"
     assert "table_markdown" not in record
-
 
 def test_table_markdown_comes_from_the_grid_or_exporter():
     grid = [[{"text": "Year"}, {"text": "Revenue"}], [{"text": "2024"}, {"text": "10"}]]

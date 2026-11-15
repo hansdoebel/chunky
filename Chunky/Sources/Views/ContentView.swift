@@ -548,7 +548,7 @@ struct BottomBarView: View {
     var body: some View {
         HStack(spacing: 12) {
             if appState.isProcessing {
-                // Processing status
+
                 HStack(spacing: 12) {
                     ProgressView()
                         .controlSize(.small)
@@ -579,12 +579,11 @@ struct BottomBarView: View {
                 .tint(AppTheme.statusRed)
                 .disabled(appState.isCancellationRequested)
             } else {
-                // Breadcrumbs on the left
+
                 statusBreadcrumbs
 
                 Spacer()
 
-                // Start button on the right
                 Button {
                     startProcessing()
                 } label: {

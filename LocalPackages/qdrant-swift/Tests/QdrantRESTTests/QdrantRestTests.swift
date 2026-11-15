@@ -206,7 +206,7 @@ struct QdrantRestTests {
 
     @Test("Distance enum encoding")
     func distanceEnumEncoding() throws {
-        // Test that Distance encodes to expected strings
+
         let encoder = JSONEncoder()
 
         let cosineData = try encoder.encode(Distance.cosine)
@@ -230,22 +230,19 @@ struct QdrantRestTests {
 
     @Test("REST Client TLS Required For Remote Host")
     func restClientTLSRequired() {
-        // Disabling TLS for remote host should throw
+
         #expect(throws: HTTPError.self) {
             _ = try QdrantRESTClient(host: "cloud.qdrant.io", useTLS: false)
         }
 
-        // Disabling TLS for localhost should be allowed
         #expect(throws: Never.self) {
             _ = try QdrantRESTClient(host: "localhost", useTLS: false)
         }
 
-        // Disabling TLS for 127.0.0.1 should be allowed
         #expect(throws: Never.self) {
             _ = try QdrantRESTClient(host: "127.0.0.1", useTLS: false)
         }
 
-        // Auto TLS for remote host should work
         #expect(throws: Never.self) {
             _ = try QdrantRESTClient(host: "cloud.qdrant.io")
         }

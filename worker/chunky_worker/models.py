@@ -7,11 +7,9 @@ from typing import Any
 
 from pydantic import BaseModel, Field
 
-
 class JobMode(str, Enum):
     CHUNK_ONLY = "chunk_only"
     CHUNK_AND_EMBED = "chunk_and_embed"
-
 
 class IngestTarget(str, Enum):
     """Where embeddings go after the worker finishes.
@@ -26,7 +24,6 @@ class IngestTarget(str, Enum):
     QDRANT_CLOUD = "qdrant_cloud"
     RETURN_VECTORS = "return_vectors"
 
-
 class JobStatus(str, Enum):
     QUEUED = "queued"
     RUNNING = "running"
@@ -34,14 +31,13 @@ class JobStatus(str, Enum):
     FAILED = "failed"
     CANCELED = "canceled"
 
-
 class JobSettings(BaseModel):
     """Subset of the docling_daemon convert-command schema plus worker mode."""
 
     mode: JobMode = JobMode.CHUNK_ONLY
     format: str = "json"
     vlm_model: str | None = None
-    # ROCm exposes the GPU as torch.cuda. MPS is Mac-only.
+
     accelerator: str = "cuda"
     enable_ocr: bool = False
     ocr_language: str | None = None
@@ -73,7 +69,7 @@ class JobSettings(BaseModel):
     embedding_url: str = ""
     ingest_target: IngestTarget = IngestTarget.NONE
     qdrant_url: str | None = None
-    # Kept in memory for the duration of the job only. Never logged or returned.
+
     qdrant_api_key: str | None = Field(default=None, repr=False)
     qdrant_collection: str = "documents"
     qdrant_distance: str = "cosine"
@@ -81,7 +77,7 @@ class JobSettings(BaseModel):
     qdrant_quantization: str = "none"
     qdrant_on_disk: bool = False
     qdrant_batch_size: int = 250
-    # Payload toggles match AppSettings metadata flags (all on by default).
+
     metadata_include_page: bool = True
     metadata_include_headings: bool = True
     metadata_include_timestamp: bool = True
@@ -100,7 +96,6 @@ class JobSettings(BaseModel):
     def public_dict(self) -> dict[str, Any]:
         return self.model_dump(mode="json", exclude={"qdrant_api_key"})
 
-
 class ProgressEvent(BaseModel):
     type: str = "progress"
     message: str | None = None
@@ -110,14 +105,12 @@ class ProgressEvent(BaseModel):
     def as_dict(self) -> dict[str, Any]:
         return self.model_dump(exclude_none=True)
 
-
 class IngestReceipt(BaseModel):
     target: IngestTarget
     collection: str | None = None
     upserted: int = 0
     vector_size: int | None = None
     distance: str | None = None
-
 
 class JobResult(BaseModel):
     mode: JobMode
@@ -138,7 +131,6 @@ class JobResult(BaseModel):
     embedding_dim: int | None = None
     ingest: IngestReceipt | None = None
     metrics: dict[str, Any] | None = None
-
 
 class Job(BaseModel):
     id: str

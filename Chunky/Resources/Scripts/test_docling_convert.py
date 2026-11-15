@@ -12,7 +12,6 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import docling_convert
 
-
 class TestSetupCpuMode(unittest.TestCase):
     """Tests for _setup_cpu_mode env var configuration."""
 
@@ -86,7 +85,6 @@ class TestSetupCpuMode(unittest.TestCase):
         ):
             docling_convert._setup_cpu_mode()
         self.assertNotIn("DOCLING_DEVICE", os.environ)
-
 
 class TestWriteOutput(unittest.TestCase):
     """Tests for _write_output atomic file writing."""
@@ -180,7 +178,7 @@ class TestWriteOutput(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             docling_convert._write_output(doc, "json", self.output_file, "embedded")
         self.assertFalse(self.output_file.exists())
-        # Also no .tmp files left
+
         tmp_files = list(Path(self.tmpdir).glob("*.tmp"))
         self.assertEqual(tmp_files, [])
 
@@ -192,7 +190,6 @@ class TestWriteOutput(unittest.TestCase):
         with self.assertRaises(RuntimeError):
             docling_convert._write_output(doc, "json", self.output_file, "embedded")
         self.assertEqual(self.output_file.read_text(), "original content")
-
 
 class TestConvertDocumentErrors(unittest.TestCase):
     """Tests for convert_document error handling (no docling needed)."""
@@ -211,14 +208,13 @@ class TestConvertDocumentErrors(unittest.TestCase):
 
     @patch.dict(sys.modules, {"docling": None, "docling.document_converter": None})
     def test_missing_docling_import(self):
-        # Force ImportError by patching the module away
+
         result = docling_convert.convert_document(
-            input_path=__file__,  # any existing file
+            input_path=__file__,
         )
         self.assertFalse(result["success"])
         self.assertEqual(result.get("error_type"), "import_error")
         self.assertIn("docling", result.get("error", "").lower())
-
 
 class TestMainArgParsing(unittest.TestCase):
     """Tests for CLI argument parsing."""
@@ -226,7 +222,7 @@ class TestMainArgParsing(unittest.TestCase):
     def test_minimal_args(self):
         with patch.object(sys, "argv", ["docling_convert.py", "input.pdf"]):
             parser = docling_convert.main.__code__
-            # Just verify argparse doesn't choke — parse directly
+
             import argparse
 
             parser = argparse.ArgumentParser()
@@ -260,7 +256,6 @@ class TestMainArgParsing(unittest.TestCase):
             args = parser.parse_args(["input.pdf", "--format", fmt])
             self.assertEqual(args.format, fmt)
 
-
 class TestLayoutModelArg(unittest.TestCase):
 
     def test_all_layout_models_accepted(self):
@@ -283,7 +278,6 @@ class TestLayoutModelArg(unittest.TestCase):
         args = parser.parse_args(["input.pdf"])
         self.assertEqual(args.layout_model, "default")
 
-
 class TestExtractSchemaArg(unittest.TestCase):
 
     def test_extract_schema_accepted(self):
@@ -303,7 +297,6 @@ class TestExtractSchemaArg(unittest.TestCase):
         parser.add_argument("--extract-schema", default=None)
         args = parser.parse_args(["input.pdf"])
         self.assertIsNone(args.extract_schema)
-
 
 class TestInputFormatArg(unittest.TestCase):
 
@@ -329,7 +322,6 @@ class TestInputFormatArg(unittest.TestCase):
         parser.add_argument("--input-format", default=None)
         args = parser.parse_args(["input.pdf"])
         self.assertIsNone(args.input_format)
-
 
 class TestConversionStageMs(unittest.TestCase):
     def test_inner_stages_share_the_convert_window(self):
@@ -360,7 +352,6 @@ class TestConversionStageMs(unittest.TestCase):
             chunk=False,
         )
         self.assertEqual(stages, {"convert_layout": 10})
-
 
 if __name__ == "__main__":
     unittest.main()

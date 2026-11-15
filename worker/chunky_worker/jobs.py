@@ -37,7 +37,6 @@ log = logging.getLogger(__name__)
 
 TERMINAL = {JobStatus.SUCCEEDED, JobStatus.FAILED, JobStatus.CANCELED}
 
-
 class JobStore:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -124,7 +123,6 @@ class JobStore:
             return
         changed.wait(timeout=timeout)
         changed.clear()
-
 
 class JobRunner:
     def __init__(
@@ -230,7 +228,7 @@ class JobRunner:
             on_disk=job.settings.qdrant_on_disk,
             on_progress=on_batch,
         )
-        # Cloud path stores the vectors in Qdrant. Do not echo them back.
+
         result.embeddings = None
         result.ingest = IngestReceipt(
             target=IngestTarget.QDRANT_CLOUD,
@@ -402,7 +400,7 @@ class JobRunner:
                 job_id,
                 {"type": "error", "message": message, "status": "failed"},
             )
-        except Exception as exc:  # noqa: BLE001 — surface any pipeline failure on the job
+        except Exception as exc:  # noqa: BLE001
             message = redact(str(exc), secret)
             if secret:
                 log.error("Job %s failed: %s", job_id, message)

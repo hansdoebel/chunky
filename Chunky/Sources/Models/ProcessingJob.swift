@@ -1,8 +1,6 @@
 import Combine
 import SwiftUI
 
-// MARK: - ProcessingJob
-
 class ProcessingJob: ObservableObject, Identifiable {
     let id = UUID()
     @Published var fileName: String
@@ -59,15 +57,13 @@ class ProcessingJob: ObservableObject, Identifiable {
         case "md", "markdown":
             return .markdown
         case "json":
-            // Could be chunked or embedded JSON - default to chunked
+
             return .chunkedJSON
         default:
-            // PDF, DOCX, PPTX, XLSX, HTML, images, etc. - process with Docling
+
             return .pdf
         }
     }
 }
-
-// MARK: - OllamaModel
 
 typealias OllamaModel = OllamaService.ModelInfo

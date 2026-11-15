@@ -16,7 +16,6 @@ PICTURE_ENRICHMENT_FLAGS = (
     "do_chart_extraction",
 )
 
-
 def enrichment_values(
     *,
     generate_images: bool = False,
@@ -39,13 +38,11 @@ def enrichment_values(
         flags["images_scale"] = 2.0
     return flags
 
-
 def _accepts(options, key: str) -> bool:
     fields = getattr(options, "model_fields", None)
     if isinstance(fields, dict):
         return key in fields
     return hasattr(options, key)
-
 
 def apply_enrichment(options, **flags):
     """Copy enrichment flags onto a pipeline options object.

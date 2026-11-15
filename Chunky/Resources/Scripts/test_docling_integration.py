@@ -14,7 +14,6 @@ ASSETS = Path(__file__).resolve().parent.parent.parent.parent / "assets"
 SAMPLE_PDF = ASSETS / "sample.pdf"
 PYTHON = os.path.expanduser("~/.chunky-venv/bin/python3")
 
-
 def _has_docling():
     try:
         result = subprocess.run(
@@ -25,7 +24,6 @@ def _has_docling():
         return result.returncode == 0
     except Exception:
         return False
-
 
 @unittest.skipUnless(
     SAMPLE_PDF.exists(), f"sample.pdf not found at {SAMPLE_PDF}"
@@ -123,7 +121,6 @@ class TestDoclingConvertIntegration(unittest.TestCase):
         data = json.loads(result.stdout)
         self.assertFalse(data["success"])
         self.assertEqual(data["error_type"], "file_not_found")
-
 
 if __name__ == "__main__":
     unittest.main()

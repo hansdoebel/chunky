@@ -3,7 +3,6 @@ import Foundation
 import QdrantCore
 import QdrantGRPC
 
-/// Business logic layer for Qdrant operations
 @MainActor
 class QdrantService: ObservableObject {
     @Published private(set) var isConnected: Bool = false
@@ -14,10 +13,8 @@ class QdrantService: ObservableObject {
     private var pendingUrl: String?
     private var pendingApiKey: String?
 
-    // MARK: - Connection Management
-
     func configure(url: String, apiKey: String?) async throws {
-        // Store for later connection
+
         self.pendingUrl = url
         self.pendingApiKey = apiKey
     }
@@ -27,7 +24,6 @@ class QdrantService: ObservableObject {
             throw QdrantServiceError.notConfigured
         }
 
-        // Parse URL to extract host and port
         guard let urlComponents = URLComponents(string: url),
             let host = urlComponents.host, !host.isEmpty
         else {
@@ -38,7 +34,7 @@ class QdrantService: ObservableObject {
         let port = urlComponents.port ?? 6334
 
         do {
-            // Close existing client if any
+
             client?.close()
 
             let config = try QdrantConfiguration(
@@ -50,7 +46,6 @@ class QdrantService: ObservableObject {
             )
             let newClient = try await QdrantGRPCClient(configuration: config)
 
-            // Test connection with health check
             let health = try await newClient.healthCheck()
 
             self.client = newClient
@@ -80,8 +75,6 @@ class QdrantService: ObservableObject {
             return false
         }
     }
-
-    // MARK: - Collections
 
     func listCollections() async throws -> [String] {
         guard let client = client else {
@@ -228,9 +221,6 @@ class QdrantService: ObservableObject {
         try await client.collections.delete(name: name)
     }
 
-    // MARK: - Points Operations
-
-    /// Upsert points in batches with progress reporting
     func upsertPoints(
         collectionName: String,
         points: [ChunkPoint],
@@ -252,7 +242,6 @@ class QdrantService: ObservableObject {
             let batchEnd = min(batchStart + batchSize, points.count)
             let batch = Array(points[batchStart..<batchEnd])
 
-            // Convert ChunkPoints to QdrantCore.Points
             let qdrantPoints = batch.map { $0.toQdrantPoint() }
 
             try await client.points.upsert(
@@ -368,7 +357,6 @@ class QdrantService: ObservableObject {
         return results.map { $0.toSearchResult() }
     }
 
-    /// Load all points from a collection (paginated)
     func loadPoints(
         collectionName: String,
         limit: Int = 1000
@@ -393,7 +381,6 @@ class QdrantService: ObservableObject {
             allPoints.append(contentsOf: result.points.map { $0.toQdrantPoint() })
             offset = result.nextPageOffset
 
-            // Stop if we've reached the requested limit
             if allPoints.count >= limit {
                 break
             }
@@ -402,14 +389,12 @@ class QdrantService: ObservableObject {
         return Array(allPoints.prefix(limit))
     }
 
-    /// Get unique source values from collection
     func getSources(collectionName: String) async throws -> [String] {
         let points = try await loadPoints(collectionName: collectionName, limit: 10000)
         let sources = Set(points.map { $0.source })
         return Array(sources).sorted()
     }
 
-    /// Delete points by IDs
     func deletePoints(collectionName: String, ids: [String]) async throws {
         guard let client = client else {
             throw QdrantServiceError.notConnected
@@ -481,8 +466,6 @@ class QdrantService: ObservableObject {
     }
 }
 
-// MARK: - Errors
-
 enum QdrantServiceError: LocalizedError, Sendable {
     case notConfigured
     case notConnected
@@ -506,10 +489,8 @@ enum QdrantServiceError: LocalizedError, Sendable {
     }
 }
 
-// MARK: - Convenience factory
-
 extension QdrantService {
-    /// Create a configured and connected QdrantService
+
     static func create(url: String, apiKey: String?) async throws -> QdrantService {
         let service = QdrantService()
         try await service.configure(url: url, apiKey: apiKey)

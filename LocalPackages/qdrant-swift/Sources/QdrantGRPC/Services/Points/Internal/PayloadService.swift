@@ -4,7 +4,6 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
-/// Internal service for payload operations.
 internal final class PayloadService: Sendable {
     private let base: PointsServiceBase
 
@@ -12,7 +11,6 @@ internal final class PayloadService: Sendable {
         self.base = base
     }
 
-    /// Sets payload values for specific points.
     func setPayload(
         collection: String,
         ids: [PointID],
@@ -52,7 +50,6 @@ internal final class PayloadService: Sendable {
         }
     }
 
-    /// Overwrites the entire payload for specific points.
     func overwritePayload(
         collection: String,
         ids: [PointID],
@@ -92,7 +89,6 @@ internal final class PayloadService: Sendable {
         }
     }
 
-    /// Deletes specific payload keys from points.
     func deletePayload(
         collection: String,
         ids: [PointID],
@@ -129,7 +125,6 @@ internal final class PayloadService: Sendable {
         }
     }
 
-    /// Clears all payload from points.
     func clearPayload(
         collection: String,
         ids: [PointID],

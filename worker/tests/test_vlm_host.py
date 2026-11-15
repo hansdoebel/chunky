@@ -11,7 +11,6 @@ from chunky_worker.models import JobSettings
 from chunky_worker.pipeline import DoclingPipeline
 from chunky_worker.vlm import UnsupportedMLXModel, accelerator_for_worker, model_for_worker
 
-
 def test_known_mlx_models_map_to_transformers():
     assert model_for_worker("granite-docling-mlx") == "granite-docling-transformers"
     assert model_for_worker("smoldocling-mlx") == "smoldocling-transformers"
@@ -19,11 +18,9 @@ def test_known_mlx_models_map_to_transformers():
     assert model_for_worker("standard") is None
     assert model_for_worker(None) is None
 
-
 def test_unknown_mlx_model_is_rejected():
     with pytest.raises(UnsupportedMLXModel, match="Apple-only"):
         model_for_worker("custom-mlx")
-
 
 def test_accelerator_defaults_to_cuda_and_rewrites_mps():
     assert accelerator_for_worker(None) == "cuda"
@@ -33,7 +30,6 @@ def test_accelerator_defaults_to_cuda_and_rewrites_mps():
     assert accelerator_for_worker("cpu") == "cpu"
     assert accelerator_for_worker("cuda") == "cuda"
     assert JobSettings().accelerator == "cuda"
-
 
 def test_pipeline_rewrites_mlx_before_convert(tmp_path: Path):
     seen: dict = {}

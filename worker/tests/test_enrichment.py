@@ -27,13 +27,11 @@ VLM_FIELDS = (
     "images_scale",
 )
 
-
 class Options:
     def __init__(self, fields):
         self.model_fields = {name: None for name in fields}
         for name in fields:
             setattr(self, name, 1.0 if name == "images_scale" else False)
-
 
 def test_picture_formula_and_code_flags_reach_both_pipelines():
     flags = dict(
@@ -60,7 +58,6 @@ def test_picture_formula_and_code_flags_reach_both_pipelines():
     assert not hasattr(vlm, "do_formula_enrichment")
     assert not hasattr(vlm, "do_code_enrichment")
 
-
 def test_any_picture_enrichment_turns_on_scaled_images():
     for flag in ("do_picture_description", "do_picture_classification", "do_chart_extraction"):
         pdf = Options(PDF_FIELDS)
@@ -71,7 +68,6 @@ def test_any_picture_enrichment_turns_on_scaled_images():
             assert getattr(options, flag) is True
             assert options.generate_picture_images is True
             assert options.images_scale == 2.0
-
 
 def test_formula_and_code_do_not_force_picture_images():
     pdf = Options(PDF_FIELDS)
@@ -90,7 +86,6 @@ def test_formula_and_code_do_not_force_picture_images():
     assert vlm.generate_picture_images is False
     assert vlm.images_scale == 1.0
     assert vlm.do_picture_description is False
-
 
 def test_daemon_forwards_enrichment_flags_to_the_vlm_builder(monkeypatch):
     import types

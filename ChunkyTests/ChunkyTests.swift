@@ -3,12 +3,8 @@ import Testing
 
 @testable import Chunky
 
-// MARK: - AppState Tests
-
 @MainActor
 struct AppStateTests {
-
-    // MARK: - Initialization Tests
 
     @Test func initialState() {
         let appState = AppState()
@@ -20,12 +16,9 @@ struct AppStateTests {
         #expect(appState.isCancellationRequested == false)
     }
 
-    // MARK: - Job Management Tests
-
     @Test func addFilesCreatesJobs() {
         let appState = AppState()
 
-        // Create a temporary file that actually exists
         let tempDir = FileManager.default.temporaryDirectory
         let testFile = tempDir.appendingPathComponent("test_\(UUID().uuidString).pdf")
         FileManager.default.createFile(atPath: testFile.path, contents: nil)
@@ -57,9 +50,9 @@ struct AppStateTests {
         defer { try? FileManager.default.removeItem(at: testFile) }
 
         appState.addFiles([testFile])
-        appState.addFiles([testFile])  // Try to add same file again
+        appState.addFiles([testFile])
 
-        #expect(appState.jobs.count == 1)  // Should still be 1
+        #expect(appState.jobs.count == 1)
     }
 
     @Test func removeJobWorks() {
@@ -117,7 +110,6 @@ struct AppStateTests {
 
         appState.addFiles([testFile1, testFile2])
 
-        // Mark first job as completed
         appState.jobs[0].status = .completed
 
         appState.clearCompleted()
@@ -125,8 +117,6 @@ struct AppStateTests {
         #expect(appState.jobs.count == 1)
         #expect(appState.jobs.first?.status == .pending)
     }
-
-    // MARK: - Computed Properties Tests
 
     @Test func pendingJobsFiltersCorrectly() {
         let appState = AppState()
@@ -182,8 +172,6 @@ struct AppStateTests {
         appState.jobs[0].status = .completed
         #expect(appState.hasJobsToProcess == false)
     }
-
-    // MARK: - Cancellation Tests
 
     @Test func cancellationRequestWorks() {
         let appState = AppState()

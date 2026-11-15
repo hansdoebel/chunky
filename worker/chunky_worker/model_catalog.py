@@ -37,7 +37,6 @@ RECOMMENDED = {
     "mac": ["granite-docling-mlx"],
 }
 
-
 def parse_ollama_tags(payload: dict[str, Any]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for item in payload.get("models") or []:
@@ -56,7 +55,6 @@ def parse_ollama_tags(payload: dict[str, Any]) -> list[dict[str, Any]]:
         )
     return rows
 
-
 def parse_hf_cache(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for entry in entries:
@@ -72,7 +70,6 @@ def parse_hf_cache(entries: list[dict[str, Any]]) -> list[dict[str, Any]]:
         )
     return rows
 
-
 def parse_openai_models(payload: dict[str, Any]) -> list[str]:
     names: list[str] = []
     for item in payload.get("data") or []:
@@ -80,7 +77,6 @@ def parse_openai_models(payload: dict[str, Any]) -> list[str]:
         if name:
             names.append(name)
     return names
-
 
 def parse_pull_event(line: str) -> dict[str, Any] | None:
     text = line.strip()
@@ -96,7 +92,6 @@ def parse_pull_event(line: str) -> dict[str, Any] | None:
         "total": total,
         "percent": percent,
     }
-
 
 def scan_hf_cache() -> tuple[list[dict[str, Any]], str | None]:
     try:
@@ -121,7 +116,6 @@ def scan_hf_cache() -> tuple[list[dict[str, Any]], str | None]:
             }
         )
     return parse_hf_cache(rows), None
-
 
 def vlm_report(
     cache_rows: list[dict[str, Any]],
@@ -164,15 +158,12 @@ def vlm_report(
         )
     return report
 
-
 def recommended(host: str) -> list[str]:
     if host == "mac":
         return list(RECOMMENDED["mac"])
     return [name for name in RECOMMENDED["devbox"] if not name.endswith("-mlx")]
 
-
 ProgressCallback = Callable[[float | None, str], None]
-
 
 def fetch_vllm_models(url: str) -> list[str]:
     if not url:
@@ -188,7 +179,6 @@ def fetch_vllm_models(url: str) -> list[str]:
     except Exception:
         return []
 
-
 def fetch_ollama_tags(url: str) -> tuple[list[dict[str, Any]], str | None]:
     if not url:
         return [], "ollama url is empty"
@@ -202,7 +192,6 @@ def fetch_ollama_tags(url: str) -> tuple[list[dict[str, Any]], str | None]:
         return parse_ollama_tags(response.json()), None
     except Exception as exc:
         return [], str(exc)
-
 
 def ollama_pull_runner(base_url: str, model: str, on_progress: ProgressCallback, cancel_event) -> None:
     import httpx
@@ -222,7 +211,6 @@ def ollama_pull_runner(base_url: str, model: str, on_progress: ProgressCallback,
             if event is None:
                 continue
             on_progress(event["percent"], event["status"] or "pulling")
-
 
 def snapshot_download_runner(repo_id: str, revision: str | None, on_progress: ProgressCallback, cancel_event) -> None:
     import subprocess
@@ -260,10 +248,8 @@ def snapshot_download_runner(repo_id: str, revision: str | None, on_progress: Pr
         raise RuntimeError(error or f"snapshot_download exited {process.returncode}")
     on_progress(100, "done")
 
-
 class DownloadBusy(Exception):
     pass
-
 
 class DownloadManager:
     def __init__(self, download: Callable[..., None] | None = None, ollama_url: str = "http://127.0.0.1:11434") -> None:

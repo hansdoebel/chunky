@@ -8,8 +8,6 @@ private extension String {
 
 actor DoclingService {
 
-    // MARK: - Types
-
     struct PythonChunk: Codable, Sendable {
         let text: String
         let embeddingText: String
@@ -169,8 +167,6 @@ actor DoclingService {
         }
     }
 
-    // MARK: - Properties
-
     private var currentTask: Process?
     private let scriptName = "docling_convert.py"
     private let daemonScriptName = "docling_daemon.py"
@@ -183,8 +179,6 @@ actor DoclingService {
     private var daemonStartTask: Task<Void, Error>?
     private var daemonConvertQueue: [CheckedContinuation<ConversionResult, Error>] = []
     private var isDaemonBusy: Bool = false
-
-    // MARK: - Daemon Management
 
     func ensureDaemonReady(pythonPath: String = "~/.chunky-venv/bin/python3".expandingTildeInPath) async throws {
         if isDaemonRunning { return }
@@ -322,8 +316,6 @@ actor DoclingService {
         }
     }
 
-    // MARK: - Public Methods
-
     func convert(
         inputURL: URL,
         options: ConversionOptions = ConversionOptions(),
@@ -354,8 +346,6 @@ actor DoclingService {
             return (false, nil)
         }
     }
-
-    // MARK: - Daemon Conversion
 
     private func buildDaemonCommand(inputURL: URL, options: ConversionOptions) throws -> Data {
         var cmd: [String: Any] = [
@@ -509,8 +499,6 @@ actor DoclingService {
         }
     }
 
-    // MARK: - Subprocess Conversion (fallback)
-
     private func convertViaSubprocess(
         inputURL: URL,
         options: ConversionOptions,
@@ -629,8 +617,6 @@ actor DoclingService {
 
         return result
     }
-
-    // MARK: - Private Methods
 
     private func findScript(named name: String = "docling_convert.py") throws -> String {
         let baseName = (name as NSString).deletingPathExtension
@@ -779,8 +765,6 @@ actor DoclingService {
         }
     }
 }
-
-// MARK: - Convenience Extensions
 
 extension DoclingService {
 

@@ -7,10 +7,8 @@ MLX_TO_TRANSFORMERS = {
     "smoldocling-mlx": "smoldocling-transformers",
 }
 
-
 class UnsupportedMLXModel(ValueError):
     """An MLX model id has no Linux equivalent."""
-
 
 def model_for_worker(vlm_model: str | None) -> str | None:
     """Map an MLX model id to its Transformers counterpart.
@@ -32,7 +30,6 @@ def model_for_worker(vlm_model: str | None) -> str | None:
         )
     return name
 
-
 def accelerator_for_worker(accelerator: str | None) -> str:
     """ROCm is addressed as CUDA. MPS and an empty value become ``cuda``."""
     name = (accelerator or "").strip().lower()
@@ -40,14 +37,11 @@ def accelerator_for_worker(accelerator: str | None) -> str:
         return "cuda"
     return name
 
-
 GRANITE_REPO_ID = "ibm-granite/granite-docling-258M"
 GRANITE_PRESET = "granite_docling"
-# Kept equal so Docling's page batch is never smaller than the API concurrency.
-# Raising both together is PER-77.
+
 GRANITE_CONCURRENCY = 8
 VLM_ENGINES = {"vllm", "transformers"}
-
 
 def normalize_vlm_engine(value: str | None) -> str:
     """Worker-wide engine. ``vllm`` is the default; ``transformers`` is the fallback."""
@@ -55,7 +49,6 @@ def normalize_vlm_engine(value: str | None) -> str:
     if engine not in VLM_ENGINES:
         raise ValueError("CHUNKY_VLM_ENGINE must be 'vllm' or 'transformers'")
     return engine
-
 
 def chat_completions_url(base: str) -> str:
     """OpenAI-compatible chat URL. Accepts a host root, ``/v1``, or the full path."""
@@ -66,13 +59,11 @@ def chat_completions_url(base: str) -> str:
         return trimmed + "/chat/completions"
     return trimmed + "/v1/chat/completions"
 
-
 def granite_engine_for(vlm_model: str | None, configured: str) -> str | None:
     """Return the granite engine for this job, or None when the job is not granite."""
     if model_for_worker(vlm_model) != "granite-docling-transformers":
         return None
     return normalize_vlm_engine(configured)
-
 
 def granite_plan(engine: str, vllm_url: str, accelerator: str | None) -> dict:
     """Describe a granite-docling run. Does not import Docling, torch, or MLX.
@@ -102,11 +93,10 @@ def granite_plan(engine: str, vllm_url: str, accelerator: str | None) -> dict:
             "model": GRANITE_REPO_ID,
             "max_tokens": 4096,
             "temperature": 0.0,
-            # DocTags uses special tokens. A generic markdown prompt strips them.
+
             "skip_special_tokens": False,
         },
     }
-
 
 def granite_engine_call(plan: dict) -> dict:
     """Arguments for ``VlmConvertOptions.from_preset`` and the pipeline wrapper."""
@@ -137,7 +127,6 @@ def granite_engine_call(plan: dict) -> dict:
         "accelerator": accelerator,
     }
 
-
 def build_granite_pipeline_options(plan: dict, *, factories: dict | None = None):
     """Build ``VlmPipelineOptions`` for granite-docling.
 
@@ -163,7 +152,6 @@ def build_granite_pipeline_options(plan: dict, *, factories: dict | None = None)
         accelerator_options=factories["AcceleratorOptions"](**call["accelerator"]),
     )
 
-
 def _docling_vlm_factories(page_batch_size: int) -> dict:
     from docling.datamodel.pipeline_options import VlmConvertOptions, VlmPipelineOptions
     from docling.datamodel.vlm_engine_options import ApiVlmEngineOptions, TransformersVlmEngineOptions
@@ -184,7 +172,6 @@ def _docling_vlm_factories(page_batch_size: int) -> dict:
         "GRANITEDOCLING_TRANSFORMERS": GRANITEDOCLING_TRANSFORMERS,
     }
 
-
 def _match_page_batch(concurrency: int) -> None:
     """Docling requires ``page_batch_size`` to be at least the API concurrency."""
     try:
@@ -195,7 +182,6 @@ def _match_page_batch(concurrency: int) -> None:
     current = getattr(perf, "page_batch_size", None)
     if isinstance(current, int) and current < concurrency:
         perf.page_batch_size = concurrency
-
 
 def gpu_probe() -> dict:
     """Report whether PyTorch sees a GPU. ROCm appears as ``torch.cuda``. Never imports MLX."""

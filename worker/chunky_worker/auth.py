@@ -14,11 +14,9 @@ from fastapi import HTTPException, Request
 
 from chunky_worker.settings import Settings
 
-
 def generate_token() -> str:
     """Return a new URL-safe token (256 bits)."""
     return secrets.token_urlsafe(32)
-
 
 def write_token_file(path: Path, token: str | None = None) -> str:
     """Write ``token`` (or a new one) to ``path`` with mode 0600. Returns the token."""
@@ -27,7 +25,6 @@ def write_token_file(path: Path, token: str | None = None) -> str:
     path.write_text(value + "\n", encoding="utf-8")
     path.chmod(0o600)
     return value
-
 
 def require_bearer(request: Request) -> None:
     """Reject the request unless the Authorization bearer token matches settings."""
