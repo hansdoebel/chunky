@@ -48,9 +48,9 @@ enum DevboxClientError: LocalizedError, Equatable {
         case .invalidURL(let url):
             return "Invalid worker URL: \(url)"
         case .unreachable(let url, let reason):
-            return "Cannot reach \(url). \(reason) Check the 10GbE address, that chunky-worker is running, and the firewall."
+            return "Cannot reach \(url). \(reason) Check the worker address, that chunky-worker is running, and the firewall."
         case .transportSecurity(let url):
-            return "App Transport Security blocked \(url). Private LAN addresses are allowed by NSAllowsLocalNetworking. Use the devbox 10GbE IP, or HTTPS for a public host."
+            return "App Transport Security blocked \(url). Private LAN addresses are allowed by NSAllowsLocalNetworking. Use a LAN address, or HTTPS for a public host."
         case .unauthorized(let url):
             return "Worker rejected the token (401) for \(url). Check the token in the Keychain."
         case .dimensionMismatch(let url, let detail):

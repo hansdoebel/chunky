@@ -289,8 +289,8 @@ def _log_startup(settings: Settings) -> None:
     log.info("Bind host %s port %s", settings.host, settings.port)
     if settings.host in {"0.0.0.0", "::"}:
         log.warning(
-            "Worker is bound to every interface. Prefer CHUNKY_WORKER_HOST set to the 10GbE address "
-            "and a firewall that allows only the Mac."
+            "Worker is bound to every interface. Prefer CHUNKY_WORKER_HOST set to one address "
+            "and a firewall that allows only the app machine."
         )
     if not is_loopback_url(settings.ollama_url):
         log.warning("Ollama URL is not loopback: %s", settings.ollama_url)

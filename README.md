@@ -7,11 +7,11 @@ A native macOS application for processing documents into semantic chunks and sto
 ## Features
 
 - Multi-format document processing (PDF, DOCX, PPTX, HTML, images) via Docling
-- Local VLM support with DocTags output (SmolDocling MLX, Granite-Docling MLX), or granite-docling on the devbox through vLLM
+- Local VLM support with DocTags output (SmolDocling MLX, Granite-Docling MLX), or granite-docling on a worker host through vLLM
 - Text chunking with configurable token limits and overlap
 - Embeddings from Ollama or an OpenAI-compatible `/v1/embeddings` endpoint
 - Vector storage in local Docker Qdrant or Qdrant Cloud
-- Named Devbox worker profiles (Mac Studio 10GbE, Wi-Fi LAN, Tailscale) with a reachability and latency check
+- Named worker profiles (wired LAN, Wi-Fi, Tailscale) with a reachability and latency check
 - Retrieval over dense search or hybrid dense plus BM25 with RRF, plus an optional reranker
 - Eval sets with recall@k, MRR, nDCG, and hit rate
 - RAG chat with numbered citations, using pi or an OpenAI-compatible chat API
@@ -76,17 +76,17 @@ Chunky supports local vision-language models for document processing via Docling
 | Granite-Docling 258M (MLX) | MLX | DocTags | — |
 | Granite-Docling 258M (Transformers) | Transformers | DocTags | — |
 
-*Benchmarked on MacBook M3 Max, single PDF page.
+*Single-page times from the Docling vision-model table. They are not a measurement of your machine.
 
-On Local Mac the default VLM is Granite-Docling MLX. On the devbox the default is granite-docling through vLLM. Change it in Preferences, Documents, VLM Model. "Standard (no VLM)" uses the classic layout-analysis pipeline. MLX models are hidden for the Devbox host.
+On the app machine the default VLM is Granite-Docling MLX. On a worker host the default is granite-docling through vLLM. Change it in Preferences, Documents, VLM Model. "Standard (no VLM)" uses the classic layout-analysis pipeline. MLX models are hidden when the processing host is a worker.
 
 ## Worker and retrieval
 
 The default embedding tag is `qwen3-embedding:0.6b` (1024 dimensions). Ollama's untagged `qwen3-embedding` is the 8B model. Switching width means a new collection. See [docs/models.md](docs/models.md).
 
-Preferences, Documents, Processing host **Devbox** sends the file to the worker and polls progress. Save a profile per path and press Use before a job. Check reachability reports unreachable, HTTP 401, App Transport Security, success, and latency. The token stays in the Keychain. See [Devbox over 10GbE](docs/devbox-setup.md) and [MacBook over Wi-Fi or Tailscale](docs/macbook-wifi-tailscale.md).
+Preferences, Documents, Processing host **Devbox** sends the file to a worker and polls progress. Save a profile per path and press Use before a job. Check reachability reports unreachable, HTTP 401, App Transport Security, success, and latency. The token stays in the Keychain. See [worker host](docs/worker-host.md), [reaching a worker](docs/remote-workers.md), and [use cases](docs/worker-use-cases.md).
 
-The Retrieval tab searches the active collection. With Processing host Devbox and Devbox ingest set to Qdrant Cloud, that search is `POST /v1/search` on the worker profile that Use applied. Otherwise it searches the Qdrant URL on the Mac. Hybrid search fuses the dense vector with a Qdrant BM25 text query using RRF. Rerank is optional and runs on the Mac against an OpenAI-compatible `/v1/rerank` URL. Eval stores recall@k, MRR, nDCG, and hit rate for a JSON query set. Ask in that tab to answer from the hits with citations. Chat uses a local pi install (`npm install -g @earendil-works/pi-coding-agent`) or an OpenAI-compatible chat API. `Chunky --mcp` serves the same search to pi and other MCP clients. See [MCP](docs/mcp.md).
+The Retrieval tab searches the active collection. With Processing host Devbox and Devbox ingest set to Qdrant Cloud, that search is `POST /v1/search` on the worker profile that Use applied. Otherwise it searches the Qdrant URL on the app machine. Hybrid search fuses the dense vector with a Qdrant BM25 text query using RRF. Rerank is optional and runs on the app machine against a Cohere-style `/v1/rerank` URL. Eval stores recall@k, MRR, nDCG, and hit rate for a JSON query set. Ask in that tab to answer from the hits with citations. Chat uses a local pi install (`npm install -g @earendil-works/pi-coding-agent`) or an OpenAI-compatible chat API. `Chunky --mcp` serves the same search to pi and other MCP clients. See [MCP](docs/mcp.md).
 
 ## Architecture
 
@@ -111,8 +111,9 @@ LocalPackages/    qdrant-swift (gRPC and REST client)
 ## Resources
 
 - [Model choices](docs/models.md)
-- [Devbox over 10GbE](docs/devbox-setup.md)
-- [MacBook over Wi-Fi or Tailscale](docs/macbook-wifi-tailscale.md)
+- [Worker host](docs/worker-host.md)
+- [Reaching a worker](docs/remote-workers.md)
+- [Worker use cases](docs/worker-use-cases.md)
 - [MCP search server](docs/mcp.md)
 - [Worker API](worker/README.md)
 - [Docling](https://www.docling.ai/)

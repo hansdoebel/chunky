@@ -1,6 +1,6 @@
-# Models for the Mac and the ROCm devbox
+# Models for the app machine and a worker host
 
-Checked 15 Nov 2026. The two machines are an M4 Max MacBook Pro (MLX, unified memory) and the Ubuntu devbox (AMD R9700, 32 GB, `gfx1201`, ROCm). Nothing here assumes an NVIDIA GPU. Weights sizes are the published download sizes, not a measurement of resident VRAM on the R9700.
+Checked 15 Nov 2026. The app machine is Apple Silicon and runs MLX. A worker host is a Linux machine with a ROCm-capable AMD GPU and at least 32 GB of GPU memory. Nothing here assumes an NVIDIA GPU. Weights sizes are the published download sizes, not a measurement of resident VRAM on a particular card.
 
 Docling itself is **v2.150.1** (14 Nov 2026). The VLM pipeline defaults to the `granite_docling` preset. Chunk export defaults to the hybrid chunker. Sources are listed at the bottom.
 
@@ -11,15 +11,15 @@ Changing the embedding model, or its width, does not rewrite an existing Qdrant 
 | Role | Target | Default | Alternative | Width | Why this default |
 | --- | --- | --- | --- | --- | --- |
 | Embedding | Both | `qwen3-embedding:0.6b` (`Qwen/Qwen3-Embedding-0.6B`) | `qwen3-embedding:4b` (`Qwen/Qwen3-Embedding-4B`) | 1024, or 2560 for the 4B | Apache 2.0, 32K context, German and English. The 0.6B fits beside granite-docling on 32 GB. The 4B is the better German retriever and needs a new collection. |
-| Page VLM | Devbox | `ibm-granite/granite-docling-258M` via vLLM | Standard pipeline (Heron layout, TableFormer, Tesseract `de-Latn`+`en-Latn`) | n/a | Docling's own VLM preset. DocTags, about 0.5 GB of weights, and it stays on loopback. |
-| Page VLM | Mac | `granite-docling-mlx` (`ibm-granite/granite-docling-258M-mlx`) | `smoldocling-mlx` | n/a | MLX build of the same 258M model. SmolDocling is the smaller fallback and is weaker on real pages. |
-| Chart VLM | Devbox | `ibm-granite/granite-vision-4.1-4b` on its own vLLM port | Leave chart extraction off | n/a | Apache 2.0. Docling's default chart preset. Do not share the granite-docling port. |
-| Chart VLM | Mac | Docling preset `granite_vision_v4_mlx` (same 4.1 repo, MLX) | Preset `granite_vision_v3_3` (older 2B CSV model) | n/a | The 4.1 model is the current Docling default on Apple Silicon when `mlx-vlm` is new enough. |
-| Picture description | Devbox | `granite_vision` (`ibm-granite/granite-vision-3.3-2b`) | `qwen` (`Qwen2.5-VL-3B`) | n/a | The 2B Granite Vision preset is the one Docling can serve with vLLM. Turn it on only when the 4.1 chart model is not also resident. |
-| Picture description | Mac | `smolvlm` (SmolVLM-256M MLX) | `qwen` (Qwen2.5-VL-3B MLX) | n/a | 256M leaves room for granite-docling MLX. The 3B is the quality step up. |
+| Page VLM | Worker host | `ibm-granite/granite-docling-258M` via vLLM | Standard pipeline (Heron layout, TableFormer, Tesseract `de-Latn`+`en-Latn`) | n/a | Docling's own VLM preset. DocTags, about 0.5 GB of weights, and it stays on loopback. |
+| Page VLM | App machine | `granite-docling-mlx` (`ibm-granite/granite-docling-258M-mlx`) | `smoldocling-mlx` | n/a | MLX build of the same 258M model. SmolDocling is the smaller fallback and is weaker on real pages. |
+| Chart VLM | Worker host | `ibm-granite/granite-vision-4.1-4b` on its own vLLM port | Leave chart extraction off | n/a | Apache 2.0. Docling's default chart preset. Do not share the granite-docling port. |
+| Chart VLM | App machine | Docling preset `granite_vision_v4_mlx` (same 4.1 repo, MLX) | Preset `granite_vision_v3_3` (older 2B CSV model) | n/a | The 4.1 model is the current Docling default on Apple Silicon when `mlx-vlm` is new enough. |
+| Picture description | Worker host | `granite_vision` (`ibm-granite/granite-vision-3.3-2b`) | `qwen` (`Qwen2.5-VL-3B`) | n/a | The 2B Granite Vision preset is the one Docling can serve with vLLM. Turn it on only when the 4.1 chart model is not also resident. |
+| Picture description | App machine | `smolvlm` (SmolVLM-256M MLX) | `qwen` (Qwen2.5-VL-3B MLX) | n/a | 256M leaves room for granite-docling MLX. The 3B is the quality step up. |
 | Reranker | Either | `BAAI/bge-reranker-v2-m3` | `Qwen/Qwen3-Reranker-0.6B` | n/a | MIT, about 0.6B, strongest small multilingual score in the Jina comparison (MIRACL 69.32). Qwen3-Reranker-0.6B is Apache 2.0 and weaker on MIRACL (57.70). Jina v3 is CC BY-NC, so it is not the default. |
 
-The app's new-install defaults match the first column: embedding `qwen3-embedding:0.6b` at 1024 dimensions, layout Heron, page VLM granite-docling MLX on the Mac and the transformers/vLLM id on the devbox, picture description SmolVLM on the Mac and Granite Vision 3.3-2B on the devbox.
+The app's new-install defaults match the first column: embedding `qwen3-embedding:0.6b` at 1024 dimensions, layout Heron, page VLM granite-docling MLX on the app machine and the transformers/vLLM id on a worker host, picture description SmolVLM on the app machine and Granite Vision 3.3-2B on a worker host.
 
 ## Embedding
 
@@ -43,7 +43,7 @@ Ollama, checked on the library tags page 15 Nov 2026: `ollama pull qwen3-embeddi
 ollama pull qwen3-embedding:0.6b
 ```
 
-On the devbox, Ollama stays on `127.0.0.1:11434`. A pooling vLLM is the alternative when you want the OpenAI embeddings API. Keep it on loopback and on a different port from granite-docling:
+On a worker host, Ollama stays on `127.0.0.1:11434`. A pooling vLLM is the alternative when you want the OpenAI embeddings API. Keep it on loopback and on a different port from granite-docling:
 
 ```bash
 vllm serve Qwen/Qwen3-Embedding-0.6B \
@@ -52,9 +52,9 @@ vllm serve Qwen/Qwen3-Embedding-0.6B \
   --gpu-memory-utilization 0.15
 ```
 
-Then set `CHUNKY_EMBEDDING_BACKEND=openai`, `CHUNKY_EMBEDDING_URL=http://127.0.0.1:8002`, and `CHUNKY_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B`. Use a ROCm build of vLLM. The generic CUDA wheel will not see `gfx1201`.
+Then set `CHUNKY_EMBEDDING_BACKEND=openai`, `CHUNKY_EMBEDDING_URL=http://127.0.0.1:8002`, and `CHUNKY_EMBEDDING_MODEL=Qwen/Qwen3-Embedding-0.6B`. Use a ROCm build of vLLM whose wheel lists your GPU's gfx target. A generic CUDA wheel will not see an AMD GPU.
 
-On the Mac the same Ollama tag is the one the app calls. MLX embedding runtimes exist, and the app does not call them. It calls Ollama or an OpenAI-compatible `/v1/embeddings` URL.
+On the app machine the same Ollama tag is the one the app calls. MLX embedding runtimes exist, and the app does not call them. It calls Ollama or an OpenAI-compatible `/v1/embeddings` URL.
 
 The HybridChunker tokenizes with the same family as the embedding model (`Qwen/Qwen3-Embedding-0.6B` for the default tag). A 4B or 8B job uses that size's tokenizer. The bare name `qwen3-embedding` still maps to the 0.6B tokenizer so older jobs keep their chunk widths. `:latest` maps to the 8B tokenizer.
 
@@ -66,11 +66,11 @@ As of the [CLI reference](https://docling-project.github.io/docling/reference/cl
 - `--chunks-type` defaults to `hybrid`. The hierarchical chunker is the base. HybridChunker splits a chunk that exceeds the tokenizer limit and merges small neighbors that share headings. Table headers repeat on each piece unless that would overflow the row.
 - Layout default in the [model catalog](https://docling-project.github.io/docling/usage/model_catalog/) is `docling-layout-heron`. The app default is Heron. Egret Large and Egret XLarge are the accuracy alternatives.
 - Tables: TableFormer accurate mode. Granite Vision can replace TableFormer. The standard pipeline is the one to use for a dense numeric table. A whole-page VLM is the one to use for a scan, a formula, or code.
-- OCR engines in the catalog: Tesseract, EasyOCR, RapidOCR, macOS Vision, SuryaOCR. For German and English on the devbox, Tesseract with `de-Latn` and `en-Latn`. On the Mac, the native Vision OCR is available. The worker does not run MLX.
+- OCR engines in the catalog: Tesseract, EasyOCR, RapidOCR, macOS Vision, SuryaOCR. For German and English on a worker host, Tesseract with `de-Latn` and `en-Latn`. On the app machine, the native Vision OCR is available. The worker does not run MLX.
 - Picture classification is `document_figure_classifier_v2`. Chart extraction turns classification on by itself.
-- `docling-serve` 1.38.2 (27 Oct 2026) is the HTTP wrapper. Chunky does not call it. The Mac app calls the local Docling scripts, or the Chunky worker.
+- `docling-serve` 1.38.2 (27 Oct 2026) is the HTTP wrapper. Chunky does not call it. The app calls the local Docling scripts, or the Chunky worker.
 
-Page conversion on the devbox:
+Page conversion on a worker host:
 
 ```bash
 vllm serve ibm-granite/granite-docling-258M \
@@ -83,13 +83,13 @@ vllm serve ibm-granite/granite-docling-258M \
 
 `0.6` leaves room for `qwen3-embedding:0.6b` on the same 32 GB card. The [GPU guide](https://docling-project.github.io/docling/usage/gpu/) shows `0.9` when the card is dedicated to this server. Flash Attention 2 stays off. `device="cuda"` is correct on a ROCm PyTorch. ONNX has no ROCm execution provider.
 
-On the Mac, Docling selects the MLX weights (`ibm-granite/granite-docling-258M-mlx` or the bf16 MLX id in the vision-model table) when the preset is `granite_docling` and `mlx-vlm` is installed. The app's Mac preset is `granite-docling-mlx`.
+On the app machine, Docling selects the MLX weights (`ibm-granite/granite-docling-258M-mlx` or the bf16 MLX id in the vision-model table) when the preset is `granite_docling` and `mlx-vlm` is installed. The app-machine preset is `granite-docling-mlx`.
 
 Newer whole-page presets in the catalog (LightOnOCR-3, Unlimited-OCR 2, Nemotron Parse) are not the default. Unlimited-OCR 2's own server path is NVIDIA SGLang. Nemotron's best published numbers are not the guarded merge Docling actually runs.
 
 ## Chart and picture description
 
-Chart extraction uses Granite Vision 4.1 4B, released 29 Apr 2026, Apache 2.0 ([model card](https://huggingface.co/ibm-granite/granite-vision-4.1-4b)). Docling's preset is `granite_vision_v4` on the devbox and `granite_vision_v4_mlx` on the Mac. The Mac preset reads the same Hugging Face repo through MLX when `mlx-vlm>=0.7.0`.
+Chart extraction uses Granite Vision 4.1 4B, released 29 Apr 2026, Apache 2.0 ([model card](https://huggingface.co/ibm-granite/granite-vision-4.1-4b)). Docling's preset is `granite_vision_v4` on a worker host and `granite_vision_v4_mlx` on the app machine. The app-machine preset reads the same Hugging Face repo through MLX when `mlx-vlm>=0.7.0`.
 
 Give it a second port. Do not point it at the granite-docling server:
 
@@ -103,7 +103,7 @@ vllm serve ibm-granite/granite-vision-4.1-4b \
 
 `CHUNKY_CHART_VLLM_URL=http://127.0.0.1:8001` makes the worker call that server. An empty URL keeps chart extraction in-process on Transformers, and only while a chart job is running. If the card cannot hold granite-docling, the 0.6B embedder, and this 4B model, leave chart extraction off.
 
-Picture description is a different preset. `granite_vision` is Granite Vision 3.3-2B and is the devbox default. `smolvlm` is the Mac default. `qwen` is Qwen2.5-VL-3B, with an MLX build, and is the alternative on the Mac. Qwen2.5-VL-3B is not marked as a vLLM preset in the catalog table fetched 15 Nov 2026, so it is not the devbox default.
+Picture description is a different preset. `granite_vision` is Granite Vision 3.3-2B and is the worker-host default. `smolvlm` is the app-machine default. `qwen` is Qwen2.5-VL-3B, with an MLX build, and is the alternative on the app machine. Qwen2.5-VL-3B is not marked as a vLLM preset in the catalog table fetched 15 Nov 2026, so it is not the worker-host default.
 
 ## Rerankers
 
@@ -124,7 +124,7 @@ It reads `results[].index` and `results[].relevance_score` (or `score`). That is
 
 The BEIR and MIRACL numbers are the table on the [jina-reranker-v3 model card](https://huggingface.co/jinaai/jina-reranker-v3), fetched 15 Nov 2026. Qwen lists the same three reranker sizes, 32K context, Apache 2.0, on the embedding GitHub page.
 
-Point Preferences, Retrieval, Rerank URL at a server that speaks the JSON above. The model field is the id that server expects. Leave rerank off for the first devbox test.
+Point Preferences, Retrieval, Rerank URL at a server that speaks the JSON above. The model field is the id that server expects. Leave rerank off for the first worker test.
 
 ## Scientific papers
 

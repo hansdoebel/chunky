@@ -5,7 +5,7 @@ nonisolated struct WorkerEndpoint: Codable, Identifiable, Equatable, Sendable {
     var name: String
     var url: String
 
-    static let starterNames = ["Mac Studio 10GbE", "Wi-Fi LAN", "Tailscale"]
+    static let starterNames = ["Wired LAN", "Wi-Fi", "Tailscale"]
 
     static func starters() -> [WorkerEndpoint] {
         starterNames.map { WorkerEndpoint(id: UUID(), name: $0, url: "") }

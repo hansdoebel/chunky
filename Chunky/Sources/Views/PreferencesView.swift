@@ -402,14 +402,14 @@ struct PreferencesView: View {
                 StepperRow(label: "Parallel Jobs", value: $appState.settings.maxParallelJobs, range: 1...4)
                 StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...16)
                 if appState.settings.processingHost == .localMac {
-                    Text("TableFormer stays on the CPU. Keep table batches small on this Mac.")
+                    Text("TableFormer stays on the CPU. Keep table batches small on this machine.")
                         .font(.caption)
                         .foregroundColor(.secondary)
                 }
                 StepperRow(label: "OCR batch", value: $appState.settings.ocrBatchSize, range: 0...64)
                 StepperRow(label: "Layout batch", value: $appState.settings.layoutBatchSize, range: 0...64)
                 StepperRow(label: "Table batch", value: $appState.settings.tableBatchSize, range: 0...16)
-                Text("Zero uses the host default. The devbox uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
+                Text("Zero uses the host default. A worker host uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
                     .font(.caption)
                     .foregroundColor(.secondary)
 
@@ -683,7 +683,7 @@ struct PreferencesView: View {
                 Text("Quality turns on picture description and classification.")
                     .font(.caption)
                     .foregroundColor(.secondary)
-                Picker("Devbox ingest", selection: $appState.settings.devboxIngestTarget) {
+                Picker("Worker ingest", selection: $appState.settings.devboxIngestTarget) {
                     ForEach(DevboxIngestTarget.allCases) { target in
                         Text(target.rawValue).tag(target)
                     }
@@ -701,7 +701,7 @@ struct PreferencesView: View {
                     .font(.caption)
                     .foregroundColor(.secondary)
             } header: {
-                Text("Devbox ingest target")
+                Text("Worker ingest target")
             }
 
             Section {

@@ -778,7 +778,7 @@ class DocumentProcessor: ObservableObject {
     @MainActor
     private func processOnDevbox(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
         job.status = .chunking
-        job.statusMessage = "Uploading to devbox..."
+        job.statusMessage = "Uploading to the worker..."
         job.error = nil
         job.startTime = Date()
         let started = CFAbsoluteTimeGetCurrent()
@@ -840,7 +840,7 @@ class DocumentProcessor: ObservableObject {
                 try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed)
                 job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
             default:
-                job.statusMessage = "\(parsed.chunks.count) chunks from devbox"
+                job.statusMessage = "\(parsed.chunks.count) chunks from the worker"
             }
             job.totalTime = CFAbsoluteTimeGetCurrent() - started
             if var remote = parsed.metrics {
