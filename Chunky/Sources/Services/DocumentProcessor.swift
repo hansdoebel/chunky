@@ -1253,7 +1253,10 @@ class DocumentProcessor: ObservableObject {
                 pictureClass: raw["picture_class"] as? String,
                 tableMarkdown: raw["table_markdown"] as? String,
                 pageEnd: (raw["page_end"] as? NSNumber)?.intValue,
-                bboxesJSON: Self.bboxesJSON(raw["bboxes"])
+                bboxesJSON: Self.bboxesJSON(raw["bboxes"]),
+                pageLabels: (raw["page_labels"] as? [Any])?.compactMap { $0 as? String } ?? [],
+                printedPage: raw["printed_page"] as? String,
+                pageOffset: (raw["page_offset"] as? NSNumber)?.intValue
             )
         }
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
