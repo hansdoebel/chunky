@@ -7,6 +7,7 @@ import Testing
 struct BibliographyTests {
     @Test func parsesBibTeXAndMatchesPdfs() {
         let text = """
+        @comment{skip me}
         @article{lovelace2020,
           title = {Analytical {Engine}},
           author = {Lovelace, Ada and Turing, Alan},
@@ -15,10 +16,13 @@ struct BibliographyTests {
           journal = {Nature},
           abstract = {A short abstract.}
         }
-        @comment{skip me}
+        @article{aftercomment,
+          title = {Why (},
+          year = {1999}
+        }
         """
         let records = BibTeXParser.parse(text)
-        #expect(records.count == 1)
+        #expect(records.count == 2)
         #expect(records[0].citeKey == "lovelace2020")
         #expect(records[0].title == "Analytical Engine")
         #expect(records[0].authors == ["Ada Lovelace", "Alan Turing"])
@@ -36,6 +40,15 @@ struct BibliographyTests {
         let missing = BibliographyFiles.match(records, pdfs: [folder.appendingPathComponent("other.pdf")])
         #expect(missing[0].pdf == nil)
         #expect(missing[0].warning == "No PDF for lovelace2020")
+        #expect(records[1].title == "Why (")
+        let prefix = BibliographyFiles.match(
+            [records[0]],
+            pdfs: [
+                folder.appendingPathComponent("10.1000_xyz123.pdf"),
+                folder.appendingPathComponent("10.1000_xyz.pdf"),
+            ]
+        )
+        #expect(prefix[0].pdf?.lastPathComponent == "10.1000_xyz.pdf")
     }
 
     @Test func parsesZoteroItemsAndRedactsTheKey() throws {

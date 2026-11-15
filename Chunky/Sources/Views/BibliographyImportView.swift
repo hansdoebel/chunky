@@ -98,10 +98,16 @@ struct BibliographyImportSheet: View {
     @EnvironmentObject var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var matches: [BibliographyMatch] = []
-    @State private var status = "Zotero key is stored in the Keychain."
+    @State private var status = "The Zotero key is saved in the Keychain."
+    @State private var apiKey = ""
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
+            SecureField("Zotero local API key", text: $apiKey)
+                .textFieldStyle(.roundedBorder)
+                .onChange(of: apiKey) { _, newValue in
+                    appState.settings.zoteroAPIKey = newValue
+                }
             HStack {
                 Button("BibTeX…") { pickBibliography() }
                 Button("Load Zotero") { Task { await loadZotero() } }
@@ -112,7 +118,9 @@ struct BibliographyImportSheet: View {
                 appState.importBibliography(chosen)
                 dismiss()
             }
+            .id(matches.map(\.id).joined(separator: "|"))
         }
+        .onAppear { apiKey = appState.settings.zoteroAPIKey }
         .padding(12)
         .frame(width: 640, height: 520)
     }
@@ -137,16 +145,28 @@ struct BibliographyImportSheet: View {
     }
 
     private func loadZotero() async {
-        let key = appState.settings.zoteroAPIKey
+        let key = apiKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !key.isEmpty else {
             status = "Add a Zotero local API key. It is saved in the Keychain."
             return
         }
+        appState.settings.zoteroAPIKey = key
         guard let base = URL(string: "http://127.0.0.1:23119/api") else { return }
         do {
-            let items = try await ZoteroLocalClient().data(for: ZoteroLocalAPI.itemsRequest(baseURL: base, apiKey: key))
+            let client = ZoteroLocalClient()
+            var rows: [[String: Any]] = []
+            var start = 0
+            while true {
+                let page = try await client.page(for: ZoteroLocalAPI.itemsRequest(baseURL: base, apiKey: key, start: start))
+                let batch = try JSONSerialization.jsonObject(with: page.data) as? [[String: Any]] ?? []
+                rows.append(contentsOf: batch)
+                start += batch.count
+                if batch.isEmpty || batch.count < 100 || (page.total != nil && start >= page.total!) {
+                    break
+                }
+            }
+            let items = try JSONSerialization.data(withJSONObject: rows)
             var attachments: [[String: Any]] = []
-            let rows = try JSONSerialization.jsonObject(with: items) as? [[String: Any]] ?? []
             for row in rows {
                 guard let itemKey = row["key"] as? String, !itemKey.isEmpty else { continue }
                 let children = try await ZoteroLocalClient().data(
@@ -174,10 +194,15 @@ struct ZoteroLocalClient: Sendable {
     var session: URLSession = .shared
 
     func data(for request: URLRequest) async throws -> Data {
+        try await page(for: request).data
+    }
+
+    func page(for request: URLRequest) async throws -> (data: Data, total: Int?) {
         let (data, response) = try await session.data(for: request)
         guard let http = response as? HTTPURLResponse, (200..<300).contains(http.statusCode) else {
             throw URLError(.badServerResponse)
         }
-        return data
+        let total = http.value(forHTTPHeaderField: "Total-Results").flatMap(Int.init)
+        return (data, total)
     }
 }

@@ -29,66 +29,119 @@ enum BibTeXParser {
         while cursor < text.endIndex {
             guard let at = text[cursor...].firstIndex(of: "@") else { break }
             let typeStart = text.index(after: at)
-            guard let opener = text[typeStart...].firstIndex(where: { $0 == "{" || $0 == "(" }) else { break }
-            let type = text[typeStart..<opener].filter { !$0.isWhitespace }.lowercased()
-            let closer: Character = text[opener] == "{" ? "}" : ")"
-            let afterOpener = text.index(after: opener)
-            guard let comma = text[afterOpener...].firstIndex(of: ",") else { break }
-            let key = text[afterOpener..<comma].trimmingCharacters(in: .whitespacesAndNewlines)
-            var fields: [String: String] = [:]
-            var index = text.index(after: comma)
-            var depth = 1
-            var name = ""
-            var value = ""
-            var readingName = true
-            var quote: Character?
-            while index < text.endIndex && depth > 0 {
-                let character = text[index]
-                if quote != nil {
-                    if character == quote {
-                        quote = nil
-                    } else {
-                        value.append(character)
-                    }
-                } else if character == "{" || character == "(" {
-                    depth += 1
-                    if !readingName { value.append(character) }
-                } else if character == closer || character == "}" || character == ")" {
-                    depth -= 1
-                    if depth == 0 {
-                        store(&fields, name: name, value: value)
-                        break
-                    }
-                    if !readingName { value.append(character) }
-                } else if character == "\"" {
-                    quote = character
-                } else if character == "=" && readingName {
-                    readingName = false
-                } else if character == "," && depth == 1 {
-                    store(&fields, name: name, value: value)
-                    name = ""
-                    value = ""
-                    readingName = true
-                } else if readingName {
-                    name.append(character)
-                } else {
-                    value.append(character)
-                }
-                index = text.index(after: index)
+            var typeEnd = typeStart
+            while typeEnd < text.endIndex, text[typeEnd].isLetter {
+                typeEnd = text.index(after: typeEnd)
             }
-            if !["comment", "string", "preamble"].contains(type), !key.isEmpty {
-                records.append(record(key: key, fields: fields, source: "bibtex"))
+            let type = String(text[typeStart..<typeEnd]).lowercased()
+            var openerIndex = typeEnd
+            while openerIndex < text.endIndex, text[openerIndex].isWhitespace {
+                openerIndex = text.index(after: openerIndex)
             }
-            cursor = index < text.endIndex ? text.index(after: index) : text.endIndex
+            guard openerIndex < text.endIndex, text[openerIndex] == "{" || text[openerIndex] == "(" else {
+                cursor = typeEnd < text.endIndex ? typeEnd : text.endIndex
+                continue
+            }
+            let opener = text[openerIndex]
+            let closer: Character = opener == "{" ? "}" : ")"
+            let contentStart = text.index(after: openerIndex)
+            guard let contentEnd = endOfEntry(text, from: contentStart, open: opener, close: closer) else { break }
+            let content = String(text[contentStart..<contentEnd])
+            cursor = text.index(after: contentEnd)
+            if ["comment", "string", "preamble"].contains(type) { continue }
+            let parsed = fields(in: content)
+            if !parsed.key.isEmpty {
+                records.append(record(key: parsed.key, fields: parsed.fields, source: "bibtex"))
+            }
         }
         return records
     }
 
+    private static func endOfEntry(
+        _ text: String,
+        from start: String.Index,
+        open: Character,
+        close: Character
+    ) -> String.Index? {
+        var depth = 1
+        var index = start
+        var quoted = false
+        while index < text.endIndex {
+            let character = text[index]
+            if quoted {
+                if character == "\"" { quoted = false }
+            } else if character == "\"" {
+                quoted = true
+            } else if character == open {
+                depth += 1
+            } else if character == close {
+                depth -= 1
+                if depth == 0 { return index }
+            }
+            index = text.index(after: index)
+        }
+        return nil
+    }
+
+    private static func fields(in content: String) -> (key: String, fields: [String: String]) {
+        var parsed: [String: String] = [:]
+        guard let comma = separator(in: content, from: content.startIndex) else {
+            return (content.trimmingCharacters(in: .whitespacesAndNewlines), parsed)
+        }
+        let key = content[..<comma].trimmingCharacters(in: .whitespacesAndNewlines)
+        var index = content.index(after: comma)
+        while index < content.endIndex {
+            guard let equals = content[index...].firstIndex(of: "=") else { break }
+            let name = content[index..<equals]
+            var valueStart = content.index(after: equals)
+            while valueStart < content.endIndex, content[valueStart].isWhitespace {
+                valueStart = content.index(after: valueStart)
+            }
+            let end = separator(in: content, from: valueStart) ?? content.endIndex
+            store(&parsed, name: String(name), value: String(content[valueStart..<end]))
+            if end == content.endIndex { break }
+            index = content.index(after: end)
+        }
+        return (key, parsed)
+    }
+
+    private static func separator(in content: String, from start: String.Index) -> String.Index? {
+        var brace = 0
+        var quoted = false
+        var index = start
+        while index < content.endIndex {
+            let character = content[index]
+            if quoted {
+                if character == "\"" { quoted = false }
+            } else if character == "\"" {
+                quoted = true
+            } else if character == "{" {
+                brace += 1
+            } else if character == "}" && brace > 0 {
+                brace -= 1
+            } else if character == "," && brace == 0 {
+                return index
+            }
+            index = content.index(after: index)
+        }
+        return nil
+    }
+
     private static func store(_ fields: inout [String: String], name: String, value: String) {
         let key = name.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-        let cleaned = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        let cleaned = unwrap(value.trimmingCharacters(in: .whitespacesAndNewlines))
         guard !key.isEmpty, !cleaned.isEmpty else { return }
         fields[key] = cleaned
+    }
+
+    private static func unwrap(_ value: String) -> String {
+        guard value.count >= 2 else { return value }
+        let first = value.first
+        let last = value.last
+        if (first == "{" && last == "}") || (first == "\"" && last == "\"") {
+            return String(value.dropFirst().dropLast()).trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return value
     }
 
     static func record(key: String, fields: [String: String], source: String) -> BibliographicMetadata {
@@ -170,21 +223,29 @@ enum BibTeXParser {
 enum BibliographyFiles {
     static func match(_ records: [BibliographicMetadata], pdfs: [URL]) -> [BibliographyMatch] {
         records.map { record in
-            if let pdf = pdfs.first(where: { file($0, matches: record) }) {
+            if let pdf = pdfs.first(where: { stem($0) == record.citeKey.lowercased() }) {
+                return BibliographyMatch(record: record, pdf: pdf, warning: nil)
+            }
+            if let pdf = pdfs.first(where: { doiMatch($0, record: record) }) {
                 return BibliographyMatch(record: record, pdf: pdf, warning: nil)
             }
             return BibliographyMatch(record: record, pdf: nil, warning: "No PDF for \(record.citeKey)")
         }
     }
 
-    static func file(_ url: URL, matches record: BibliographicMetadata) -> Bool {
-        let stem = url.deletingPathExtension().lastPathComponent.lowercased()
-        if stem == record.citeKey.lowercased() { return true }
+    private static func stem(_ url: URL) -> String {
+        url.deletingPathExtension().lastPathComponent.lowercased()
+    }
+
+    private static func doiMatch(_ url: URL, record: BibliographicMetadata) -> Bool {
         guard let doi = record.doi?.lowercased(), !doi.isEmpty else { return false }
-        let collapsed = doi.replacingOccurrences(of: "/", with: "")
-        let underscored = doi.replacingOccurrences(of: "/", with: "_")
-        let dashed = doi.replacingOccurrences(of: "/", with: "-")
-        return [doi, collapsed, underscored, dashed].contains { stem.contains($0) }
+        let forms = [
+            doi,
+            doi.replacingOccurrences(of: "/", with: "_"),
+            doi.replacingOccurrences(of: "/", with: "-"),
+            doi.replacingOccurrences(of: "/", with: ""),
+        ]
+        return forms.contains(stem(url))
     }
 }
 
@@ -242,10 +303,14 @@ enum ZoteroLibraryParser {
 }
 
 enum ZoteroLocalAPI {
-    static func itemsRequest(baseURL: URL, apiKey: String) -> URLRequest {
+    static func itemsRequest(baseURL: URL, apiKey: String, start: Int = 0) -> URLRequest {
         var components = URLComponents(url: baseURL, resolvingAgainstBaseURL: false)
         components?.path = baseURL.path.appending("/users/0/items")
-        components?.queryItems = [URLQueryItem(name: "format", value: "json"), URLQueryItem(name: "limit", value: "100")]
+        components?.queryItems = [
+            URLQueryItem(name: "format", value: "json"),
+            URLQueryItem(name: "limit", value: "100"),
+            URLQueryItem(name: "start", value: String(start)),
+        ]
         var request = URLRequest(url: components?.url ?? baseURL)
         request.setValue(apiKey, forHTTPHeaderField: "Zotero-API-Key")
         request.setValue("3", forHTTPHeaderField: "Zotero-API-Version")
