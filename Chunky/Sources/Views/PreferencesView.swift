@@ -29,6 +29,10 @@ struct PreferencesView: View {
     @State private var isUpdatingDocling = false
     @State private var doclingUpdateStatus: String?
     @State private var showNewCollection = false
+    @State private var piReport: PiInstallReport = .unknown
+    @State private var piModels: [PiModel] = []
+    @State private var piStatusMessage = ""
+    @State private var chatAPIKeyInput = ""
 
     enum ConnectionStatus {
         case unknown, checking, connected, failed
@@ -60,17 +64,24 @@ struct PreferencesView: View {
                 }
                 .tag(3)
 
+            chatTab
+                .tabItem {
+                    Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                }
+                .tag(4)
+
             aboutTab
                 .tabItem {
                     Label("About", systemImage: "info.circle")
                 }
-                .tag(4)
+                .tag(5)
         }
         .frame(width: 500, height: 700)
         .onAppear {
             qdrantAPIKeyInput = appState.settings.qdrantAPIKey
             workerTokenInput = appState.settings.workerToken
             qdrantCloudURLInput = appState.settings.qdrantCloudURL
+            chatAPIKeyInput = appState.settings.chatAPIKey
             Task { await loadModels() }
         }
         .onDisappear {
@@ -83,6 +94,52 @@ struct PreferencesView: View {
                 embeddingModel: appState.settings.embeddingModel
             )
             .environmentObject(appState)
+        }
+    }
+
+    private var chatTab: some View {
+        ChatSettingsPane(
+            backend: $appState.settings.chatBackend,
+            piPath: $appState.settings.piExecutablePath,
+            chatAPIURL: $appState.settings.chatAPIURL,
+            piModel: $appState.settings.piModel,
+            chatModel: $appState.settings.chatModel,
+            apiKey: $chatAPIKeyInput,
+            report: piReport,
+            models: piModels,
+            statusMessage: piStatusMessage,
+            onCheck: { Task { await refreshPi() } },
+            onListModels: { Task { await listPiModels() } }
+        )
+        .padding()
+        .onChange(of: chatAPIKeyInput) { _, newValue in
+            appState.settings.chatAPIKey = newValue
+        }
+        .task {
+            await refreshPi()
+        }
+    }
+
+    private func refreshPi() async {
+        let override = appState.settings.piExecutablePath
+        let report = await Task.detached(priority: .userInitiated) {
+            PiLocator.live(overridePath: override)
+        }.value
+        piReport = report
+        piStatusMessage = ""
+    }
+
+    private func listPiModels() async {
+        piStatusMessage = ""
+        appState.piSession.setOverridePath(appState.settings.piExecutablePath)
+        do {
+            piModels = try await appState.piSession.availableModels()
+            if appState.settings.piModel.isEmpty, let first = piModels.first {
+                appState.settings.piModel = first.modelIdentifier
+            }
+        } catch {
+            piModels = []
+            piStatusMessage = error.localizedDescription
         }
     }
 

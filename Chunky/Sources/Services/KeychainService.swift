@@ -105,4 +105,5 @@ extension KeychainService {
     static let ollamaURLKey = "ollama_url"
     static let workerTokenKey = "worker_token"
     static let qdrantCloudURLKey = "qdrant_cloud_url"
+    static let chatAPIKeyKey = "chat_api_key"
 }

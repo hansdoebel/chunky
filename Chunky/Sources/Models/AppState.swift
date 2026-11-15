@@ -6,6 +6,7 @@ import Combine
 class AppState: ObservableObject {
     @Published var jobs: [ProcessingJob] = []
     @Published var settings = AppSettings()
+    let piSession = PiChatSession()
     @Published var viewMode: ViewMode = .queue
     @Published var processingMode: ProcessingMode = {
         ProcessingMode(rawValue: UserDefaults.standard.string(forKey: "chunky.processingMode") ?? "") ?? .chunkOnly
@@ -105,6 +106,24 @@ class AppState: ObservableObject {
 
     func requestCancellation() { isCancellationRequested = true }
     func resetCancellation() { isCancellationRequested = false }
+
+    deinit {
+        piSession.terminate()
+    }
+
+    func makeChat(report: PiInstallReport, http: any ChatHTTPStreaming = URLSessionChatHTTP()) -> any ChatStreaming {
+        ChatBackendFactory.make(
+            preference: ChatBackendPreference(rawValue: settings.chatBackend) ?? .automatic,
+            report: report,
+            piModel: settings.piModel,
+            chatModel: settings.chatModel,
+            apiURL: settings.chatAPIURL,
+            apiKey: settings.chatAPIKey,
+            overridePath: settings.piExecutablePath,
+            session: piSession,
+            http: http
+        )
+    }
 
     /// Connect to Qdrant if not already connected
     @MainActor

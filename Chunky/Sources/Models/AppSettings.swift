@@ -263,6 +263,27 @@ class AppSettings: ObservableObject {
         didSet { defaults.set(devboxIngestTarget.rawValue, forKey: prefix + "devboxIngestTarget") }
     }
 
+    @Published var chatBackend: String {
+        didSet { defaults.set(chatBackend, forKey: prefix + "chatBackend") }
+    }
+    @Published var piExecutablePath: String {
+        didSet { defaults.set(piExecutablePath, forKey: prefix + "piExecutablePath") }
+    }
+    @Published var chatAPIURL: String {
+        didSet { defaults.set(chatAPIURL, forKey: prefix + "chatAPIURL") }
+    }
+    @Published var chatModel: String {
+        didSet { defaults.set(chatModel, forKey: prefix + "chatModel") }
+    }
+    @Published var piModel: String {
+        didSet { defaults.set(piModel, forKey: prefix + "piModel") }
+    }
+
+    var chatAPIKey: String {
+        get { secret(KeychainService.chatAPIKeyKey) }
+        set { setSecret(KeychainService.chatAPIKeyKey, newValue) }
+    }
+
     /// Bearer token for the devbox worker. Stored in the Keychain.
     var workerToken: String {
         get { secret(KeychainService.workerTokenKey) }
@@ -371,6 +392,11 @@ class AppSettings: ObservableObject {
         self.devboxIngestTarget = DevboxIngestTarget(
             rawValue: defaults.string(forKey: prefix + "devboxIngestTarget") ?? ""
         ) ?? .localDocker
+        self.chatBackend = defaults.string(forKey: prefix + "chatBackend") ?? ChatBackendPreference.automatic.rawValue
+        self.piExecutablePath = defaults.string(forKey: prefix + "piExecutablePath") ?? ""
+        self.chatAPIURL = defaults.string(forKey: prefix + "chatAPIURL") ?? "http://127.0.0.1:11434/v1"
+        self.chatModel = defaults.string(forKey: prefix + "chatModel") ?? ""
+        self.piModel = defaults.string(forKey: prefix + "piModel") ?? ""
     }
 
     func save() {

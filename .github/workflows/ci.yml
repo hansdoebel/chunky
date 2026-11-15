@@ -112,6 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
+          rm -rf /tmp/chunky-chat-settings-screenshots
+          mkdir -p /tmp/chunky-chat-settings-screenshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -137,3 +139,18 @@ jobs:
         if: ${{ needs.changes.outputs.qdrant != 'false' }}
         working-directory: LocalPackages/qdrant-swift
         run: swift test --skip IntegrationTests
+
+      - name: Stage chat settings screenshots
+        if: always()
+        run: |
+          mkdir -p chat-screenshots
+          cp -f /tmp/chunky-chat-settings-screenshots/*.png chat-screenshots/ || true
+          ls -la chat-screenshots
+
+      - name: Upload chat settings screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: chat-settings-screenshots
+          path: chat-screenshots/*.png
+          if-no-files-found: error
