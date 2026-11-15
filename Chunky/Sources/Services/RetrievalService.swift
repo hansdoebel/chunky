@@ -235,7 +235,9 @@ struct RetrievalHit: Identifiable, Equatable, Sendable {
     var score: Double
     var text: String
     var source: String
+    var docTitle: String
     var page: Int?
+    var pageEnd: Int?
     var headings: [String]
     var payload: [String: String]
 
@@ -253,17 +255,31 @@ struct RetrievalHit: Identifiable, Equatable, Sendable {
         self.score = Double(result.score)
         self.text = result.text
         self.source = result.source
+        self.docTitle = result.metadata["doc_title"] ?? ""
         self.page = result.page
+        self.pageEnd = Int(result.metadata["page_end"] ?? "")
         self.headings = result.headings
         self.payload = payload
     }
 
-    init(id: String, score: Double, text: String, source: String, page: Int?, headings: [String], payload: [String: String]) {
+    init(
+        id: String,
+        score: Double,
+        text: String,
+        source: String,
+        page: Int?,
+        headings: [String],
+        payload: [String: String],
+        docTitle: String = "",
+        pageEnd: Int? = nil
+    ) {
         self.id = id
         self.score = score
         self.text = text
         self.source = source
+        self.docTitle = docTitle.isEmpty ? (payload["doc_title"] ?? "") : docTitle
         self.page = page
+        self.pageEnd = pageEnd ?? Int(payload["page_end"] ?? "")
         self.headings = headings
         self.payload = payload
     }
@@ -918,6 +934,8 @@ extension RetrievalHit {
         let flat = Self.flatten(payloadObject)
         let headings = Self.headings(from: payloadObject["headings"])
         let page = Self.pageNumber(payloadObject["page"])
+        let pageEnd = Self.pageNumber(payloadObject["page_end"])
+        let docTitle = payloadObject["doc_title"] as? String ?? ""
         let identifier: String
         if let text = workerRow["id"] as? String {
             identifier = text
@@ -933,7 +951,9 @@ extension RetrievalHit {
             source: flat["source"] ?? "",
             page: page,
             headings: headings,
-            payload: flat
+            payload: flat,
+            docTitle: docTitle,
+            pageEnd: pageEnd
         )
     }
 

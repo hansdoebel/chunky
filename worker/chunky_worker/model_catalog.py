@@ -30,7 +30,7 @@ KNOWN_VLM = {
 
 RECOMMENDED = {
     "devbox": [
-        "qwen3-embedding",
+        "qwen3-embedding:0.6b",
         "ibm-granite/granite-docling-258M",
         "ibm-granite/granite-vision-3.3-2b",
     ],

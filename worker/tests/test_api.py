@@ -62,7 +62,7 @@ def test_models_lists_embeddings_and_known_vlms(client):
     for name in MLX_VLM_MODELS:
         assert vlm_names[name]["available"] is False
         assert "Apple-only" in vlm_names[name]["reason"]
-    assert "qwen3-embedding" in body["recommended"]["devbox"]
+    assert "qwen3-embedding:0.6b" in body["recommended"]["devbox"]
     assert body["recommended"]["mac"] == ["granite-docling-mlx"]
 
 def test_cached_model_is_available_and_download_stays_local(tmp_settings):

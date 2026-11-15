@@ -7,7 +7,19 @@ Use the MacBook in two ways:
 
 The Mac Studio path over 10GbE stays the default for heavy ingest. See [devbox-setup.md](devbox-setup.md). This guide covers the MacBook over local Wi-Fi and an optional Tailscale path for a stable name and for access when you are not on the LAN.
 
-Do not commit addresses or the bearer token. There is no Tailscale SDK in the app. The worker is a URL plus the token.
+Do not commit addresses or the bearer token. There is no Tailscale SDK in the app. The worker is a URL plus the token. Model ids and why they were picked are in [models.md](models.md).
+
+## Install and test today
+
+This is the short path for the M4 Max against the devbox worker. Addresses stay on the machines.
+
+1. On the Mac: Xcode 27.2, then `make first-launch` and `make setup-venv` in this repo. Build with `make run`.
+2. On the devbox, the worker is already bound off loopback with a bearer token. Confirm `curl -sS http://DEVBOX_LAN_IP:8080/v1/health`.
+3. On the devbox, pull the embedding tag the collection uses: `ollama pull qwen3-embedding:0.6b`. Do not pull bare `qwen3-embedding`. That tag is the 8B model and its vectors are 4096 wide.
+4. In the app, Preferences, Documents: Processing host **Devbox**. Save a Wi-Fi LAN profile with `http://DEVBOX_LAN_IP:8080` or `http://HOSTNAME.local:8080` and the token. Press Use, then Check reachability. A green result includes a latency.
+5. Preferences, Qdrant. For Devbox ingest **Qdrant Cloud**, fill **Qdrant Cloud URL** and the API key. That pair is what the job and Retrieval send. **Server URL** is the Local Docker address on the Mac (`http://localhost:6334` after `make qdrant`). An empty Cloud URL makes the first Cloud ingest fail.
+6. Embedding model `qwen3-embedding:0.6b`, dimensions 1024. VLM Granite-Docling (the devbox preset, not the MLX build). Layout Heron. Drop one PDF on the queue and run Chunk & Ingest.
+7. Open Retrieval, search that collection, and confirm a hit. Hybrid and rerank can wait until that search works. If the width is wrong, the job fails with `dimension_mismatch`. Create a new collection instead of reusing one built with another model.
 
 ## Recommendation
 
@@ -73,7 +85,7 @@ Narrow the Tailscale source to the MacBook and Mac Studio tailnet addresses once
 ## Local Mac on the M4 Max MacBook Pro
 
 1. Install Xcode, then run `make first-launch` and `make setup-venv`.
-2. Start local Ollama and pull `qwen3-embedding` if you embed on the laptop.
+2. Start local Ollama and pull `qwen3-embedding:0.6b` if you embed on the laptop. The bare `qwen3-embedding` tag is the 8B model.
 3. In Preferences, Documents, set Processing host to **Local Mac**.
 4. VLM: Granite-Docling 258M (MLX) or SmolDocling 256M (MLX). **Standard (no VLM)** uses the classic pipeline.
 5. In Preferences, Qdrant, set **Server URL** to the Qdrant Cloud address and enter the API key. Local Mac ingest uses **Server URL**. The **Qdrant Cloud URL** field is only for Devbox ingest and is ignored on Local Mac. For Docker on the laptop, leave **Server URL** at `http://localhost:6334` after `make qdrant`.

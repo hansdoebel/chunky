@@ -19,6 +19,8 @@ actor DoclingService {
         let pictureDescription: String?
         let pictureClass: String?
         let tableMarkdown: String?
+        let pageEnd: Int?
+        let bboxes: [ProvenanceBox]?
 
         enum CodingKeys: String, CodingKey {
             case text
@@ -30,7 +32,17 @@ actor DoclingService {
             case pictureDescription = "picture_description"
             case pictureClass = "picture_class"
             case tableMarkdown = "table_markdown"
+            case pageEnd = "page_end"
+            case bboxes
         }
+    }
+
+    struct ProvenanceBox: Codable, Sendable {
+        let page: Int?
+        let l: Double
+        let t: Double
+        let r: Double
+        let b: Double
     }
 
     struct ConversionResult: Codable, Sendable {

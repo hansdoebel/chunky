@@ -146,7 +146,9 @@ class DocumentProcessor: ObservableObject {
                         embeddingText: pc.embeddingText,
                         pictureDescription: pc.pictureDescription,
                         pictureClass: pc.pictureClass,
-                        tableMarkdown: pc.tableMarkdown
+                        tableMarkdown: pc.tableMarkdown,
+                        pageEnd: pc.pageEnd,
+                        bboxesJSON: Self.bboxesJSON(pc.bboxes)
                     )
                 }
             } else {
@@ -419,6 +421,27 @@ class DocumentProcessor: ObservableObject {
         }
     }
 
+    private static func bboxesJSON(_ value: Any?) -> String? {
+        guard let value else { return nil }
+        if let text = value as? String, !text.isEmpty { return text }
+        guard JSONSerialization.isValidJSONObject(value),
+              let data = try? JSONSerialization.data(withJSONObject: value),
+              let text = String(data: data, encoding: .utf8),
+              !text.isEmpty
+        else { return nil }
+        return text
+    }
+
+    private static func bboxesJSON(_ boxes: [DoclingService.ProvenanceBox]?) -> String? {
+        guard let boxes, !boxes.isEmpty else { return nil }
+        let rows: [[String: Any]] = boxes.map { box in
+            var row: [String: Any] = ["l": box.l, "t": box.t, "r": box.r, "b": box.b]
+            if let page = box.page { row["page"] = page }
+            return row
+        }
+        return bboxesJSON(rows)
+    }
+
     private func contentHash(text: String, model: String) -> String {
         let input = text + "|" + model
         let digest = SHA256.hash(data: Data(input.utf8))
@@ -460,6 +483,12 @@ class DocumentProcessor: ObservableObject {
             }
             if let tableMarkdown = chunk.tableMarkdown, !tableMarkdown.isEmpty {
                 metadata["table_markdown"] = tableMarkdown
+            }
+            if let pageEnd = chunk.pageEnd {
+                metadata["page_end"] = String(pageEnd)
+            }
+            if let bboxesJSON = chunk.bboxesJSON, !bboxesJSON.isEmpty {
+                metadata["bboxes"] = bboxesJSON
             }
             let storedText = (chunk.embeddingText?.isEmpty == false) ? chunk.embeddingText! : chunk.text
             return ChunkPoint(
@@ -869,7 +898,9 @@ class DocumentProcessor: ObservableObject {
                 embeddingText: raw["embedding_text"] as? String,
                 pictureDescription: raw["picture_description"] as? String,
                 pictureClass: raw["picture_class"] as? String,
-                tableMarkdown: raw["table_markdown"] as? String
+                tableMarkdown: raw["table_markdown"] as? String,
+                pageEnd: (raw["page_end"] as? NSNumber)?.intValue,
+                bboxesJSON: Self.bboxesJSON(raw["bboxes"])
             )
         }
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)

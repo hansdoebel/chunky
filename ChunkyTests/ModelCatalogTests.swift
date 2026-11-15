@@ -35,9 +35,8 @@ struct ModelCatalogTests {
             ManagedModel(name: "qwen3-embedding:latest", state: .installed, size: 4096, digest: "abc", quantization: "Q8_0", parameterSize: "0.6B", source: "ollama", mlx: false)
         ]
         let marked = ModelCatalog.marking(devbox, inventory: inventory, downloading: ["ibm-granite/granite-docling-258M"])
-        #expect(marked.first { $0.name == "qwen3-embedding" }?.state == .installed)
-        #expect(marked.first { $0.name == "qwen3-embedding" }?.size == 4096)
-        #expect(marked.first { $0.name == "qwen3-embedding" }?.downloadKind == "ollama")
+        #expect(marked.first { $0.name == "qwen3-embedding:0.6b" }?.state == .missing)
+        #expect(marked.first { $0.name == "qwen3-embedding:0.6b" }?.downloadKind == "ollama")
         #expect(marked.first { $0.name == "ibm-granite/granite-docling-258M" }?.downloadKind == "huggingface")
         #expect(marked.first { $0.name == "ibm-granite/granite-docling-258M" }?.state == .downloading)
         #expect(marked.first { $0.name == "ibm-granite/granite-vision-3.3-2b" }?.state == .missing)

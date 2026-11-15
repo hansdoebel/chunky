@@ -50,6 +50,8 @@ actor ChunkingService {
         let pictureDescription: String?
         let pictureClass: String?
         let tableMarkdown: String?
+        let pageEnd: Int?
+        let bboxesJSON: String?
 
         init(
             id: String = UUID().uuidString,
@@ -73,7 +75,9 @@ actor ChunkingService {
             embeddingText: String? = nil,
             pictureDescription: String? = nil,
             pictureClass: String? = nil,
-            tableMarkdown: String? = nil
+            tableMarkdown: String? = nil,
+            pageEnd: Int? = nil,
+            bboxesJSON: String? = nil
         ) {
             self.id = id
             self.text = text
@@ -97,6 +101,8 @@ actor ChunkingService {
             self.pictureDescription = pictureDescription
             self.pictureClass = pictureClass
             self.tableMarkdown = tableMarkdown
+            self.pageEnd = pageEnd
+            self.bboxesJSON = bboxesJSON
         }
 
         func replacing(text: String, formattedContent: String, contentType: String, tokenCount: Int) -> DocumentChunk {
@@ -122,7 +128,9 @@ actor ChunkingService {
                 embeddingText: embeddingText,
                 pictureDescription: pictureDescription,
                 pictureClass: pictureClass,
-                tableMarkdown: tableMarkdown
+                tableMarkdown: tableMarkdown,
+                pageEnd: pageEnd,
+                bboxesJSON: bboxesJSON
             )
         }
     }

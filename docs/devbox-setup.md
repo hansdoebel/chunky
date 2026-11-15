@@ -83,8 +83,10 @@ Set `CHUNKY_EMBEDDING_BACKEND=openai`, `CHUNKY_EMBEDDING_URL=http://127.0.0.1:80
 Ollama remains available:
 
 ```bash
-ollama pull qwen3-embedding
+ollama pull qwen3-embedding:0.6b
 ```
+
+`qwen3-embedding` with no tag, and `qwen3-embedding:latest`, are the 8B model (4096 dimensions) on the Ollama library as of 15 Nov 2026. The app default is the explicit `qwen3-embedding:0.6b` tag and 1024 dimensions. A different width needs a new collection. Model choices, serve commands, and the MacBook checklist are in [models.md](models.md).
 
 Generate a token and bind the worker to the 10GbE address in `worker/deploy/chunky-worker.service`:
 

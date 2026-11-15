@@ -15,7 +15,7 @@ struct RAGAnswerText: View {
                         .textSelection(.enabled)
                 case .citation(let citation):
                     Button(action: { onSelect(citation) }) {
-                        Text("\(citation.marker) \(citation.id)")
+                        Text("\(citation.marker) \(citation.citeLabel)")
                             .font(.body.weight(.semibold))
                     }
                     .buttonStyle(.bordered)
@@ -264,11 +264,12 @@ struct RetrievalPlayground: View {
                     .padding(.horizontal, 6)
                     .padding(.vertical, 2)
                     .background(AppTheme.accentFallback.opacity(0.18), in: Capsule())
-                Text(hit.source.isEmpty ? "unknown source" : hit.source)
+                Text(hit.docTitle.isEmpty ? (hit.source.isEmpty ? "unknown source" : hit.source) : hit.docTitle)
                     .font(.caption)
                     .lineLimit(1)
                 if let page = hit.page {
-                    Text("p. \(page)")
+                    let range = hit.pageEnd.flatMap { $0 == page ? nil : "–\($0)" } ?? ""
+                    Text("p. \(page)\(range)")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

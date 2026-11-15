@@ -35,9 +35,32 @@ def test_plain_text_has_no_visual_fields():
     assert record["embedding_text"] == "Hello"
     assert record["content_type"] == "text"
     assert record["page"] == 2
+    assert record["page_end"] == 2
+    assert record["pages"] == [2]
     assert record["headings"] == ["Intro"]
     assert "picture_description" not in record
     assert "table_markdown" not in record
+
+def test_span_keeps_every_page_box_and_printed_label():
+    first = SimpleNamespace(
+        label="text",
+        prov=[
+            SimpleNamespace(page_no=3, page_label="12", bbox=SimpleNamespace(l=1, t=2, r=3, b=4)),
+            SimpleNamespace(page_no=4, page_label=None, bbox=SimpleNamespace(l=0, t=10, r=20, b=0)),
+        ],
+        annotations=[],
+    )
+    record = record_from_chunk(_chunk("Across", "Across", [first], ["Methods", "Setup"]), 2, Chunker())
+    assert record["page"] == 3
+    assert record["page_end"] == 4
+    assert record["pages"] == [3, 4]
+    assert record["page_labels"] == ["12"]
+    assert record["bboxes"] == [
+        {"l": 1.0, "t": 2.0, "r": 3.0, "b": 4.0, "page": 3},
+        {"l": 0.0, "t": 10.0, "r": 20.0, "b": 0.0, "page": 4},
+    ]
+    assert record["headings"] == ["Methods", "Setup"]
+
 
 def test_picture_keeps_description_and_class():
     annotation = SimpleNamespace(

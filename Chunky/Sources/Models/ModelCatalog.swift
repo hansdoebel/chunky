@@ -77,7 +77,7 @@ enum ModelCatalog {
             names = ["granite-docling-mlx"]
         case .devbox:
             names = [
-                "qwen3-embedding",
+                EmbeddingWidth.defaultModel,
                 "ibm-granite/granite-docling-258M",
                 "ibm-granite/granite-vision-3.3-2b",
             ]

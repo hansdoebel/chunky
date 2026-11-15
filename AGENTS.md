@@ -7,11 +7,11 @@ Chunky is a macOS app that turns documents into chunks and Qdrant vectors. Heavy
 - `Chunky/` is the macOS app. `Sources/Models` holds settings, jobs, and eval records. `Sources/Services` holds Docling, Ollama, Qdrant, the worker client, retrieval, pi, and the MCP server. `Sources/Views` is SwiftUI. `Resources/Scripts` is the local Docling pipeline.
 - `worker/` is the FastAPI worker (`chunky_worker`). It converts, chunks, embeds, ingests to Qdrant Cloud, and searches. It does not ship a web UI and it does not call a reranker.
 - `LocalPackages/qdrant-swift` is the vendored gRPC and REST client. `Sources/QdrantProto` is generated. Leave those files generated.
-- `docs/` is the operator guide. `worker/README.md` is the HTTP API.
+- `docs/` is the operator guide. `docs/models.md` is the model choice for the Mac and the ROCm devbox. `worker/README.md` is the HTTP API.
 
 The app windows are Queue, Collections, Retrieval, Eval, Analytics, and Benchmark. Processing host is Local Mac or Devbox. Devbox URLs are named profiles (Mac Studio 10GbE, Wi-Fi LAN, Tailscale). A profile is a name, a base URL, and a Keychain token. Use applies it. Check reachability calls `GET /v1/health`, then `GET /v1/models`, and reports unreachable, HTTP 401, App Transport Security, success, and latency.
 
-Retrieval searches the active collection. Dense is the default. Hybrid fuses the dense vector with Qdrant BM25 using RRF. An optional rerank step calls an OpenAI-compatible `/v1/rerank` endpoint from the Mac. Eval scores a JSON set with recall@k, MRR, nDCG, and hit rate. RAG chat in the Retrieval tab turns the hits into numbered citations and answers with pi or an OpenAI-compatible chat API. `Chunky --mcp` exposes `search` and `list_collections` on stdio for pi and other MCP clients.
+Retrieval searches the active collection. A chunk payload keeps `page` and `page_end` (PDF page index, not a printed journal label), `headings`, `bboxes` when Docling recorded them, and `doc_title`, `authors`, `year`, and `doi` when the document description has them. Dense is the default. Hybrid fuses the dense vector with Qdrant BM25 using RRF. An optional rerank step posts Cohere-style JSON (`model`, `query`, `documents`, `top_n`) to the URL in Preferences and reads `results[].relevance_score`. The worker does not call a reranker. Eval scores a JSON set with recall@k, MRR, nDCG, and hit rate. RAG chat in the Retrieval tab turns the hits into numbered citations and answers with pi or an OpenAI-compatible chat API. `Chunky --mcp` exposes `search` and `list_collections` on stdio for pi and other MCP clients.
 
 ## Toolchain
 

@@ -133,17 +133,86 @@ def visual_fields(doc_items, doc=None) -> dict[str, str]:
         fields["table_markdown"] = "\n\n".join(tables)
     return fields
 
-def _page_number(item) -> int | None:
+def _prov_entries(item) -> list:
     prov = getattr(item, "prov", None)
+    if isinstance(item, dict) and prov is None:
+        prov = item.get("prov")
     if not prov:
+        return []
+    if isinstance(prov, list):
+        return prov
+    return [prov]
+
+
+def _page_number_of(entry) -> int | None:
+    page = getattr(entry, "page_no", None)
+    if page is None and isinstance(entry, dict):
+        page = entry.get("page_no")
+    if isinstance(page, bool):
         return None
-    first = prov[0] if isinstance(prov, list) else prov
-    page = getattr(first, "page_no", None)
-    if page is None and isinstance(first, dict):
-        page = first.get("page_no")
     if isinstance(page, int):
         return page
+    if isinstance(page, float) and page.is_integer():
+        return int(page)
     return None
+
+
+def _page_label_of(entry) -> str | None:
+    label = getattr(entry, "page_label", None)
+    if label is None and isinstance(entry, dict):
+        label = entry.get("page_label")
+    return _text(label)
+
+
+def _bbox_of(entry) -> dict[str, float] | None:
+    box = getattr(entry, "bbox", None)
+    if box is None and isinstance(entry, dict):
+        box = entry.get("bbox")
+    if box is None:
+        return None
+
+    def coord(name: str):
+        value = box.get(name) if isinstance(box, dict) else getattr(box, name, None)
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return None
+        return float(value)
+
+    coords = {name: coord(name) for name in ("l", "t", "r", "b")}
+    if any(value is None for value in coords.values()):
+        return None
+    return coords
+
+
+def provenance(doc_items) -> dict:
+    """Page span, printed labels when present, and boxes from Docling provenance."""
+    pages: list[int] = []
+    labels: list[str] = []
+    boxes: list[dict] = []
+    for item in doc_items or []:
+        for entry in _prov_entries(item):
+            page = _page_number_of(entry)
+            if page is not None and page not in pages:
+                pages.append(page)
+            label = _page_label_of(entry)
+            if label and label not in labels:
+                labels.append(label)
+            box = _bbox_of(entry)
+            if box is not None:
+                recorded = dict(box)
+                if page is not None:
+                    recorded["page"] = page
+                boxes.append(recorded)
+    pages = sorted(pages)
+    fields: dict = {}
+    if pages:
+        fields["page"] = pages[0]
+        fields["page_end"] = pages[-1]
+        fields["pages"] = pages
+    if labels:
+        fields["page_labels"] = labels
+    if boxes:
+        fields["bboxes"] = boxes
+    return fields
 
 def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     """One chunk dict. ``text`` stays raw. ``embedding_text`` is the serialized form."""
@@ -152,10 +221,8 @@ def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     meta = getattr(chunk, "meta", None)
     if meta is not None and getattr(meta, "doc_items", None):
         items = list(meta.doc_items)
-    page = None
     content_type = "text"
     if items:
-        page = _page_number(items[0])
         label = _label(items[0])
         if label:
             content_type = label
@@ -163,14 +230,18 @@ def record_from_chunk(chunk, index: int, chunker, doc=None) -> dict:
     if meta is not None and getattr(meta, "headings", None):
         headings = [str(heading) for heading in meta.headings]
     token_count = chunker.tokenizer.count_tokens(chunk.text)
+    located = provenance(items)
     record = {
         "text": chunk.text,
         "embedding_text": contextualized,
-        "page": page,
+        "page": located.get("page"),
         "headings": headings,
         "content_type": content_type,
         "chunk_index": index,
         "token_count": token_count,
     }
+    for key in ("page_end", "pages", "page_labels", "bboxes"):
+        if key in located:
+            record[key] = located[key]
     record.update(visual_fields(items, doc))
     return record

@@ -1,7 +1,7 @@
 # Chunky worker
 
 HTTP worker for Docling conversion, HybridChunker, embeddings, Qdrant ingest,
-and search on a Linux host (the Ubuntu devbox). The macOS app calls this API
+and search on a Linux host (the Ubuntu devbox). Model ids for that host are in `docs/models.md`. The macOS app calls this API
 when the Devbox processing host is selected and a saved worker profile is in use.
 
 This package wraps the existing scripts in `Chunky/Resources/Scripts/`
