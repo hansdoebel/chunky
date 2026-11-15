@@ -74,6 +74,7 @@ class JobSettings(BaseModel):
     contextual_chat_url: str = ""
     contextual_prompt: str = "v1"
     cache_options: str = ""
+    grobid_url: str = ""
     ollama_url: str | None = None
     embedding_model: str | None = None
     embedding_backend: str = ""
@@ -143,6 +144,7 @@ class JobResult(BaseModel):
     ingest: IngestReceipt | None = None
     metrics: dict[str, Any] | None = None
     verification_status: str | None = None
+    reference_warning: str | None = None
 
 class Job(BaseModel):
     id: str

@@ -175,6 +175,46 @@ def _enrich_context(
         raise JobCanceled() from None
 
 
+def _grobid_tei(url: str, pdf_path: Path) -> str | None:
+    import httpx
+
+    if not url or pdf_path.suffix.lower() != ".pdf":
+        return None
+    try:
+        with pdf_path.open("rb") as handle:
+            response = httpx.post(url, files={"input": handle}, timeout=30)
+    except (OSError, httpx.HTTPError):
+        return None
+    if response.status_code != 200:
+        return None
+    return response.text or None
+
+
+def _attach_references(
+    chunks: list[dict[str, Any]],
+    pdf_path: Path,
+    settings: JobSettings,
+    raw: dict[str, Any],
+) -> list[dict[str, Any]]:
+    import sys
+
+    scripts = str(Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts")
+    if scripts not in sys.path:
+        sys.path.insert(0, scripts)
+    try:
+        from references import attach_references, section_text
+
+        xml = _grobid_tei(settings.grobid_url, pdf_path) if settings.grobid_url else None
+        chunks, references, warnings = attach_references(chunks, section_text(chunks), xml)
+    except (OSError, ValueError):
+        raw["reference_warning"] = "reference parsing failed"
+        return chunks
+    raw["references"] = references
+    if warnings:
+        raw["reference_warning"] = "; ".join(warnings)
+    return chunks
+
+
 def _crossref_lookup(doi: str) -> dict[str, Any] | None:
     import httpx
 
@@ -499,6 +539,9 @@ class JobRunner:
             if job.settings.metadata_enrich:
                 chunks = _enrich_bibliography(chunks, input_path, job.settings, raw)
             chunks = _enrich_context(chunks, input_path, job.settings, raw, self.chunk_cache, cancel_event)
+            chunks = _attach_references(chunks, input_path, job.settings, raw)
+            if raw.get("reference_warning"):
+                self._emit(job_id, str(raw["reference_warning"]), type="warning")
             raw["chunks"] = chunks
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset
@@ -525,6 +568,7 @@ class JobRunner:
                 language=raw.get("language"),
                 year=year,
                 chunks=chunks,
+                reference_warning=raw.get("reference_warning"),
             )
 
             if needs_embeddings(job.settings):
