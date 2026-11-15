@@ -57,6 +57,11 @@ struct ChunkCacheTests {
         let other = try store.lookup(key, embeddingModel: "other", embeddingDimension: 4)
         #expect(other?.vectorHit == false)
         #expect(other?.chunks.count == 1)
+        _ = try store.store(key: key, document: document, chunks: [ChunkCacheChunk.normalize(["text": "replaced"])])
+        #expect(try store.lookup(key, embeddingModel: "qwen3-embedding", embeddingDimension: 4)?.vectorHit == false)
+        #expect(throws: ChunkCacheError.invalidVectors) {
+            try store.storeVectors(key: key, model: "qwen3-embedding", dimension: 4, vectors: [[0.1, 0.2, 0.3, 0.4], [0.1, 0.2, 0.3, 0.4]])
+        }
 
         let tight = ChunkCacheStore(directory: root.appendingPathComponent("tight"), limitBytes: 1)
         let first = ChunkCacheKey(contentSHA256: String(repeating: "a", count: 64), doclingVersion: "2.64.0", pipeline: "standard", tokenizer: "", maxTokens: 512)
