@@ -19,6 +19,7 @@ final class RetrievalEvalRecord {
     var hitRate: Double
     var latencyMs: Double
     var queries: Int
+    var scope: String = ""
 
     init(draft: RetrievalEvalDraft) {
         runID = draft.runID
@@ -36,6 +37,7 @@ final class RetrievalEvalRecord {
         hitRate = draft.score.hitRate
         latencyMs = draft.score.latencyMs
         queries = draft.score.queries
+        scope = draft.scope
     }
 }
 
@@ -123,13 +125,15 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
     var reranker: Bool
     var setIdentity: String
     var score: RetrievalEvalScore
+    var scope: String
 
     var id: UUID { runID }
 
     var label: String {
         let fusion = hybrid ? "hybrid" : "dense"
         let rank = reranker ? "rerank" : "no rerank"
-        return "\(setIdentity) · k\(score.k) · \(embeddingModel) · \(chunking) · \(fusion) · \(rank)"
+        let base = "\(setIdentity) · k\(score.k) · \(embeddingModel) · \(chunking) · \(fusion) · \(rank)"
+        return scope.isEmpty ? base : "\(base) · \(scope)"
     }
 
     init(record: RetrievalEvalRecord) {
@@ -150,6 +154,7 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
             k: record.k,
             queries: record.queries
         )
+        scope = record.scope
     }
 
     init(
@@ -161,7 +166,8 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
         hybrid: Bool,
         reranker: Bool,
         setIdentity: String,
-        score: RetrievalEvalScore
+        score: RetrievalEvalScore,
+        scope: String = ""
     ) {
         self.runID = runID
         self.createdAt = createdAt
@@ -172,6 +178,7 @@ struct RetrievalEvalDraft: Equatable, Identifiable, Sendable {
         self.reranker = reranker
         self.setIdentity = setIdentity
         self.score = score
+        self.scope = scope
     }
 }
 
@@ -418,7 +425,8 @@ struct RetrievalEvalRunner {
             hybrid: config.hybrid,
             reranker: config.reranker,
             setIdentity: RetrievalEvalSets.identity(name: set.name, queries: set.queries),
-            score: RetrievalEvalMetrics.summarize(rows, k: config.k)
+            score: RetrievalEvalMetrics.summarize(rows, k: config.k),
+            scope: RetrievalFilter.scopeLabel(config.filters)
         )
     }
 }

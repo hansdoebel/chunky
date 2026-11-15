@@ -207,6 +207,31 @@ struct RetrievalFilter: Equatable, Sendable {
         return filters
     }
 
+    static func scopeLabel(_ filters: [RetrievalFilter]) -> String {
+        filters.map(\.labelToken).joined(separator: ",")
+    }
+
+    var labelToken: String {
+        var parts = [key]
+        switch match {
+        case .text(let value):
+            parts.append(value)
+        case .integer(let value):
+            parts.append(String(value))
+        case .boolean(let value):
+            parts.append(value ? "true" : "false")
+        case .contains(let value):
+            parts.append("~\(value)")
+        case nil:
+            break
+        }
+        if let gt { parts.append("gt\(gt)") }
+        if let gte { parts.append("gte\(gte)") }
+        if let lt { parts.append("lt\(lt)") }
+        if let lte { parts.append("lte\(lte)") }
+        return parts.joined(separator: ":")
+    }
+
     static func keeps(_ payload: [String: Any], filters: [RetrievalFilter]) -> Bool {
         filters.allSatisfy { $0.matches(payload) }
     }

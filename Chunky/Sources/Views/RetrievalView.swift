@@ -122,7 +122,16 @@ struct RetrievalPlayground: View {
         .background(AppTheme.surfaceGrouped)
     }
 
+    @ViewBuilder
     private var controls: some View {
+        if scrolls {
+            ScrollView(.vertical) { controlFields }
+        } else {
+            controlFields
+        }
+    }
+
+    private var controlFields: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Retrieval")
                 .font(.headline)

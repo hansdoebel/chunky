@@ -239,6 +239,36 @@ def _keeps(payload, query_filter) -> bool:
                 return False
     return True
 
+def test_index_setup_runs_once_per_collection():
+    class IndexedQdrant(FakeQdrant):
+        def __init__(self):
+            super().__init__()
+            self.indexes = []
+
+        def create_payload_index(self, **kwargs):
+            self.indexes.append(kwargs.get("field_name"))
+
+    fake = IndexedQdrant()
+    searcher = QdrantPointSearcher(client_factory=lambda url, api_key: fake)
+    arguments = dict(
+        url="http://127.0.0.1:6333",
+        api_key="",
+        collection="documents",
+        vector=[0.1, 0.2, 0.3],
+        limit=1,
+        offset=0,
+        filters=[],
+        score_threshold=None,
+        using="dense",
+    )
+    searcher.query_dense(**arguments)
+    first = len(fake.indexes)
+    searcher.query_dense(**arguments)
+    assert first > 0
+    assert len(fake.indexes) == first
+    searcher.query_dense(**{**arguments, "collection": "notes"})
+    assert len(fake.indexes) == first * 2
+
 def test_searcher_sends_dense_query_shape():
     fake = FakeQdrant(named="dense")
     opened = []

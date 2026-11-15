@@ -402,13 +402,15 @@ def _default_client(url: str, api_key: str):
         return QdrantClient(url=url, api_key=api_key, timeout=30)
     return QdrantClient(url=url, timeout=30)
 
-def _ensure_filter_indexes(client: Any, collection: str) -> None:
+def _ensure_filter_indexes(client: Any, collection: str) -> bool:
     try:
         from chunky_worker.qdrant_ingest import ensure_payload_indexes
 
         ensure_payload_indexes(client, collection)
     except Exception:
         log.debug("payload index ensure skipped for %s", collection)
+        return False
+    return True
 
 def _payload_dict(payload: Any) -> dict[str, Any]:
     if payload is None:
@@ -425,6 +427,14 @@ def _payload_dict(payload: Any) -> dict[str, Any]:
 class QdrantPointSearcher:
     def __init__(self, client_factory: Callable[[str, str], Any] | None = None) -> None:
         self._client_factory = client_factory or _default_client
+        self._indexed: set[tuple[str, str]] = set()
+
+    def _ensure_indexes(self, client: Any, url: str, collection: str) -> None:
+        key = (_destination_key(url), collection)
+        if key in self._indexed:
+            return
+        if _ensure_filter_indexes(client, collection):
+            self._indexed.add(key)
 
     def _open(self, url: str, api_key: str):
         if not url:
@@ -470,7 +480,7 @@ class QdrantPointSearcher:
     ) -> list[ScoredHit]:
         client = self._open(url, api_key)
         try:
-            _ensure_filter_indexes(client, collection)
+            self._ensure_indexes(client, url, collection)
             response = client.query_points(
                 collection_name=collection,
                 query=vector,
@@ -523,7 +533,7 @@ class QdrantPointSearcher:
     ) -> list[ScoredHit]:
         client = self._open(url, api_key)
         try:
-            _ensure_filter_indexes(client, collection)
+            self._ensure_indexes(client, url, collection)
             arguments = hybrid_query_arguments(
                 vector=vector,
                 text=text,

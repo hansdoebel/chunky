@@ -171,6 +171,26 @@ struct RetrievalEvalTests {
         #expect(try store.allDrafts().isEmpty)
     }
 
+    @Test func differentScopesStaySeparateComparisons() throws {
+        let store = try RunHistoryStore(inMemory: true)
+        let open = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: false, reranker: false, recall: 0.4, latency: 40)
+        var year = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: false, reranker: false, recall: 0.8, latency: 40)
+        year.scope = RetrievalFilter.scopeLabel(RetrievalFilter.scope(yearFrom: "2020", yearTo: "2024", author: "Ada"))
+        var author = year
+        author.scope = RetrievalFilter.scopeLabel(RetrievalFilter.scope(author: "Bea"))
+        author.score.recallAtK = 0.2
+        try store.insert(open)
+        try store.insert(year)
+        try store.insert(author)
+        let loaded = try store.evalDrafts()
+        #expect(loaded.contains { $0.scope == year.scope })
+        let compared = RetrievalEvalHistory.compare(loaded)
+        #expect(compared.count == 3)
+        #expect(compared.contains { $0.label.contains("year:") && $0.label.contains("authors:~Ada") && $0.runs == 1 })
+        #expect(compared.contains { $0.label.contains("authors:~Bea") && $0.runs == 1 })
+        #expect(compared.contains { $0.runs == 1 && !$0.label.contains("authors:") })
+    }
+
     @Test @MainActor func evalViewRendersAColoredScreenshot() throws {
         let runs = [
             sample(model: "qwen3-embedding", chunking: "512/64", hybrid: false, reranker: false, recall: 0.42, latency: 40),
