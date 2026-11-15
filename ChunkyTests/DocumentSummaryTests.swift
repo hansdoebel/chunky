@@ -41,6 +41,11 @@ struct DocumentSummaryTests {
         #expect(!choice.text.contains("Much later."))
     }
 
+    @Test func summaryIdentityIsStableForASource() {
+        #expect(DocumentSummary.summaryID(source: "paper.pdf") == "bdefd408-de82-54f7-b74f-8478d8f689e9")
+        #expect(DocumentSummary.summaryID(source: "paper.pdf") == DocumentSummary.summaryID(source: "paper.pdf"))
+    }
+
     @Test func defaultSearchDropsSummaryPointsAndPapersFirstKeepsThem() {
         let settings = IsolatedSettings.make()
         let chunks = RetrievalRequest.make(text: "revenue", collection: "documents", limit: 8, settings: settings).scopedFilters()

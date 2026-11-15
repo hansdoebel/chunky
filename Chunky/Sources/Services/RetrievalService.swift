@@ -400,6 +400,7 @@ struct RetrievalRequest: Equatable, Sendable {
     func scopedFilters() -> [RetrievalFilter] {
         var items = filters.filter { $0.key != "record_type" }
         if papersFirst {
+            items = items.filter { !DocumentSummary.passageOnlyKeys.contains($0.key) }
             items.append(RetrievalFilter(key: "record_type", match: .text(DocumentSummary.documentRecord)))
         } else {
             items.append(RetrievalFilter(key: "record_type", match: .text(DocumentSummary.documentRecord), negated: true))
@@ -1004,6 +1005,7 @@ struct RetrievalService {
         var chunksRequest = request
         chunksRequest.papersFirst = false
         chunksRequest.expandPapers = false
+        chunksRequest.offset = 0
         chunksRequest.filters.append(RetrievalFilter(key: "source", match: .anyText(sources)))
         let chunks = try await searchLocal(chunksRequest, index: index)
         var page = papers

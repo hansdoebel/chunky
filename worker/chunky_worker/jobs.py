@@ -204,16 +204,23 @@ class JobRunner:
             if chunk.get("document_id"):
                 document_id = str(chunk["document_id"])
                 break
+        settings = job.settings
         payload = summary_payload(
             text=text,
             kind=kind,
             source=job.filename,
-            doc_title=result.doc_title,
-            authors=result.authors,
-            year=result.year,
-            document_id=document_id,
+            doc_title=result.doc_title if settings.metadata_include_doc_title else None,
+            authors=result.authors if settings.metadata_include_authors else None,
+            year=result.year if settings.metadata_include_year else None,
+            document_id=document_id if settings.metadata_include_document_id else None,
         )
-        points.append(PreparedPoint(id=str(uuid.uuid4()), vector=list(vectors[0]), payload=payload))
+        points.append(
+            PreparedPoint(
+                id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"chunky-summary:{job.filename}")),
+                vector=list(vectors[0]),
+                payload=payload,
+            )
+        )
         return points
 
     def _apply_ingest(

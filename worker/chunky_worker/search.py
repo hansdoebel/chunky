@@ -292,9 +292,12 @@ def parse_search_request(payload: Any) -> SearchRequest:
             raise SearchError(str(exc)) from None
     return request
 
+PASSAGE_ONLY_KEYS = {"content_type", "page", "page_end", "headings", "section"}
+
 def record_scope(filters: list[PayloadFilter], papers_first: bool) -> list[PayloadFilter]:
     scoped = [item for item in filters if item.key != "record_type"]
     if papers_first:
+        scoped = [item for item in scoped if item.key not in PASSAGE_ONLY_KEYS]
         scoped.append(PayloadFilter(key="record_type", match="document"))
     else:
         scoped.append(PayloadFilter(key="record_type", match="document", negate=True))
@@ -355,7 +358,7 @@ def run_search(
             error_type="dimension_mismatch",
         )
 
-    def query(filters: list[PayloadFilter]) -> list[ScoredHit]:
+    def query(filters: list[PayloadFilter], offset: int) -> list[ScoredHit]:
         if request.mode == "hybrid":
             return searcher.query_hybrid(
                 url=url,
@@ -364,7 +367,7 @@ def run_search(
                 vector=vector,
                 text=request.query,
                 limit=request.limit,
-                offset=request.offset,
+                offset=offset,
                 filters=filters,
                 score_threshold=request.score_threshold,
                 using=layout.using,
@@ -376,14 +379,16 @@ def run_search(
             collection=collection,
             vector=vector,
             limit=request.limit,
-            offset=request.offset,
+            offset=offset,
             filters=filters,
             score_threshold=request.score_threshold,
             using=layout.using,
         )
 
+    paper_count = 0
     try:
-        hits = query(record_scope(request.filters, request.papers_first))
+        hits = query(record_scope(request.filters, request.papers_first), request.offset)
+        paper_count = len(hits)
         if request.papers_first and request.expand_documents and hits:
             sources: list[str] = []
             for hit in hits:
@@ -395,7 +400,7 @@ def run_search(
                     request.filters + [PayloadFilter(key="source", any=sources)],
                     False,
                 )
-                hits = hits + query(expanded)
+                hits = hits + query(expanded, 0)
     except SearchError:
         raise
     except Exception as exc:
@@ -410,7 +415,7 @@ def run_search(
         kind,
         len(hits),
     )
-    next_offset = request.offset + request.limit if len(hits) == request.limit else None
+    next_offset = request.offset + request.limit if paper_count == request.limit else None
     return {
         "results": [
             {"id": hit.id, "score": hit.score, "payload": hit.payload}

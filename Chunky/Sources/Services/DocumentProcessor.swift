@@ -453,7 +453,7 @@ class DocumentProcessor: ObservableObject {
         points: [ChunkPoint],
         chunks: [ChunkingService.DocumentChunk],
         settings: AppSettings,
-        ollama: OllamaService,
+        hybrid: Bool,
         ingestedAt: String
     ) async throws -> [ChunkPoint] {
         let summaryChunks = chunks.map { SummaryChunk(text: $0.text, headings: $0.headings, page: $0.page) }
@@ -465,25 +465,35 @@ class DocumentProcessor: ObservableObject {
             }
         }
         guard !choice.text.isEmpty else { return points }
-        let vectors = try await ollama.embedBatch(texts: [choice.text], model: settings.embeddingModel)
-        guard let vector = vectors.first, !vector.isEmpty else { return points }
+        let source = chunks.first?.source ?? ""
+        let vector = try await LiveRetrievalEmbedding().embed(
+            text: choice.text,
+            backend: settings.embeddingBackend,
+            model: settings.embeddingModel,
+            ollamaURL: settings.ollamaURL,
+            apiURL: settings.embeddingAPIURL
+        )
+        guard !vector.isEmpty else { return points }
         var metadata = [
             "record_type": DocumentSummary.documentRecord,
             "summary_kind": choice.kind,
             "content_type": "document",
-            "ingested_at": ingestedAt,
         ]
-        if !title.isEmpty { metadata["doc_title"] = title }
-        if let authors = chunks.compactMap(\.authors).first, !authors.isEmpty {
+        if settings.metadataIncludeTimestamp { metadata["ingested_at"] = ingestedAt }
+        if settings.metadataIncludeDocTitle, !title.isEmpty { metadata["doc_title"] = title }
+        if settings.metadataIncludeAuthors, let authors = chunks.compactMap(\.authors).first, !authors.isEmpty {
             metadata["authors"] = authors.joined(separator: "; ")
         }
-        if let documentID = chunks.compactMap(\.documentId).first, !documentID.isEmpty {
+        if settings.metadataIncludeDocumentId, let documentID = chunks.compactMap(\.documentId).first, !documentID.isEmpty {
             metadata["document_id"] = documentID
         }
+        let sparse = hybrid ? SparseVectorService.generateSparseVectors(texts: [choice.text]).first : nil
         let point = ChunkPoint(
+            id: DocumentSummary.summaryID(source: source),
             vector: vector,
+            sparseVector: sparse,
             text: choice.text,
-            source: chunks.first?.source ?? "",
+            source: source,
             year: settings.metadataIncludeYear ? chunks.compactMap(\.year).first : nil,
             metadata: metadata
         )
@@ -668,7 +678,7 @@ class DocumentProcessor: ObservableObject {
             let sparseVectors = sparseVectors(for: chunksToEmbed, hybrid: createOptions.hybrid)
 
             let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
-            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, ollama: ollama, ingestedAt: ingestedAt)
+            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
             allPoints = newPoints
 
             job.status = .uploading
@@ -692,6 +702,17 @@ class DocumentProcessor: ObservableObject {
             job.uploadTime = (job.uploadTime ?? 0) + (CFAbsoluteTimeGetCurrent() - uploadStarted)
         } else {
             job.statusMessage = "All chunks cached, skipping embedding"
+            let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+            if !summaryPoints.isEmpty {
+                try await uploadToQdrant(
+                    points: summaryPoints,
+                    collectionName: settings.defaultCollection,
+                    vectorSize: try await probedVectorSize(settings: settings, ollama: ollama),
+                    batchSize: settings.qdrantBatchSize,
+                    createOptions: createOptions,
+                    dedupSource: nil
+                ) { _ in }
+            }
         }
 
         if let hashes = cachedHashes, let appState = appState, let qdrant = appState.qdrantService {
@@ -701,6 +722,7 @@ class DocumentProcessor: ObservableObject {
             )
             let staleIds = existingPoints
                 .filter { point in
+                    if point.metadata["record_type"] == DocumentSummary.documentRecord { return false }
                     guard let hash = point.metadata["content_hash"] else { return true }
                     return !hashes.contains(hash) && !chunksToEmbed.contains(where: {
                         contentHash(text: $0.embeddingText ?? $0.text, model: settings.embeddingModel) == hash
@@ -801,7 +823,7 @@ class DocumentProcessor: ObservableObject {
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
         }
 
-        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, ollama: ollama, ingestedAt: ingestedAt)
+        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
         if !summaryPoints.isEmpty {
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: summaryPoints, batchSize: settings.qdrantBatchSize)
         }
@@ -989,8 +1011,7 @@ class DocumentProcessor: ObservableObject {
             settings: settings,
             ingestedAt: ingestedAt
         )
-        let ollama = try getOllamaService(baseURL: settings.ollamaURL)
-        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, ollama: ollama, ingestedAt: ingestedAt)
+        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
         try await uploadToQdrant(
             points: points,
             collectionName: settings.defaultCollection,

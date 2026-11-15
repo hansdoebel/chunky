@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 nonisolated struct SummaryChunk: Equatable, Sendable {
@@ -15,6 +16,22 @@ nonisolated struct DocumentSummaryChoice: Equatable, Sendable {
 nonisolated enum DocumentSummary {
     static let abstractHeadings: Set<String> = ["abstract", "summary", "zusammenfassung"]
     static let documentRecord = "document"
+    static let passageOnlyKeys: Set<String> = ["content_type", "page", "page_end", "headings", "section"]
+
+    static func summaryID(source: String) -> String {
+        let namespace: [UInt8] = [
+            0x6b, 0xa7, 0xb8, 0x11, 0x9d, 0xad, 0x11, 0xd1,
+            0x80, 0xb4, 0x00, 0xc0, 0x4f, 0xd4, 0x30, 0xc8,
+        ]
+        var bytes = namespace
+        bytes.append(contentsOf: Array("chunky-summary:\(source)".utf8))
+        var hash = Array(Insecure.SHA1.hash(data: Data(bytes)))
+        hash[6] = (hash[6] & 0x0F) | 0x50
+        hash[8] = (hash[8] & 0x3F) | 0x80
+        let hex = hash.prefix(16).map { String(format: "%02x", $0) }.joined()
+        let chars = Array(hex)
+        return "\(String(chars[0..<8]))-\(String(chars[8..<12]))-\(String(chars[12..<16]))-\(String(chars[16..<20]))-\(String(chars[20..<32]))"
+    }
 
     static func resolve(chunks: [SummaryChunk], title: String, generated: String?) -> DocumentSummaryChoice {
         let material = fallbackSource(chunks: chunks, title: title)

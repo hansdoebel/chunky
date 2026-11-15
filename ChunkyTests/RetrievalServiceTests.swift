@@ -139,11 +139,16 @@ struct RetrievalServiceTests {
         index.responses = [[paper], [chunk]]
         let service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]), worker: FakeWorker())
         var request = localRequest()
+        request.offset = 4
         request.papersFirst = true
         request.expandPapers = true
+        request.filters = [RetrievalFilter(key: "content_type", match: .text("text"))]
         let page = try await service.search(request, index: index)
         #expect(page.hits.map(\.id) == ["doc", "chunk"])
-        #expect(index.searchCalls == 2)
+        #expect(index.offsets == [4, 0])
+        let papers = request.scopedFilters()
+        #expect(!papers.contains { $0.key == "content_type" })
+        #expect(papers.contains { $0.key == "record_type" && $0.negated == false })
     }
 
     @Test func emptyScopeDoesNotAddFilters() {
@@ -497,6 +502,7 @@ private final class FakeIndex: RetrievalIndex {
     var searchCalls = 0
     var lastOffset: Int?
     var responses: [[SearchResult]] = []
+    var offsets: [Int] = []
 
     init(vectorSize: Int?, hits: [SearchResult] = []) {
         self.vectorSize = vectorSize
@@ -523,6 +529,7 @@ private final class FakeIndex: RetrievalIndex {
         vectorName: String?
     ) async throws -> [SearchResult] {
         searchCalls += 1
+        offsets.append(offset)
         lastOffset = offset
         lastSeenName = vectorName
         _ = filter

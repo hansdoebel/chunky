@@ -400,11 +400,21 @@ def test_papers_first_returns_the_document_then_its_chunks(tmp_settings, monkeyp
                 "qdrant_url": "http://127.0.0.1:6333",
                 "papers_first": True,
                 "expand_documents": True,
+                "limit": 1,
+                "offset": 3,
+                "filters": [{"key": "content_type", "match": "text"}, {"key": "year", "gte": 2020}],
             },
         )
+    body = response.json()
     assert response.status_code == 200
-    assert [item["id"] for item in response.json()["results"]] == ["doc", "chunk"]
+    assert [item["id"] for item in body["results"]] == ["doc", "chunk"]
+    assert body["next_offset"] == 4
     assert len(fake.query_calls) == 2
+    paper_keys = [item.key for item in (fake.query_calls[0]["query_filter"].must or [])]
+    assert "content_type" not in paper_keys
+    assert "year" in paper_keys
+    assert fake.query_calls[0]["offset"] == 3
+    assert fake.query_calls[1]["offset"] == 0
 
 def test_short_page_has_no_next_offset(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)

@@ -1,4 +1,6 @@
-from chunky_worker.document_summary import resolve_summary
+import uuid
+
+from chunky_worker.document_summary import resolve_summary, summary_payload
 
 
 def test_abstract_is_preferred_over_a_generated_summary():
@@ -37,3 +39,21 @@ def test_extract_uses_the_title_and_opening_pages():
     assert "Revenue" in text
     assert "Opening paragraph." in text
     assert "Much later." not in text
+
+
+def test_summary_id_is_stable_and_disabled_metadata_is_omitted():
+    point_id = str(uuid.uuid5(uuid.NAMESPACE_URL, "chunky-summary:paper.pdf"))
+    assert point_id == "bdefd408-de82-54f7-b74f-8478d8f689e9"
+    payload = summary_payload(
+        text="Abstract",
+        kind="abstract",
+        source="paper.pdf",
+        doc_title=None,
+        authors=None,
+        year=None,
+        document_id=None,
+    )
+    assert "doc_title" not in payload
+    assert "authors" not in payload
+    assert "year" not in payload
+    assert payload["record_type"] == "document"
