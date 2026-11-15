@@ -23,7 +23,20 @@ struct AnalyticsTests {
         }
         job.metrics = metrics
         job.error = "upsert failed super-secret-key-12345 bearer worker-token-abcdef"
+        job.pageCount = nil
+        job.tokenCount = nil
         let draft = RunDraft.make(job: job, settings: settings, contentHash: "abc")
+        #expect(draft.pages == nil)
+        #expect(draft.tokens == nil)
+        #expect(draft.wallMs == 2000)
+        job.pageCount = 9
+        job.tokenCount = 120
+        job.totalTime = 3
+        job.metrics?.wallMs = 50
+        let counted = RunDraft.make(job: job, settings: settings, contentHash: "abc")
+        #expect(counted.pages == 9)
+        #expect(counted.tokens == 120)
+        #expect(counted.wallMs == 3000)
         let stored = try JSONEncoder().encode(draft)
         let object = try #require(JSONSerialization.jsonObject(with: stored) as? [String: Any])
         #expect(object["embeddings"] == nil)
@@ -33,6 +46,13 @@ struct AnalyticsTests {
         #expect(!text.contains("super-secret-key-12345"))
         #expect(!text.contains("worker-token-abcdef"))
         #expect(text.contains("[redacted]"))
+
+        settings.qdrantAPIKey = "k1"
+        job.error = "rejected k1"
+        let shortSecret = RunDraft.make(job: job, settings: settings, contentHash: "abc")
+        #expect(shortSecret.errorMessage == "rejected [redacted]")
+        let bearer = RunHistory.redact("bearer xy", secrets: [])
+        #expect(bearer == "bearer [redacted]")
     }
 
     @Test func contentHashIsStable() {
@@ -66,25 +86,55 @@ struct AnalyticsTests {
         #expect(byRuntime.first { $0.key == "ollama" }?.runs == 1)
 
         let fetched = try store.allDrafts()
-        let blob = fetched.map(\.encodedStages).joined()
+        let blob = fetched.map { $0.encodedStages() }.joined()
         #expect(!blob.contains("embeddings"))
         #expect(fetched.allSatisfy { $0.errorMessage == nil })
     }
 
+    @Test func failedStageKeepsElapsedTime() {
+        let settings = IsolatedSettings.make()
+        let job = ProcessingJob(url: URL(fileURLWithPath: "/tmp/paper.pdf"))
+        job.conversionTime = 1
+        job.chunkingTime = 0.4
+        job.totalTime = 2
+        job.status = .uploading
+        var metrics = JobMetrics.record(job: job, settings: settings, host: "Local Mac")
+        metrics = metrics.markingStageError("qdrant_upsert", wallMs: 2000)
+        let upsert = metrics.stages.first { $0.name == "qdrant_upsert" }
+        #expect(upsert?.status == "error")
+        #expect((upsert?.durationMs ?? 0) > 0)
+        #expect(metrics.wallMs == 2000)
+    }
+
     @Test @MainActor func analyticsViewRendersAColoredScreenshot() throws {
         let runs = screenshotRuns()
+        let light = try render(runs, scheme: .light)
+        let dark = try render(runs, scheme: .dark)
+        try light.png.write(to: URL(fileURLWithPath: "/tmp/chunky-analytics.png"))
+        #expect(light.colored > 20)
+        #expect(dark.colored > 20)
+        #expect(dark.luminance < light.luminance)
+    }
+
+    @MainActor
+    private func render(_ runs: [RunDraft], scheme: ColorScheme) throws -> (png: Data, colored: Int, luminance: Double) {
         let view = AnalyticsView(runs: runs, group: .host, selectedID: runs[0].runID)
             .frame(width: 960, height: 720)
-            .environment(\.colorScheme, .light)
+            .environment(\.colorScheme, scheme)
+        let appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
+        let previous = NSAppearance.current
+        NSAppearance.current = appearance
+        defer { NSAppearance.current = previous }
         let renderer = ImageRenderer(content: view)
         renderer.scale = 2
         let image = try #require(renderer.nsImage)
         let tiff = try #require(image.tiffRepresentation)
         let rep = try #require(NSBitmapImageRep(data: tiff))
         let png = try #require(rep.representation(using: .png, properties: [:]))
-        try png.write(to: URL(fileURLWithPath: "/tmp/chunky-analytics.png"))
         let bitmap = rep.converting(to: .sRGB, renderingIntent: .relativeColorimetric) ?? rep
         var colored = 0
+        var luminance = 0.0
+        var samples = 0
         let stepX = max(1, bitmap.pixelsWide / 40)
         let stepY = max(1, bitmap.pixelsHigh / 40)
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: stepY) {
@@ -98,9 +148,11 @@ struct AnalyticsTests {
                 if alpha > 0.1 && (red < 0.97 || green < 0.97 || blue < 0.97) {
                     colored += 1
                 }
+                luminance += (0.2126 * red + 0.7152 * green + 0.0722 * blue) * alpha
+                samples += 1
             }
         }
-        #expect(colored > 20)
+        return (png, colored, samples == 0 ? 1 : luminance / Double(samples))
     }
 
     private func sample(

@@ -3,11 +3,13 @@ import SwiftUI
 
 struct AnalyticsView: View {
     var runs: [RunDraft]
+    var warning: String?
     @State private var group: RunGroup
     @State private var selectedID: UUID?
 
-    init(runs: [RunDraft], group: RunGroup = .host, selectedID: UUID? = nil) {
+    init(runs: [RunDraft], warning: String? = nil, group: RunGroup = .host, selectedID: UUID? = nil) {
         self.runs = runs
+        self.warning = warning
         _group = State(initialValue: group)
         _selectedID = State(initialValue: selectedID ?? runs.first?.runID)
     }
@@ -35,40 +37,50 @@ struct AnalyticsView: View {
                         .foregroundStyle(.secondary)
                         .padding(12)
                 } else {
-                    VStack(alignment: .leading, spacing: 4) {
-                        ForEach(runs) { run in
-                            runRow(run)
+                    ScrollView {
+                        VStack(alignment: .leading, spacing: 4) {
+                            ForEach(runs) { run in
+                                runRow(run)
+                            }
                         }
+                        .padding(.horizontal, 8)
+                        .padding(.bottom, 12)
                     }
-                    .padding(.horizontal, 8)
                 }
-                Spacer(minLength: 0)
             }
-            .frame(width: 240)
+            .frame(width: 240, alignment: .top)
+            .frame(maxHeight: .infinity, alignment: .top)
             .background(Color.gray.opacity(0.08))
 
             Divider()
 
-            VStack(alignment: .leading, spacing: 16) {
-                if let selected {
-                    PostJobPanel(run: selected)
-                    comparison
-                    if sameFile.count > 1 {
-                        sameFileChart
+            ScrollView {
+                VStack(alignment: .leading, spacing: 16) {
+                    if let warning {
+                        Text(warning)
+                            .font(.callout)
+                            .foregroundStyle(.orange)
                     }
-                } else {
-                    Text("Finish a job to see stage timings.")
+                    if let selected {
+                        PostJobPanel(run: selected)
+                        comparison
+                        if sameFile.count > 1 {
+                            sameFileChart
+                        }
+                    } else {
+                        Text("Finish a job to see stage timings.")
+                            .foregroundStyle(.secondary)
+                    }
+                    Text("History stores timings only. Vectors and API keys are not kept.")
+                        .font(.caption)
                         .foregroundStyle(.secondary)
                 }
-                Spacer(minLength: 0)
-                Text("History stores timings only. Vectors and API keys are not kept.")
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
             }
-            .padding(16)
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
         }
-        .background(Color.white)
+        .background(AppTheme.surfaceGrouped)
         .onChange(of: runs) { _, updated in
             let current = selectedID
             if current == nil || !updated.contains(where: { $0.runID == current }) {
@@ -157,9 +169,9 @@ struct PostJobPanel: View {
                 .font(.callout)
                 .foregroundStyle(.secondary)
             HStack(spacing: 16) {
-                metric("Pages", value: "\(run.pages)")
+                metric("Pages", value: run.pages.map(String.init) ?? "—")
                 metric("Chunks", value: "\(run.chunks)")
-                metric("Tokens", value: "\(run.tokens)")
+                metric("Tokens", value: run.tokens.map(String.init) ?? "—")
                 metric("Embeddings/s", value: rateText)
                 metric("Qdrant", value: upsertText)
             }

@@ -21,8 +21,9 @@ class AppState: ObservableObject {
     @Published var isLoadingPoints: Bool = false
     @Published var sidebarVisibility: NavigationSplitViewVisibility = .all
     @Published var qdrantConnectionError: String?
-    let runHistory = RunHistoryStore.makeDefault()
+    let runHistory: RunHistoryStore
     @Published private(set) var finishedRuns: [RunDraft] = []
+    @Published var historyWarning: String?
 
     /// The shared Qdrant service instance
     var qdrantService: QdrantService?
@@ -33,6 +34,15 @@ class AppState: ObservableObject {
     var activeJobs: [ProcessingJob] { jobs.filter { [.chunking, .embedding, .uploading].contains($0.status) } }
     var hasJobsToProcess: Bool { !pendingJobs.isEmpty }
     var overallProgress: Double { 0.5 }
+
+    init() {
+        do {
+            runHistory = try RunHistoryStore(inMemory: false)
+        } catch {
+            runHistory = try! RunHistoryStore(inMemory: true)
+            historyWarning = "Run history could not be opened on disk. New runs stay in memory until quit."
+        }
+    }
 
     func addFiles(_ urls: [URL]) {
         for url in urls {
@@ -71,15 +81,24 @@ class AppState: ObservableObject {
 
     func storeFinishedRun(_ job: ProcessingJob, settings: AppSettings) {
         guard job.status == .completed || job.status == .failed else { return }
-        guard !job.analyticsStored else { return }
-        let hash = RunHistory.contentHash(ofFile: job.sourceURL)
-        let draft = RunDraft.make(job: job, settings: settings, contentHash: hash)
-        do {
-            try runHistory.insert(draft)
-            job.analyticsStored = true
-            reloadHistory()
-        } catch {
-            job.analyticsStored = true
+        guard !job.analyticsStored, !job.analyticsPending else { return }
+        job.analyticsPending = true
+        let url = job.sourceURL
+        Task {
+            let hash = await Task.detached {
+                RunHistory.contentHash(ofFile: url)
+            }.value
+            guard !job.analyticsStored else { return }
+            let draft = RunDraft.make(job: job, settings: settings, contentHash: hash)
+            do {
+                try runHistory.insert(draft)
+                job.analyticsStored = true
+                job.analyticsPending = false
+                reloadHistory()
+            } catch {
+                job.analyticsPending = false
+                historyWarning = "Could not save \(job.fileName) to run history."
+            }
         }
     }
 

@@ -119,6 +119,22 @@ struct JobMetrics: Codable, Equatable {
         }
     }
 
+    func markingStageError(_ name: String, wallMs: Double) -> JobMetrics {
+        var copy = self
+        let others = stages.filter { $0.name != name }.map(\.durationMs).reduce(0, +)
+        copy.stages = stages.map { stage in
+            guard stage.name == name else { return stage }
+            var updated = stage
+            updated.status = "error"
+            if updated.durationMs <= 0 {
+                updated.durationMs = max(0, wallMs - others)
+            }
+            return updated
+        }
+        copy.wallMs = wallMs
+        return copy
+    }
+
     func addingLocalUpload(seconds: TimeInterval) -> JobMetrics {
         var copy = self
         let extra = seconds * 1000

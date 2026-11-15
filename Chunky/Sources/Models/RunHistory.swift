@@ -10,9 +10,9 @@ final class RunRecord {
     var contentHash: String
     var host: String
     var runtime: String
-    var pages: Int
+    var pages: Int?
     var chunks: Int
-    var tokens: Int
+    var tokens: Int?
     var embeddingsPerSecond: Double?
     var wallMs: Double
     var upsertMs: Double
@@ -46,9 +46,9 @@ struct RunDraft: Identifiable, Codable, Equatable {
     var contentHash: String
     var host: String
     var runtime: String
-    var pages: Int
+    var pages: Int?
     var chunks: Int
-    var tokens: Int
+    var tokens: Int?
     var embeddingsPerSecond: Double?
     var wallMs: Double
     var upsertMs: Double
@@ -83,9 +83,9 @@ struct RunDraft: Identifiable, Codable, Equatable {
         contentHash: String,
         host: String,
         runtime: String,
-        pages: Int,
+        pages: Int?,
         chunks: Int,
-        tokens: Int,
+        tokens: Int?,
         embeddingsPerSecond: Double?,
         wallMs: Double,
         upsertMs: Double,
@@ -131,8 +131,10 @@ struct RunDraft: Identifiable, Codable, Equatable {
             return copy
         }
         let upsert = stages.first { $0.name == "qdrant_upsert" }
-        let pages = stages.compactMap(\.pages).max() ?? 0
-        let tokens = stages.compactMap(\.tokens).reduce(0, +)
+        let stagePages = stages.compactMap(\.pages).max()
+        let stageTokens = stages.compactMap(\.tokens).reduce(0, +)
+        let pages = job.pageCount ?? stagePages
+        let tokens = (job.tokenCount ?? 0) > 0 ? job.tokenCount : (stageTokens > 0 ? stageTokens : nil)
         let stageError = stages.first { $0.status == "error" }.map { "\($0.name) failed" }
         let error = [job.error, stageError]
             .compactMap { $0 }
@@ -151,7 +153,7 @@ struct RunDraft: Identifiable, Codable, Equatable {
             chunks: job.chunksCount,
             tokens: tokens,
             embeddingsPerSecond: metrics?.embeddingsPerSecond,
-            wallMs: metrics?.wallMs ?? (job.totalTime ?? 0) * 1000,
+            wallMs: job.totalTime.map { $0 * 1000 } ?? metrics?.wallMs ?? 0,
             upsertMs: upsert?.durationMs ?? (job.uploadTime ?? 0) * 1000,
             upsertStatus: upsert?.status ?? "skipped",
             errorMessage: error.isEmpty ? nil : error,
@@ -184,11 +186,11 @@ struct RunAggregate: Equatable, Identifiable {
 }
 
 enum RunHistory {
-    static func contentHash(of data: Data) -> String {
+    nonisolated static func contentHash(of data: Data) -> String {
         SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
-    static func contentHash(ofFile url: URL) -> String {
+    nonisolated static func contentHash(ofFile url: URL) -> String {
         guard let handle = try? FileHandle(forReadingFrom: url) else {
             return contentHash(of: Data(url.path.utf8))
         }
@@ -207,15 +209,15 @@ enum RunHistory {
         return hasher.finalize().map { String(format: "%02x", $0) }.joined()
     }
 
-    static func redact(_ text: String, secrets: [String]) -> String {
+    nonisolated static func redact(_ text: String, secrets: [String]) -> String {
         var result = text
         for secret in secrets {
             let trimmed = secret.trimmingCharacters(in: .whitespacesAndNewlines)
-            guard trimmed.count >= 8 else { continue }
+            guard !trimmed.isEmpty else { continue }
             result = result.replacingOccurrences(of: trimmed, with: "[redacted]")
         }
         guard let regex = try? NSRegularExpression(
-            pattern: "(?i)(bearer\\s+)[A-Za-z0-9\\-\\._~\\+/=]{8,}"
+            pattern: "(?i)(bearer\\s+)\\S+"
         ) else {
             return result
         }

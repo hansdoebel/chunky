@@ -176,7 +176,7 @@ struct MainContentView: View {
             } else if appState.viewMode == .collections {
                 CollectionBrowserView()
             } else {
-                AnalyticsView(runs: appState.finishedRuns)
+                AnalyticsView(runs: appState.finishedRuns, warning: appState.historyWarning)
             }
 
             Divider()
