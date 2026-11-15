@@ -23,7 +23,7 @@ The bearer token stays required on every profile. Tailscale only limits who can 
 | --- | --- | --- |
 | `CHUNKY_WORKER_HOST` or `--host` | `127.0.0.1` | Bind address |
 | `CHUNKY_WORKER_PORT` or `--port` | `8080` | Bind port |
-| `CHUNKY_WORKER_TOKEN` | unset | Bearer token. Wins when set and non-empty |
+| `CHUNKY_WORKER_TOKEN` | unset | Bearer token. Overrides token files whenever it is set. An empty or whitespace-only value disables file fallback. Unset the variable to use a token file |
 | `CHUNKY_WORKER_TOKEN_FILE` | unset | Token file. Must exist when set |
 | `~/.config/chunky/worker.token` or `$XDG_CONFIG_HOME/chunky/worker.token` | — | File fallback |
 
@@ -76,7 +76,7 @@ Narrow the Tailscale source to the MacBook and Mac Studio tailnet addresses once
 2. Start local Ollama and pull `qwen3-embedding` if you embed on the laptop.
 3. In Preferences, Documents, set Processing host to **Local Mac**.
 4. VLM: Granite-Docling 258M (MLX) or SmolDocling 256M (MLX). **Standard (no VLM)** uses the classic pipeline.
-5. In Preferences, Qdrant, choose **Qdrant Cloud** and store the API key in the Keychain, or use local Docker Qdrant if you started `make qdrant`.
+5. In Preferences, Qdrant, set **Server URL** to the Qdrant Cloud address and enter the API key. Local Mac ingest uses **Server URL**. The **Qdrant Cloud URL** field is only for Devbox ingest and is ignored on Local Mac. For Docker on the laptop, leave **Server URL** at `http://localhost:6334` after `make qdrant`.
 
 This path does not need the devbox, Wi-Fi routing, or Tailscale.
 
@@ -97,9 +97,11 @@ The MacBook and the devbox must be on the same LAN. The worker must listen on an
 curl -sS "http://DEVBOX_LAN_IP:8080/v1/health"
 curl -sS -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"quarterly revenue","collection":"documents","limit":5}' \
+  -d '{"query":"quarterly revenue","collection":"documents","limit":5,"qdrant_url":"https://QDRANT_CLOUD_HOST","qdrant_api_key":"QDRANT_API_KEY"}' \
   "http://DEVBOX_LAN_IP:8080/v1/search"
 ```
+
+`POST /v1/search` returns 400 `qdrant_url is required` unless the JSON includes `qdrant_url` or the worker process has `CHUNKY_QDRANT_URL` set. Add `CHUNKY_QDRANT_API_KEY` on the worker only when that URL is the one you search. A request for a different URL must send `qdrant_api_key` in the JSON. Do not commit either value.
 
 A timeout is the bind address, the firewall, or the wrong interface. HTTP 401 is a token mismatch. `/v1/health` succeeding and `/v1/search` returning 401 still means the host is reachable.
 
@@ -128,13 +130,14 @@ Use a plain MagicDNS or tailnet HTTP URL on port 8080. If the node is named `dev
 
 Start with the plain MagicDNS name or the tailnet IPv4, HTTP, port 8080. Bind the worker to `tailscale ip -4`, or to `0.0.0.0` if the Mac Studio and the LAN must connect too. That matches the app’s HTTP worker URL.
 
-`tailscale serve` is the later option when you want HTTPS. It proxies the tailnet to loopback and can present a `*.ts.net` certificate:
+`tailscale serve` is the later option when you want HTTPS. It proxies the tailnet to loopback and can present a `*.ts.net` certificate. The command below forwards to `127.0.0.1`, so the worker must be listening there. If it is bound only to `tailscale ip -4`, switch `CHUNKY_WORKER_HOST` to `127.0.0.1` before starting Serve. If the LAN and 10GbE must stay reachable, keep `CHUNKY_WORKER_HOST=0.0.0.0` and the firewall rules above. `0.0.0.0` accepts the Serve forward. A Tailscale-only bind does not.
 
 ```bash
+CHUNKY_WORKER_HOST=127.0.0.1
 sudo tailscale serve --bg --https=443 http://127.0.0.1:8080
 ```
 
-Serve is easier for App Transport Security, and the worker process can stay on `127.0.0.1`, but it does not serve the Mac Studio on 10GbE. Keep a direct bind for 10GbE and the LAN if Serve is only for the tailnet. Enable HTTPS certificates for the tailnet before using Serve. Do not use Funnel. The worker stays private to the tailnet.
+Serve is easier for App Transport Security, and the worker process can stay on `127.0.0.1`, but that bind does not serve the Mac Studio on 10GbE. Enable HTTPS certificates for the tailnet before using Serve. Do not use Funnel. The worker stays private to the tailnet.
 
 ### App Transport Security
 
@@ -171,7 +174,7 @@ tailscale status
 curl -sS "http://devbox:8080/v1/health"
 curl -sS -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"quarterly revenue","collection":"documents","limit":5}' \
+  -d '{"query":"quarterly revenue","collection":"documents","limit":5,"qdrant_url":"https://QDRANT_CLOUD_HOST","qdrant_api_key":"QDRANT_API_KEY"}' \
   "http://devbox:8080/v1/search"
 ```
 
@@ -181,7 +184,7 @@ If Serve HTTPS is on:
 curl -sS "https://devbox.TAILNET.ts.net/v1/health"
 curl -sS -H "Authorization: Bearer TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"query":"quarterly revenue","collection":"documents","limit":5}' \
+  -d '{"query":"quarterly revenue","collection":"documents","limit":5,"qdrant_url":"https://QDRANT_CLOUD_HOST","qdrant_api_key":"QDRANT_API_KEY"}' \
   "https://devbox.TAILNET.ts.net/v1/search"
 ```
 
