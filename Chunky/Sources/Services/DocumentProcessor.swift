@@ -659,6 +659,87 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
+    func appendSummary(
+        points: [ChunkPoint],
+        chunks: [ChunkingService.DocumentChunk],
+        settings: AppSettings,
+        hybrid: Bool,
+        ingestedAt: String
+    ) async throws -> [ChunkPoint] {
+        let summaryChunks = chunks.map { SummaryChunk(text: $0.text, headings: $0.headings, page: $0.page) }
+        let title = chunks.compactMap(\.docTitle).first { !$0.isEmpty } ?? ""
+        var choice = DocumentSummary.resolve(chunks: summaryChunks, title: title, generated: nil)
+        if choice.kind != "abstract" {
+            if let generated = await generatedSummary(source: choice.source, settings: settings) {
+                choice = DocumentSummary.resolve(chunks: summaryChunks, title: title, generated: generated)
+            }
+        }
+        guard !choice.text.isEmpty else { return points }
+        let source = chunks.first?.source ?? ""
+        let vector = try await LiveRetrievalEmbedding().embed(
+            text: choice.text,
+            backend: settings.embeddingBackend,
+            model: settings.embeddingModel,
+            ollamaURL: settings.ollamaURL,
+            apiURL: settings.embeddingAPIURL
+        )
+        guard !vector.isEmpty else { return points }
+        var metadata = [
+            "record_type": DocumentSummary.documentRecord,
+            "summary_kind": choice.kind,
+            "content_type": "document",
+        ]
+        if settings.metadataIncludeTimestamp { metadata["ingested_at"] = ingestedAt }
+        if settings.metadataIncludeDocTitle, !title.isEmpty { metadata["doc_title"] = title }
+        if settings.metadataIncludeAuthors, let authors = chunks.compactMap(\.authors).first, !authors.isEmpty {
+            metadata["authors"] = authors.joined(separator: "; ")
+        }
+        if settings.metadataIncludeDocumentId, let documentID = chunks.compactMap(\.documentId).first, !documentID.isEmpty {
+            metadata["document_id"] = documentID
+        }
+        let sparse = hybrid ? SparseVectorService.generateSparseVectors(texts: [choice.text]).first : nil
+        let point = ChunkPoint(
+            id: DocumentSummary.summaryID(source: source),
+            vector: vector,
+            sparseVector: sparse,
+            text: choice.text,
+            source: source,
+            year: settings.metadataIncludeYear ? chunks.compactMap(\.year).first : nil,
+            metadata: metadata
+        )
+        return points + [point]
+    }
+
+    @MainActor
+    private func generatedSummary(source: String, settings: AppSettings) async -> String? {
+        let model = settings.chatModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = settings.chatAPIURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, !endpoint.isEmpty, !source.isEmpty else { return nil }
+        let chat = OpenAIRAGChat(
+            client: OpenAICompatibleChatClient(
+                baseURL: endpoint,
+                model: model,
+                apiKey: settings.chatAPIKey,
+                http: URLSessionChatHTTP()
+            )
+        )
+        var text = ""
+        do {
+            for try await delta in chat.stream(
+                system: "Write a short abstract of this paper using only the supplied title, headings, and opening text.",
+                user: source
+            ) {
+                text += delta
+                if text.count > 1200 { break }
+            }
+        } catch {
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    @MainActor
     func buildPoints(
         chunks: [ChunkingService.DocumentChunk],
         embeddings: [[Float]],
@@ -821,7 +902,8 @@ class DocumentProcessor: ObservableObject {
 
             let sparseVectors = sparseVectors(for: chunksToEmbed, hybrid: createOptions.hybrid)
 
-            let newPoints = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
+            let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
+            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
             allPoints = newPoints
 
             job.status = .uploading
@@ -845,6 +927,17 @@ class DocumentProcessor: ObservableObject {
             job.uploadTime = (job.uploadTime ?? 0) + (CFAbsoluteTimeGetCurrent() - uploadStarted)
         } else {
             job.statusMessage = "All chunks cached, skipping embedding"
+            let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+            if !summaryPoints.isEmpty {
+                try await uploadToQdrant(
+                    points: summaryPoints,
+                    collectionName: settings.defaultCollection,
+                    vectorSize: try await probedVectorSize(settings: settings, ollama: ollama),
+                    batchSize: settings.qdrantBatchSize,
+                    createOptions: createOptions,
+                    dedupSource: nil
+                ) { _ in }
+            }
         }
 
         if let hashes = cachedHashes, let appState = appState, let qdrant = appState.qdrantService {
@@ -854,6 +947,7 @@ class DocumentProcessor: ObservableObject {
             )
             let staleIds = existingPoints
                 .filter { point in
+                    if point.metadata["record_type"] == DocumentSummary.documentRecord { return false }
                     guard let hash = point.metadata["content_hash"] else { return true }
                     return !hashes.contains(hash) && !chunksToEmbed.contains(where: {
                         contentHash(text: $0.embeddingText ?? $0.text, model: settings.embeddingModel) == hash
@@ -954,6 +1048,11 @@ class DocumentProcessor: ObservableObject {
             embeddedSoFar += batchChunks.count
             job.progress = Double(batchIndex + 1) / Double(totalBatches)
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
+        }
+
+        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+        if !summaryPoints.isEmpty {
+            try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: summaryPoints, batchSize: settings.qdrantBatchSize)
         }
 
         job.embeddedCount = embeddedSoFar
@@ -1240,13 +1339,15 @@ class DocumentProcessor: ObservableObject {
             )
         }
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
-        let points = buildPoints(
+        let ingestedAt = ISO8601DateFormatter().string(from: Date())
+        let built = buildPoints(
             chunks: documentChunks,
             embeddings: parsed.embeddings,
             sparseVectors: sparseVectors(for: documentChunks, hybrid: createOptions.hybrid),
             settings: settings,
-            ingestedAt: ISO8601DateFormatter().string(from: Date())
+            ingestedAt: ingestedAt
         )
+        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
         try await uploadToQdrant(
             points: points,
             collectionName: settings.defaultCollection,

@@ -372,6 +372,50 @@ def test_search_embeds_then_queries_mock_qdrant(tmp_settings, monkeypatch):
     assert API_KEY not in log_text
     assert "collection=documents" in log_text
 
+def test_papers_first_returns_the_document_then_its_chunks(tmp_settings, monkeypatch):
+    _install_embed_mock(monkeypatch)
+
+    class Switching(FakeQdrant):
+        def query_points(self, **kwargs):
+            self.query_calls.append(kwargs)
+            query_filter = kwargs.get("query_filter")
+            must = list(getattr(query_filter, "must", None) or [])
+            keys = [item.key for item in must]
+            if "record_type" in keys:
+                return FakeQueryResponse([
+                    FakePoint("doc", 0.9, {"text": "abstract", "source": "paper.pdf", "record_type": "document"})
+                ])
+            return FakeQueryResponse([
+                FakePoint("chunk", 0.4, {"text": "body", "source": "paper.pdf"})
+            ])
+
+    fake = Switching()
+    embeddings = OllamaEmbeddingBackend("http://127.0.0.1:11434")
+    with _client(tmp_settings, embeddings, fake, []) as client:
+        response = client.post(
+            "/v1/search",
+            json={
+                "query": QUERY,
+                "collection": "documents",
+                "qdrant_url": "http://127.0.0.1:6333",
+                "papers_first": True,
+                "expand_documents": True,
+                "limit": 1,
+                "offset": 3,
+                "filters": [{"key": "content_type", "match": "text"}, {"key": "year", "gte": 2020}],
+            },
+        )
+    body = response.json()
+    assert response.status_code == 200
+    assert [item["id"] for item in body["results"]] == ["doc", "chunk"]
+    assert body["next_offset"] == 4
+    assert len(fake.query_calls) == 2
+    paper_keys = [item.key for item in (fake.query_calls[0]["query_filter"].must or [])]
+    assert "content_type" not in paper_keys
+    assert "year" in paper_keys
+    assert fake.query_calls[0]["offset"] == 3
+    assert fake.query_calls[1]["offset"] == 0
+
 def test_short_page_has_no_next_offset(tmp_settings, monkeypatch):
     _install_embed_mock(monkeypatch)
     fake = FakeQdrant(points=[FakePoint("only", 0.5, {"text": "one"})])
@@ -389,7 +433,10 @@ def test_short_page_has_no_next_offset(tmp_settings, monkeypatch):
     assert len(body["results"]) == 1
     assert fake.query_calls[0]["limit"] == 10
     assert fake.query_calls[0]["offset"] == 0
-    assert fake.query_calls[0]["query_filter"] is None
+    query_filter = fake.query_calls[0]["query_filter"]
+    assert query_filter.must in (None, [])
+    assert query_filter.must_not[0].key == "record_type"
+    assert query_filter.must_not[0].match.value == "document"
 
 def test_openai_backend_posts_to_embeddings_endpoint(tmp_settings, monkeypatch):
     seen = _install_embed_mock(monkeypatch, kind="openai", vector=[0.5, 0.25, 0.0])

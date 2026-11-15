@@ -86,6 +86,8 @@ struct RetrievalPlayground: View {
     @Binding var doi: String
     @Binding var title: String
     @Binding var heading: String
+    @Binding var papersFirst: Bool
+    @Binding var expandPapers: Bool
     @Binding var mode: String
     @Binding var denseWeight: String
     @Binding var lexicalWeight: String
@@ -216,6 +218,10 @@ struct RetrievalPlayground: View {
                 Text("picture").tag("picture")
                 Text("table").tag("table")
                 Text("formula").tag("formula")
+            }
+            Toggle("Papers first", isOn: $papersFirst)
+            if papersFirst {
+                Toggle("Expand to chunks", isOn: $expandPapers)
             }
             Button(action: onSearch) {
                 Text(isSearching ? "Searching…" : "Search")
@@ -360,6 +366,8 @@ struct RetrievalScreen: View {
     @State private var doi = ""
     @State private var title = ""
     @State private var heading = ""
+    @State private var papersFirst = false
+    @State private var expandPapers = false
     @State private var mode = RetrievalMode.dense.rawValue
     @State private var denseWeight = ""
     @State private var lexicalWeight = ""
@@ -415,6 +423,8 @@ struct RetrievalScreen: View {
             doi: $doi,
             title: $title,
             heading: $heading,
+            papersFirst: $papersFirst,
+            expandPapers: $expandPapers,
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,
@@ -515,6 +525,8 @@ struct RetrievalScreen: View {
                 title: title,
                 heading: heading
             ),
+            papersFirst: papersFirst,
+            expandPapers: expandPapers,
             rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
             rerank: rerankEnabled
                 ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey)
