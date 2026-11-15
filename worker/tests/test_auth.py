@@ -42,6 +42,11 @@ def test_protected_routes_reject_missing_token(tmp_settings):
         assert client.get("/v1/jobs/nope").status_code == 401
         assert client.post("/v1/jobs/nope/cancel").status_code == 401
         assert client.get("/v1/jobs/nope/events").status_code == 401
+        search = client.post(
+            "/v1/search",
+            json={"query": "revenue", "collection": "documents", "qdrant_url": "http://127.0.0.1:6333"},
+        )
+        assert search.status_code == 401
 
 
 def test_query_string_token_is_not_accepted(tmp_settings):

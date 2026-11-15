@@ -26,6 +26,7 @@ Docling, Ollama, or a GPU.
 | `POST` | `/v1/jobs/{id}/cancel` | Request cancellation |
 | `GET` | `/v1/health` | Docling import, embedding reachability, and the granite VLM engine plus GPU visibility. **No token.** |
 | `GET` | `/v1/models` | Embedding model names and known VLM ids. **Bearer token.** |
+| `POST` | `/v1/search` | Embed a query and search Qdrant. **Bearer token.** No web UI. |
 
 `settings.mode` is `chunk_only` (default) or `chunk_and_embed`. Other fields
 match the `docling_daemon.py` convert command (for example `vlm_model`,
@@ -44,6 +45,30 @@ match the `docling_daemon.py` convert command (for example `vlm_model`,
 For `qdrant_cloud`, send `qdrant_url`, `qdrant_api_key`, and optional `qdrant_collection` (default `documents`), `qdrant_distance` (`cosine`, `dot`, `euclid`), and `qdrant_batch_size` (default 250). The API key is held in memory only for that job, stripped from `GET /v1/jobs`, and never written to the log. The worker creates the collection when it is missing, using the embedding width and the requested distance. Before upsert the worker embeds the probe string `chunky` once per model, caches that width, and compares it with an existing collection. A mismatch fails the job with `error_type: dimension_mismatch` before the rest of the chunks are embedded. The same check runs again at upsert time.
 
 Payload fields match the Mac app: `text`, `source`, `page` (int), `year` (int), `headings` (string array), and string metadata `chunk_index`, `content_type`, `section`, `doc_title`, `authors` (joined with `"; "`), `doi`, `document_id`, `url`, `language`, `ingested_at`, `content_hash` (SHA-256 of embedding text, `|`, and model). Metadata flags on the job default to on, same as the Mac app.
+
+## Search
+
+`POST /v1/search` embeds one query with the configured embedding backend (Ollama
+by default, or OpenAI-compatible `/v1/embeddings` when `embedding_backend` is
+`openai`) and runs a dense Qdrant query. The web UI is out of scope.
+
+The Qdrant target is the request's `qdrant_url` and optional `qdrant_api_key`,
+or `CHUNKY_QDRANT_URL` / `CHUNKY_QDRANT_API_KEY` when the body omits them.
+Local Docker can omit the key. Cloud needs the key. The key is not returned
+and is stripped from error text and the log.
+
+`limit` is required to be explicit in the response (default 10, maximum 100;
+larger values are rejected). `offset` pages through results. A full page sets
+`next_offset` to `offset + limit`; a short page sets it to `null`. There is no
+silent 1,000-point cap.
+
+`filters` is a list of payload conditions, combined with AND. Each item has
+`key` plus `match` (string, integer, or boolean) and/or a range (`gt`, `gte`,
+`lt`, `lte`). Example keys are `source`, `page`, and `content_type`.
+
+A collection whose dense vector width does not match the query vector is
+refused with HTTP 409 and `error_type: dimension_mismatch` before the query.
+A missing collection is HTTP 404. The response `results` are `{id, score, payload}`.
 
 ## Authentication and bind address
 

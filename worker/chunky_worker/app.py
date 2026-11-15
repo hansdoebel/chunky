@@ -26,6 +26,7 @@ from chunky_worker.model_catalog import (
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
+from chunky_worker.search import QdrantPointSearcher, SearchError, parse_search_request, run_search
 from chunky_worker.settings import Settings, is_loopback_url
 from chunky_worker.vlm import GRANITE_PRESET, GRANITE_REPO_ID, gpu_probe
 
@@ -56,6 +57,7 @@ def create_app(
     embeddings: EmbeddingBackend | None = None,
     store: JobStore | None = None,
     ingestor=None,
+    searcher=None,
     model_cache=None,
     model_server=None,
     ollama_tags=None,
@@ -79,6 +81,7 @@ def create_app(
     )
     store = store or JobStore()
     runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
+    searcher = searcher or QdrantPointSearcher()
     downloads = DownloadManager(downloader, ollama_url=settings.ollama_url)
 
     app = FastAPI(title="Chunky worker", version="0.1.0")
@@ -87,6 +90,7 @@ def create_app(
     app.state.embeddings = embeddings
     app.state.store = store
     app.state.runner = runner
+    app.state.searcher = searcher
     _log_startup(settings)
 
     # /v1/health stays open so a reachability probe and systemd can check the
@@ -191,6 +195,23 @@ def create_app(
         if record is None:
             raise HTTPException(status_code=404, detail="Download not found")
         return record
+
+    @api.post("/v1/search")
+    def search(body: dict) -> JSONResponse:
+        try:
+            request = parse_search_request(body)
+            payload = run_search(
+                request,
+                settings=settings,
+                embeddings=embeddings,
+                searcher=searcher,
+            )
+        except SearchError as exc:
+            content: dict = {"detail": str(exc)}
+            if exc.error_type:
+                content["error_type"] = exc.error_type
+            return JSONResponse(status_code=exc.status_code, content=content)
+        return JSONResponse(status_code=200, content=payload)
 
     @api.post("/v1/jobs", status_code=202)
     async def create_job(
