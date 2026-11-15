@@ -189,13 +189,12 @@ TEXT_PAYLOAD_INDEXES = (
 )
 
 def stored_chunk_text(chunk: dict[str, Any]) -> str:
-    """Payload text matches the string that was embedded."""
     serialized = chunk.get("embedding_text")
     if isinstance(serialized, str) and serialized != "":
         return serialized
     return str(chunk.get("text") or "")
 
-BM25_TEXT_FIELD = "text"
+BM25_TEXT_FIELD = "embedding_text"
 
 def ensure_bm25_text_index(client, collection: str, field_name: str = BM25_TEXT_FIELD) -> None:
     from qdrant_client.models import TextIndexParams, TextIndexType, TextScoringParams, TextScoringType
@@ -246,13 +245,14 @@ def _payload(
     year: int | None,
     ingested_at: str,
 ) -> dict[str, Any]:
+    embedded = stored_chunk_text(chunk)
+    citation = chunk.get("text") if chunk.get("context_prefix") else embedded
     payload: dict[str, Any] = {
-        "text": stored_chunk_text(chunk),
+        "text": str(citation or ""),
         "source": chunk.get("source") or source,
     }
-    embedding_text = chunk.get("embedding_text")
-    if isinstance(embedding_text, str) and embedding_text != "":
-        payload["embedding_text"] = embedding_text
+    if embedded:
+        payload["embedding_text"] = embedded
     put_visual = (
         ("picture_description", chunk.get("picture_description")),
         ("picture_class", chunk.get("picture_class")),

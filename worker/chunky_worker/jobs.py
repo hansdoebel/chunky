@@ -135,6 +135,7 @@ def _enrich_context(
     settings: JobSettings,
     raw: dict[str, Any],
     cache: Any,
+    cancel_event: threading.Event | None = None,
 ) -> list[dict[str, Any]]:
     import sys
 
@@ -143,12 +144,13 @@ def _enrich_context(
     scripts = str(Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts")
     if scripts not in sys.path:
         sys.path.insert(0, scripts)
-    from contextual import cache_options, load_or_enrich
+    from contextual import EnrichmentStopped, cache_options, load_or_enrich, metadata_key
 
     base = settings.cache_options or ""
     if settings.page_offset is not None and "pageOffset=" not in base:
         base = f"{base}\npageOffset={settings.page_offset}" if base else f"pageOffset={settings.page_offset}"
-    options = cache_options(base, settings.contextual_model, settings.contextual_prompt or "v1")
+    meta = metadata_key(chunks[0] if chunks else {})
+    options = cache_options(base, settings.contextual_model, settings.contextual_prompt or "v1", meta)
     key = {
         "content_sha256": hash_file(pdf_path),
         "docling_version": str(raw.get("docling_version") or ""),
@@ -160,7 +162,17 @@ def _enrich_context(
     llm = None
     if settings.contextual_chat_url:
         llm = lambda prompt: _chat_complete(settings.contextual_chat_url, settings.contextual_model, prompt)
-    return load_or_enrich(cache, key, chunks, llm, enabled=True)
+    try:
+        return load_or_enrich(
+            cache,
+            key,
+            chunks,
+            llm,
+            enabled=True,
+            should_stop=cancel_event.is_set if cancel_event is not None else None,
+        )
+    except EnrichmentStopped:
+        raise JobCanceled() from None
 
 
 def _crossref_lookup(doi: str) -> dict[str, Any] | None:
@@ -486,7 +498,7 @@ class JobRunner:
             chunks = _apply_printed_labels(chunks, input_path, job.settings)
             if job.settings.metadata_enrich:
                 chunks = _enrich_bibliography(chunks, input_path, job.settings, raw)
-            chunks = _enrich_context(chunks, input_path, job.settings, raw, self.chunk_cache)
+            chunks = _enrich_context(chunks, input_path, job.settings, raw, self.chunk_cache, cancel_event)
             raw["chunks"] = chunks
             if job.settings.page_offset is not None:
                 raw["page_offset"] = job.settings.page_offset

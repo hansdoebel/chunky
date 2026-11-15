@@ -341,7 +341,7 @@ def test_hybrid_create_uses_named_vectors_and_quantization(monkeypatch):
     assert create["quantization_config"] is not None
     point = created["upsert"]["points"][0]
     assert point.vector == {"dense": [0.1, 0.2]}
-    bm25 = next(item for item in created["indexes"] if item["field_name"] == "text")
+    bm25 = next(item for item in created["indexes"] if item["field_name"] == "embedding_text" and getattr(item["field_schema"], "scoring", None))
     assert bm25["field_schema"].scoring.type.value == "bm25"
 
 def test_cloud_client_creates_collection_and_batches(monkeypatch):

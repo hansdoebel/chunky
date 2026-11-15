@@ -139,7 +139,7 @@ def test_hybrid_rrf_request_uses_text_query_and_optional_weights():
     assert dense.limit == 10
     assert isinstance(lexical.query, TextQuery)
     assert lexical.query.text == "revenue by year"
-    assert lexical.using == "text"
+    assert lexical.using == "embedding_text"
     assert isinstance(arguments["query"], RrfQuery)
     assert arguments["query"].rrf.weights == [0.7, 0.3]
     assert arguments["limit"] == 8

@@ -78,6 +78,7 @@ def summary_payload(
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "text": text,
+        "embedding_text": text,
         "source": source,
         "record_type": DOCUMENT_RECORD,
         "summary_kind": kind,
