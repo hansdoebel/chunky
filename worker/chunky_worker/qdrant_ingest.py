@@ -269,6 +269,9 @@ def _payload(
         "text": str(citation or ""),
         "source": chunk.get("source") or source,
     }
+    source_path = (settings.source_path or "").strip()
+    if source_path:
+        payload["source_path"] = source_path
     if embedded:
         payload["embedding_text"] = embedded
     put_visual = (

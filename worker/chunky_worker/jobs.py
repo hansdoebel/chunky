@@ -406,6 +406,7 @@ class JobRunner:
             authors=result.authors if settings.metadata_include_authors else None,
             year=result.year if settings.metadata_include_year else None,
             document_id=document_id if settings.metadata_include_document_id else None,
+            source_path=settings.source_path or None,
         )
         points.append(
             PreparedPoint(

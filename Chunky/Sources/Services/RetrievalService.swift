@@ -1406,6 +1406,13 @@ extension RetrievalHit {
         case let number as NSNumber:
             return number.stringValue
         case let list as [Any]:
+            if list.contains(where: { !($0 is String) && !($0 is NSNumber) }),
+               JSONSerialization.isValidJSONObject(list),
+               let data = try? JSONSerialization.data(withJSONObject: list),
+               let text = String(data: data, encoding: .utf8),
+               !text.isEmpty {
+                return text
+            }
             let parts = list.compactMap { stringValue($0) }
             return parts.isEmpty ? nil : parts.joined(separator: " > ")
         default:

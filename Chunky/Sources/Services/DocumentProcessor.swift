@@ -680,7 +680,8 @@ class DocumentProcessor: ObservableObject {
         chunks: [ChunkingService.DocumentChunk],
         settings: AppSettings,
         hybrid: Bool,
-        ingestedAt: String
+        ingestedAt: String,
+        sourcePath: String? = nil
     ) async throws -> [ChunkPoint] {
         let summaryChunks = chunks.map { SummaryChunk(text: $0.text, headings: $0.headings, page: $0.page) }
         let title = chunks.compactMap(\.docTitle).first { !$0.isEmpty } ?? ""
@@ -712,6 +713,9 @@ class DocumentProcessor: ObservableObject {
         }
         if settings.metadataIncludeDocumentId, let documentID = chunks.compactMap(\.documentId).first, !documentID.isEmpty {
             metadata["document_id"] = documentID
+        }
+        if let sourcePath, !sourcePath.isEmpty {
+            metadata["source_path"] = sourcePath
         }
         let sparse = hybrid ? SparseVectorService.generateSparseVectors(texts: [choice.text]).first : nil
         let point = ChunkPoint(
@@ -761,7 +765,8 @@ class DocumentProcessor: ObservableObject {
         embeddings: [[Float]],
         sparseVectors: [SparseVector?],
         settings: AppSettings,
-        ingestedAt: String
+        ingestedAt: String,
+        sourcePath: String? = nil
     ) -> [ChunkPoint] {
         zip(chunks, zip(embeddings, sparseVectors)).map { chunk, pair in
             let (embedding, sparse) = pair
@@ -809,6 +814,9 @@ class DocumentProcessor: ObservableObject {
             }
             if let offset = chunk.pageOffset {
                 metadata["page_offset"] = String(offset)
+            }
+            if let sourcePath, !sourcePath.isEmpty {
+                metadata["source_path"] = sourcePath
             }
             let storedText = (chunk.embeddingText?.isEmpty == false) ? chunk.embeddingText! : chunk.text
             return ChunkPoint(
@@ -861,10 +869,16 @@ class DocumentProcessor: ObservableObject {
                 if !hashToPoint.isEmpty {
                     var needsEmbedding: [ChunkingService.DocumentChunk] = []
                     var skippedHashes = Set<String>()
+                    var pathIDs: [String] = []
 
                     for chunk in chunks {
                         let hash = contentHash(text: chunk.embeddingText ?? chunk.text, model: settings.embeddingModel)
                         if let existingPoint = hashToPoint[hash] {
+                            var metadata = existingPoint.metadata
+                            if CitationPDF.shouldStore(path: job.sourceURL.path, existing: metadata["source_path"]) {
+                                pathIDs.append(existingPoint.id)
+                                metadata["source_path"] = job.sourceURL.path
+                            }
                             cachedPoints.append(ChunkPoint(
                                 id: existingPoint.id,
                                 vector: [],
@@ -872,12 +886,20 @@ class DocumentProcessor: ObservableObject {
                                 source: existingPoint.source,
                                 page: existingPoint.page,
                                 headings: existingPoint.headings,
-                                metadata: existingPoint.metadata
+                                metadata: metadata
                             ))
                             skippedHashes.insert(hash)
                         } else {
                             needsEmbedding.append(chunk)
                         }
+                    }
+
+                    if !pathIDs.isEmpty {
+                        try await qdrant.setPayload(
+                            collectionName: collectionName,
+                            ids: pathIDs,
+                            fields: ["source_path": job.sourceURL.path]
+                        )
                     }
 
                     if !skippedHashes.isEmpty {
@@ -933,8 +955,8 @@ class DocumentProcessor: ObservableObject {
 
             let sparseVectors = sparseVectors(for: chunksToEmbed, hybrid: createOptions.hybrid)
 
-            let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
-            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+            let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
+            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
             allPoints = newPoints
 
             job.status = .uploading
@@ -958,7 +980,7 @@ class DocumentProcessor: ObservableObject {
             job.uploadTime = (job.uploadTime ?? 0) + (CFAbsoluteTimeGetCurrent() - uploadStarted)
         } else {
             job.statusMessage = "All chunks cached, skipping embedding"
-            let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+            let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
             if !summaryPoints.isEmpty {
                 try await uploadToQdrant(
                     points: summaryPoints,
@@ -1047,7 +1069,7 @@ class DocumentProcessor: ObservableObject {
 
         let firstChunkBatch = Array(chunks.prefix(batchSize))
         let firstSparse = sparseVectors(for: firstChunkBatch, hybrid: createOptions.hybrid)
-        let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt)
+        let firstPoints = buildPoints(chunks: firstChunkBatch, embeddings: firstEmbeddings, sparseVectors: firstSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
         let firstUploadStarted = CFAbsoluteTimeGetCurrent()
         try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: firstPoints, batchSize: settings.qdrantBatchSize)
         uploadSeconds += CFAbsoluteTimeGetCurrent() - firstUploadStarted
@@ -1070,7 +1092,7 @@ class DocumentProcessor: ObservableObject {
 
             let batchSparse = sparseVectors(for: batchChunks, hybrid: createOptions.hybrid)
 
-            let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt)
+            let batchPoints = buildPoints(chunks: batchChunks, embeddings: batchEmbeddings, sparseVectors: batchSparse, settings: settings, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
             let batchUploadStarted = CFAbsoluteTimeGetCurrent()
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: batchPoints, batchSize: settings.qdrantBatchSize)
             uploadSeconds += CFAbsoluteTimeGetCurrent() - batchUploadStarted
@@ -1081,7 +1103,7 @@ class DocumentProcessor: ObservableObject {
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
         }
 
-        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
         if !summaryPoints.isEmpty {
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: summaryPoints, batchSize: settings.qdrantBatchSize)
         }
@@ -1158,7 +1180,8 @@ class DocumentProcessor: ObservableObject {
                 return
             }
         }
-        let payload = DevboxJobPayload.settings(from: settings, mode: mode, bibliography: job.bibliography)
+        var payload = DevboxJobPayload.settings(from: settings, mode: mode, bibliography: job.bibliography)
+        payload["source_path"] = job.sourceURL.path
         do {
             await refreshDoclingVersion(settings: settings)
             let digest = RunHistory.contentHash(ofFile: job.sourceURL)
@@ -1384,9 +1407,10 @@ class DocumentProcessor: ObservableObject {
             embeddings: parsed.embeddings,
             sparseVectors: sparseVectors(for: documentChunks, hybrid: createOptions.hybrid),
             settings: settings,
-            ingestedAt: ingestedAt
+            ingestedAt: ingestedAt,
+            sourcePath: job.sourceURL.path
         )
-        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt)
+        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, hybrid: createOptions.hybrid, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path)
         try await uploadToQdrant(
             points: points,
             collectionName: settings.defaultCollection,

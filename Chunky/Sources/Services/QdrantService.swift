@@ -403,6 +403,19 @@ class QdrantService: ObservableObject {
         return Array(sources).sorted()
     }
 
+    func setPayload(collectionName: String, ids: [String], fields: [String: String]) async throws {
+        guard let client = client else {
+            throw QdrantServiceError.notConnected
+        }
+        guard !ids.isEmpty, !fields.isEmpty else { return }
+        try await client.points.setPayload(
+            collection: collectionName,
+            ids: ids.map { PointID.uuid($0) },
+            payload: fields.mapValues { PayloadValue.string($0) },
+            wait: true
+        )
+    }
+
     func deletePoints(collectionName: String, ids: [String]) async throws {
         guard let client = client else {
             throw QdrantServiceError.notConnected
