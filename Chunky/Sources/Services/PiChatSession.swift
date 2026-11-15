@@ -28,6 +28,7 @@ nonisolated final class PiChatSession: @unchecked Sendable {
     private var selectedModel = ""
     private var launchedExecutable: String?
     private var launchedOverride: String?
+    private var runtimeDirectory: String?
 
     init(
         toolMode: PiToolMode = .none,
@@ -116,6 +117,7 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         self.client = nil
         lock.unlock()
         transport?.terminate()
+        removeRuntimeDirectory()
     }
 
     private func clientForPrompt() async throws -> PiRPCClient {
@@ -171,27 +173,35 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         launchedExecutable = nil
         lock.unlock()
         previous?.terminate()
+        removeRuntimeDirectory()
         let launched = transportFactory()
         let env = PiLaunch.environment(executable: path, nodePath: report.nodePath, base: environment())
         let plan = try launchPlan()
-        try launched.launch(
-            executable: path,
-            arguments: plan.arguments,
-            environment: env,
-            currentDirectory: plan.directory
-        )
+        do {
+            try launched.launch(
+                executable: path,
+                arguments: plan.arguments,
+                environment: env,
+                currentDirectory: plan.directory
+            )
+        } catch {
+            removeDirectory(plan.directory)
+            throw error
+        }
         let created = PiRPCClient(transport: launched)
         created.startReading()
         lock.lock()
         if !accepting {
             lock.unlock()
             launched.terminate()
+            removeDirectory(plan.directory)
             throw PiSessionError.terminated
         }
         transport = launched
         client = created
         launchedExecutable = path
         launchedOverride = override
+        runtimeDirectory = plan.directory
         lock.unlock()
         return created
     }
@@ -212,8 +222,24 @@ nonisolated final class PiChatSession: @unchecked Sendable {
         client = nil
         launchedExecutable = nil
         launchedOverride = nil
+        let directory = runtimeDirectory
+        runtimeDirectory = nil
         lock.unlock()
         previous?.terminate()
+        removeDirectory(directory)
+    }
+
+    private func removeRuntimeDirectory() {
+        lock.lock()
+        let directory = runtimeDirectory
+        runtimeDirectory = nil
+        lock.unlock()
+        removeDirectory(directory)
+    }
+
+    private func removeDirectory(_ directory: String?) {
+        guard let directory else { return }
+        try? FileManager.default.removeItem(atPath: directory)
     }
 
     private func withRestart<T>(_ body: () async throws -> T) async throws -> T {

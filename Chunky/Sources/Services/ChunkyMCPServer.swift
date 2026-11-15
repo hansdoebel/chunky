@@ -2,52 +2,11 @@ import Foundation
 
 nonisolated enum MCPFraming {
     static func encode(_ object: [String: Any]) throws -> Data {
-        let body = try JSONSerialization.data(withJSONObject: object, options: [.sortedKeys])
-        let header = Data("Content-Length: \(body.count)\r\n\r\n".utf8)
-        var message = header
-        message.append(body)
-        return message
+        try PiJSONL.encodeLine(object)
     }
 
     static func pullMessages(from buffer: inout Data) -> [Data] {
-        var messages: [Data] = []
-        let separator = Data("\r\n\r\n".utf8)
-        while let headerRange = range(of: separator, in: buffer) {
-            let headerData = buffer[..<headerRange.lowerBound]
-            guard let header = String(data: headerData, encoding: .utf8),
-                  let length = contentLength(header) else {
-                break
-            }
-            let bodyStart = headerRange.upperBound
-            let bodyEnd = buffer.index(bodyStart, offsetBy: length, limitedBy: buffer.endIndex)
-            guard let bodyEnd, bodyEnd <= buffer.endIndex else { break }
-            messages.append(Data(buffer[bodyStart..<bodyEnd]))
-            buffer.removeSubrange(..<bodyEnd)
-        }
-        return messages
-    }
-
-    static func range(of separator: Data, in buffer: Data) -> Range<Data.Index>? {
-        guard !separator.isEmpty, buffer.count >= separator.count else { return nil }
-        var index = buffer.startIndex
-        let last = buffer.index(buffer.endIndex, offsetBy: -separator.count)
-        while index <= last {
-            let end = buffer.index(index, offsetBy: separator.count)
-            if buffer[index..<end] == separator {
-                return index..<end
-            }
-            index = buffer.index(after: index)
-        }
-        return nil
-    }
-
-    static func contentLength(_ header: String) -> Int? {
-        for line in header.split(separator: "\r\n") {
-            let parts = line.split(separator: ":", maxSplits: 1).map { $0.trimmingCharacters(in: .whitespaces) }
-            guard parts.count == 2, parts[0].lowercased() == "content-length" else { continue }
-            return Int(parts[1])
-        }
-        return nil
+        PiJSONL.pullRecords(from: &buffer)
     }
 }
 
@@ -269,6 +228,14 @@ nonisolated enum PiMCPConfig {
 
 nonisolated enum ChunkyMCPMain {
     static func run() {
+        Task.detached {
+            await serve()
+            exit(0)
+        }
+        dispatchMain()
+    }
+
+    static func serve() async {
         let context = ChunkyMCPContext.load(defaults: .standard, secrets: KeychainSecretStore())
         let search = ChunkySearchBackend.make(context: context)
         let input = FileHandle.standardInput
@@ -276,19 +243,14 @@ nonisolated enum ChunkyMCPMain {
         var buffer = Data()
         while true {
             let chunk = input.availableData
-            if chunk.isEmpty { break }
+            if chunk.isEmpty { return }
             buffer.append(chunk)
             for body in MCPFraming.pullMessages(from: &buffer) {
                 guard let message = try? PiJSONL.decodeObject(body) else { continue }
-                let semaphore = DispatchSemaphore(value: 0)
-                Task {
-                    if let response = await ChunkyMCPDispatch.handle(message, search: search, secrets: context.secrets),
-                       let encoded = try? MCPFraming.encode(response) {
-                        try? output.write(contentsOf: encoded)
-                    }
-                    semaphore.signal()
+                if let response = await ChunkyMCPDispatch.handle(message, search: search, secrets: context.secrets),
+                   let encoded = try? MCPFraming.encode(response) {
+                    try? output.write(contentsOf: encoded)
                 }
-                semaphore.wait()
             }
         }
     }

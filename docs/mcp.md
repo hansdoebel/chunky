@@ -26,4 +26,4 @@ Use the path of the installed app. The in-app pi chat already starts with only `
 
 ## Other clients
 
-Any MCP client that can spawn a stdio server can use the same command and arguments. The protocol is JSON-RPC 2.0 with `Content-Length` framing.
+Any MCP client that can spawn a stdio server can use the same command and arguments. Messages are JSON-RPC 2.0, one JSON object per line.

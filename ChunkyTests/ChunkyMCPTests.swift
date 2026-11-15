@@ -5,18 +5,24 @@ import Testing
 
 struct ChunkyMCPTests {
 
-    @Test func framingSplitsOnContentLength() throws {
-        let first = try MCPFraming.encode(["jsonrpc": "2.0", "id": 1, "method": "tools/list"])
-        let second = try MCPFraming.encode(["jsonrpc": "2.0", "id": 2, "method": "initialize"])
-        var buffer = Data(first.prefix(12))
+    @Test func framingReadsNewlineDelimitedJSON() async throws {
+        let line = Data("{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"initialize\",\"params\":{\"protocolVersion\":\"2024-11-05\"}}\n".utf8)
+        var buffer = Data(line.prefix(20))
         #expect(MCPFraming.pullMessages(from: &buffer).isEmpty)
-        buffer.append(first.dropFirst(12))
-        buffer.append(second)
+        buffer.append(line.dropFirst(20))
+        buffer.append(contentsOf: "{\"jsonrpc\":\"2.0\",\"id\":2,\"method\":\"tools/list\"}\r\n".utf8)
         let messages = MCPFraming.pullMessages(from: &buffer)
         #expect(messages.count == 2)
         #expect(buffer.isEmpty)
-        let decoded = try PiJSONL.decodeObject(messages[0])
-        #expect(decoded["method"] as? String == "tools/list")
+        let request = try PiJSONL.decodeObject(messages[0])
+        let response = await ChunkyMCPDispatch.handle(request, search: FakeChunkySearch())
+        let encoded = try MCPFraming.encode(response!)
+        #expect(encoded.last == 0x0A)
+        #expect(!encoded.dropLast().contains(0x0A))
+        let decoded = try PiJSONL.decodeObject(encoded.dropLast())
+        let result = PiJSONL.dictionary(decoded["result"])
+        let info = PiJSONL.dictionary(result?["serverInfo"])
+        #expect(info?["name"] as? String == "chunky")
     }
 
     @Test func toolSchemasNameSearchAndCollections() async {
@@ -133,9 +139,94 @@ struct ChunkyMCPTests {
         #expect(!text.contains("super-secret-token"))
     }
 
+    @Test func runtimeDirectoryIsRemovedWhenPiStopsOrFailsToLaunch() async throws {
+        let root = FileManager.default.temporaryDirectory.path
+        func names() -> Set<String> {
+            Set((try? FileManager.default.contentsOfDirectory(atPath: root)) ?? []).filter { $0.hasPrefix("chunky-pi-") }
+        }
+        let before = names()
+        let transports = MCPLaunchBox()
+        let session = PiChatSession(
+            toolMode: .allow(PiLaunch.chunkyMCPTools),
+            locate: { .readyFixture },
+            transportFactory: { transports.make() },
+            environment: { ["HOME": "/Users/ada", "PATH": "/usr/bin"] }
+        )
+        _ = try await session.availableModels()
+        let created = names().subtracting(before)
+        #expect(created.count == 1)
+        session.terminate()
+        #expect(names().isDisjoint(with: created))
+
+        transports.failNextLaunch = true
+        let again = PiChatSession(
+            toolMode: .allow(PiLaunch.chunkyMCPTools),
+            locate: { .readyFixture },
+            transportFactory: { transports.make() },
+            environment: { ["HOME": "/Users/ada", "PATH": "/usr/bin"] }
+        )
+        let beforeFailure = names()
+        do {
+            _ = try await again.availableModels()
+            Issue.record("launch should fail")
+        } catch {
+            #expect(names().subtracting(beforeFailure).isEmpty)
+        }
+    }
+
     private func toolText(_ response: [String: Any]?) -> String? {
         let result = PiJSONL.dictionary(response?["result"])
         return PiJSONL.dictionaries(result?["content"]).first?["text"] as? String
+    }
+}
+
+private final class MCPLaunchBox: @unchecked Sendable {
+    var failNextLaunch = false
+    func make() -> MCPLaunchTransport {
+        let transport = MCPLaunchTransport()
+        transport.failLaunch = failNextLaunch
+        failNextLaunch = false
+        return transport
+    }
+}
+
+private final class MCPLaunchTransport: PiByteStream, @unchecked Sendable {
+    var failLaunch = false
+    private var running = false
+    private let stream: AsyncStream<Data>
+    private let continuation: AsyncStream<Data>.Continuation
+
+    var stdout: AsyncStream<Data> { stream }
+    var isRunning: Bool { running }
+
+    init() {
+        var captured: AsyncStream<Data>.Continuation!
+        stream = AsyncStream { captured = $0 }
+        continuation = captured
+    }
+
+    func launch(executable: String, arguments: [String], environment: [String: String], currentDirectory: String?) throws {
+        _ = (executable, arguments, environment, currentDirectory)
+        if failLaunch { throw PiTransportError.notRunning }
+        running = true
+    }
+
+    func write(_ data: Data) throws {
+        guard let object = try? JSONSerialization.jsonObject(with: data.dropLast()) as? [String: Any] else { return }
+        let id = object["id"] as? String ?? ""
+        let response = try? PiJSONL.encodeLine([
+            "id": id,
+            "type": "response",
+            "command": "get_available_models",
+            "success": true,
+            "data": ["models": []]
+        ])
+        if let response { continuation.yield(response) }
+    }
+
+    func terminate() {
+        running = false
+        continuation.finish()
     }
 }
 
