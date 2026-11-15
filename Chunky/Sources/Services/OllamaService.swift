@@ -70,6 +70,8 @@ actor OllamaService {
     // MARK: - Properties
 
     private let baseURL: URL
+    /// The URL string this client was created with. A different string means a new client.
+    nonisolated let configuredURL: String
     private let session: URLSession
     private var dimensionCache = EmbeddingDimensionCache()
 
@@ -80,6 +82,7 @@ actor OllamaService {
             throw OllamaError.connectionFailed("Invalid URL: \(baseURL)")
         }
         self.baseURL = url
+        self.configuredURL = baseURL
 
         let config = URLSessionConfiguration.default
         config.timeoutIntervalForRequest = 300 // 5 minutes for large batches
