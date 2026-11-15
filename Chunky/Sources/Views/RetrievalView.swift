@@ -80,6 +80,12 @@ struct RetrievalPlayground: View {
     @Binding var source: String
     @Binding var page: String
     @Binding var contentType: String
+    @Binding var yearFrom: String
+    @Binding var yearTo: String
+    @Binding var author: String
+    @Binding var doi: String
+    @Binding var title: String
+    @Binding var heading: String
     @Binding var mode: String
     @Binding var denseWeight: String
     @Binding var lexicalWeight: String
@@ -116,7 +122,16 @@ struct RetrievalPlayground: View {
         .background(AppTheme.surfaceGrouped)
     }
 
+    @ViewBuilder
     private var controls: some View {
+        if scrolls {
+            ScrollView(.vertical) { controlFields }
+        } else {
+            controlFields
+        }
+    }
+
+    private var controlFields: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Retrieval")
                 .font(.headline)
@@ -180,11 +195,27 @@ struct RetrievalPlayground: View {
                 .textFieldStyle(.roundedBorder)
             TextField("Page", text: $page, prompt: Text("Page"))
                 .textFieldStyle(.roundedBorder)
+            Text("Filters")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(.secondary)
+            TextField("Year from", text: $yearFrom, prompt: Text("Year from"))
+                .textFieldStyle(.roundedBorder)
+            TextField("Year to", text: $yearTo, prompt: Text("Year to"))
+                .textFieldStyle(.roundedBorder)
+            TextField("Author", text: $author, prompt: Text("Author"))
+                .textFieldStyle(.roundedBorder)
+            TextField("DOI", text: $doi, prompt: Text("DOI"))
+                .textFieldStyle(.roundedBorder)
+            TextField("Title contains", text: $title, prompt: Text("Title contains"))
+                .textFieldStyle(.roundedBorder)
+            TextField("Heading contains", text: $heading, prompt: Text("Heading contains"))
+                .textFieldStyle(.roundedBorder)
             Picker("Content", selection: $contentType) {
                 Text("Any").tag("")
                 Text("text").tag("text")
                 Text("picture").tag("picture")
                 Text("table").tag("table")
+                Text("formula").tag("formula")
             }
             Button(action: onSearch) {
                 Text(isSearching ? "Searching…" : "Search")
@@ -323,6 +354,12 @@ struct RetrievalScreen: View {
     @State private var source = ""
     @State private var page = ""
     @State private var contentType = ""
+    @State private var yearFrom = ""
+    @State private var yearTo = ""
+    @State private var author = ""
+    @State private var doi = ""
+    @State private var title = ""
+    @State private var heading = ""
     @State private var mode = RetrievalMode.dense.rawValue
     @State private var denseWeight = ""
     @State private var lexicalWeight = ""
@@ -372,6 +409,12 @@ struct RetrievalScreen: View {
             source: $source,
             page: $page,
             contentType: $contentType,
+            yearFrom: $yearFrom,
+            yearTo: $yearTo,
+            author: $author,
+            doi: $doi,
+            title: $title,
+            heading: $heading,
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,
@@ -461,7 +504,17 @@ struct RetrievalScreen: View {
             offset: offset,
             backend: backend,
             model: model,
-            filters: RetrievalFilter.playground(source: source, page: page, contentType: contentType),
+            filters: RetrievalFilter.playground(
+                source: source,
+                page: page,
+                contentType: contentType,
+                yearFrom: yearFrom,
+                yearTo: yearTo,
+                author: author,
+                doi: doi,
+                title: title,
+                heading: heading
+            ),
             rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
             rerank: rerankEnabled
                 ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey)

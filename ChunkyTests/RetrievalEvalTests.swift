@@ -171,6 +171,26 @@ struct RetrievalEvalTests {
         #expect(try store.allDrafts().isEmpty)
     }
 
+    @Test func differentScopesStaySeparateComparisons() throws {
+        let store = try RunHistoryStore(inMemory: true)
+        let open = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: false, reranker: false, recall: 0.4, latency: 40)
+        var year = sample(model: "qwen3-embedding", chunking: "512/64", hybrid: false, reranker: false, recall: 0.8, latency: 40)
+        year.scope = RetrievalFilter.scopeLabel(RetrievalFilter.scope(yearFrom: "2020", yearTo: "2024", author: "Ada"))
+        var author = year
+        author.scope = RetrievalFilter.scopeLabel(RetrievalFilter.scope(author: "Bea"))
+        author.score.recallAtK = 0.2
+        try store.insert(open)
+        try store.insert(year)
+        try store.insert(author)
+        let loaded = try store.evalDrafts()
+        #expect(loaded.contains { $0.scope == year.scope })
+        let compared = RetrievalEvalHistory.compare(loaded)
+        #expect(compared.count == 3)
+        #expect(compared.contains { $0.label.contains("year:") && $0.label.contains("authors:~Ada") && $0.runs == 1 })
+        #expect(compared.contains { $0.label.contains("authors:~Bea") && $0.runs == 1 })
+        #expect(compared.contains { $0.runs == 1 && !$0.label.contains("authors:") })
+    }
+
     @Test @MainActor func evalViewRendersAColoredScreenshot() throws {
         let runs = [
             sample(model: "qwen3-embedding", chunking: "512/64", hybrid: false, reranker: false, recall: 0.42, latency: 40),
@@ -283,6 +303,38 @@ struct RetrievalEvalTests {
             )
         )
     }
+
+    @Test func evalSearchSendsTheSameScopeFilter() async throws {
+        let settings = IsolatedSettings.make()
+        let index = EvalFakeIndex(hits: [
+            SearchResult(id: "d1", score: 0.9, text: "alpha", source: "doc-1"),
+        ])
+        let service = RetrievalService(embedding: EvalFakeEmbedding(), worker: EvalFakeWorker())
+        let filters = RetrievalFilter.scope(yearFrom: "2020", yearTo: "2024", author: "Ada")
+        let config = RetrievalEvalConfig(
+            collection: "documents",
+            embeddingBackend: EmbeddingBackendKind.ollama.rawValue,
+            embeddingModel: "qwen3-embedding",
+            chunking: "512/64",
+            hybrid: false,
+            reranker: false,
+            k: 3,
+            rrfWeights: nil,
+            rerank: nil,
+            filters: filters
+        )
+        let draft = try await RetrievalEvalRunner(service: service).run(
+            set: RetrievalEvalSet(name: "scope", queries: [RetrievalEvalQuery(question: "revenue", relevantIDs: ["d1"])]),
+            config: config,
+            settings: settings,
+            index: index
+        )
+        let encoded = RetrievalFilter.encodedSummaries(filters)
+        #expect(encoded.map(\.key) == ["year", "authors"])
+        #expect(draft.scope == RetrievalFilter.scopeLabel(filters))
+        #expect(index.lastFilter != nil)
+        #expect(index.denseCalls == 1)
+    }
 }
 
 private struct EvalFakeEmbedding: RetrievalEmbedding {
@@ -303,6 +355,8 @@ private final class EvalFakeIndex: RetrievalIndex {
 
     func vectorSize(collection: String) async throws -> Int? { 4 }
     func vectorName(collection: String) async throws -> String? { "dense" }
+    var lastFilter: RetrievalQueryFilter?
+
     func denseSearch(
         collection: String,
         vector: [Float],
@@ -312,6 +366,7 @@ private final class EvalFakeIndex: RetrievalIndex {
         vectorName: String?
     ) async throws -> [SearchResult] {
         denseCalls += 1
+        lastFilter = filter
         return hits
     }
 

@@ -95,6 +95,34 @@ struct ChunkyMCPTests {
         #expect(toolText(missing)?.contains("query") == true)
     }
 
+    @Test func searchScopeFieldsBecomeFilters() throws {
+        let request = try ChunkyMCPDispatch.searchRequest([
+            "query": "revenue",
+            "year_from": 2020,
+            "year_to": 2024,
+            "author": "Ada",
+            "doi": "10.1000/xyz",
+            "title": "Revenue",
+            "heading": "Results",
+            "content_type": "table",
+        ])
+        #expect(request.filters.map(\.key) == ["year", "authors", "doi", "doc_title", "headings", "content_type"])
+        #expect(request.filters[0].gte == 2020)
+        #expect(request.filters[0].lte == 2024)
+        #expect(request.filters[1].text == "Ada")
+        #expect(request.filters[2].match == "10.1000/xyz")
+        #expect(request.filters[3].text == "Revenue")
+        #expect(request.filters[4].text == "Results")
+        #expect(request.filters[5].match == "table")
+        let empty = try ChunkyMCPDispatch.searchRequest(["query": "revenue", "author": "  "])
+        #expect(empty.filters.isEmpty)
+        let schema = ChunkyMCPDispatch.toolSchemas[0]["inputSchema"] as? [String: Any]
+        let properties = schema?["properties"] as? [String: Any]
+        #expect(properties?["year_from"] != nil)
+        #expect(properties?["author"] != nil)
+        #expect(properties?["heading"] != nil)
+    }
+
     @Test func retrievalServiceReceivesTheSavedSearch() async throws {
         let name = "chunky-test-\(UUID().uuidString)"
         let defaults = UserDefaults(suiteName: name)!

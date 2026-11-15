@@ -12,6 +12,7 @@ class QdrantService: ObservableObject {
     private var client: QdrantGRPCClient?
     private var pendingUrl: String?
     private var pendingApiKey: String?
+    private var indexedCollections: Set<String> = []
 
     func configure(url: String, apiKey: String?) async throws {
 
@@ -188,13 +189,19 @@ class QdrantService: ObservableObject {
         throw QdrantServiceError.operationFailed("BM25 text index failed with HTTP \(http.statusCode). \(detail)")
     }
 
+    func ensureRetrievalIndexes(collection: String) async {
+        if indexedCollections.contains(collection) { return }
+        try? await createPayloadIndexes(collection: collection)
+        indexedCollections.insert(collection)
+    }
+
     func createPayloadIndexes(collection: String) async throws {
         guard let client = client else {
             throw QdrantServiceError.notConnected
         }
 
-        let keywordFields = ["source", "doc_title", "authors", "content_type", "language", "doi", "picture_class"]
-        let textFields = ["picture_description", "table_markdown", "embedding_text"]
+        let keywordFields = ["source", "content_type", "language", "doi", "picture_class"]
+        let textFields = ["doc_title", "authors", "headings", "picture_description", "table_markdown", "embedding_text"]
         let integerFields = ["page", "page_end", "year"]
 
         for field in keywordFields {
@@ -274,6 +281,7 @@ class QdrantService: ObservableObject {
         guard let client = client else {
             throw QdrantServiceError.notConnected
         }
+        await ensureRetrievalIndexes(collection: collectionName)
 
         let resolved: Filter?
         if let filter {

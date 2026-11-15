@@ -8,10 +8,11 @@ nonisolated protocol ChunkySearchProviding: Sendable {
 nonisolated struct ChunkySearchFilter: Equatable, Sendable {
     var key: String
     var match: String?
-    var gt: Double?
-    var gte: Double?
-    var lt: Double?
-    var lte: Double?
+    var text: String? = nil
+    var gt: Double? = nil
+    var gte: Double? = nil
+    var lt: Double? = nil
+    var lte: Double? = nil
 }
 
 nonisolated struct ChunkySearchRequest: Equatable, Sendable {
@@ -125,12 +126,19 @@ nonisolated struct RetrievalServiceSearch: ChunkySearchProviding {
     private static func retrievalFilter(_ filter: ChunkySearchFilter) -> RetrievalFilter {
         RetrievalFilter(
             key: filter.key,
-            match: filter.match.map { .text($0) },
+            match: Self.match(filter),
             gt: filter.gt,
             gte: filter.gte,
             lt: filter.lt,
             lte: filter.lte
         )
+    }
+
+    private static func match(_ filter: ChunkySearchFilter) -> RetrievalMatch? {
+        if let text = filter.text?.trimmingCharacters(in: .whitespacesAndNewlines), !text.isEmpty {
+            return .contains(text)
+        }
+        return filter.match.map { .text($0) }
     }
 }
 

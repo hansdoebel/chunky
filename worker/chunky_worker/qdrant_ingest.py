@@ -168,8 +168,6 @@ def build_points(
 
 KEYWORD_PAYLOAD_INDEXES = (
     "source",
-    "doc_title",
-    "authors",
     "content_type",
     "language",
     "doi",
@@ -181,6 +179,9 @@ INTEGER_PAYLOAD_INDEXES = (
     "year",
 )
 TEXT_PAYLOAD_INDEXES = (
+    "doc_title",
+    "authors",
+    "headings",
     "picture_description",
     "table_markdown",
     "embedding_text",

@@ -147,7 +147,7 @@ struct CollectionPlan: Codable, Equatable {
 
     static let defaultIndexes = [
         "source", "doc_title", "authors", "content_type", "language", "doi",
-        "page", "year", "picture_class", "picture_description", "table_markdown", "embedding_text",
+        "headings", "page", "page_end", "year", "picture_class", "picture_description", "table_markdown", "embedding_text",
     ]
 
     static func preset(
