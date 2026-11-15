@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 @main
@@ -8,6 +9,9 @@ struct ChunkyApp: App {
         WindowGroup {
             ContentView()
                 .environmentObject(appState)
+                .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+                    appState.piSession.terminate()
+                }
         }
         .windowStyle(.automatic)
         .defaultSize(width: 900, height: 600)
