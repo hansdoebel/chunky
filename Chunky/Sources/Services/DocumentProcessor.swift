@@ -13,6 +13,7 @@ class DocumentProcessor: ObservableObject {
     private let doclingService = DoclingService()
     private let chunkingService = ChunkingService()
     private var ollamaService: OllamaService?
+    private var ollamaServiceURL: String?
     private var currentTask: Task<Void, Never>?
 
     func cancel() {
@@ -23,12 +24,15 @@ class DocumentProcessor: ObservableObject {
         }
     }
 
-    private func getOllamaService(baseURL: String) throws -> OllamaService {
-        if let service = ollamaService {
+    func getOllamaService(baseURL: String) throws -> OllamaService {
+        if let service = ollamaService, ollamaServiceURL == baseURL {
             return service
         }
+        // Drop the previous client. A call that already holds it can finish;
+        // later work uses the new URL instead of the stale host.
         let service = try OllamaService(baseURL: baseURL)
         ollamaService = service
+        ollamaServiceURL = baseURL
         return service
     }
 
