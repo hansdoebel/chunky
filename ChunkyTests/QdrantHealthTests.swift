@@ -191,7 +191,23 @@ private final class ScriptedHealthTransport: QdrantHealthTransport, @unchecked S
 private enum QdrantHealthRenderer {
     static func png(report: QdrantHealthReport) throws -> Data {
         let size = NSSize(width: 720, height: 640)
-        let view = QdrantHealthScreen(report: report, status: "Updated documents.", onRefresh: {}, onClose: {})
+        let view = QdrantHealthScreen(
+            report: report,
+            status: "Updated documents.",
+            cloud: nil,
+            cloudStatus: "",
+            accountID: "",
+            clusterID: "",
+            managementKey: "",
+            keepAlive: false,
+            onAccount: { _ in },
+            onCluster: { _ in },
+            onManagementKey: { _ in },
+            onKeepAlive: { _ in },
+            onUnsuspend: {},
+            onRefresh: {},
+            onClose: {}
+        )
             .frame(width: size.width, height: size.height, alignment: .top)
             .background(Color(nsColor: .windowBackgroundColor))
             .environment(\.colorScheme, .light)
