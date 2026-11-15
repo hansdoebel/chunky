@@ -1,0 +1,35 @@
+# Example systemd unit for the Chunky worker on the Ubuntu devbox.
+# Plain venv, no Docker. Copy to /etc/systemd/system/chunky-worker.service
+# and replace the placeholders. Do not commit a real token or IP.
+#
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now chunky-worker
+#
+# Ollama and vLLM stay on loopback. Only this unit's port is reachable on the
+# 10GbE address, and only from the Mac (see the README firewall example).
+
+[Unit]
+Description=Chunky document-processing worker
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=chunky
+Group=chunky
+WorkingDirectory=/opt/chunky
+Environment=CHUNKY_WORKER_HOST=REPLACE_WITH_DEVBOX_10GBE_IP
+Environment=CHUNKY_WORKER_PORT=8080
+Environment=CHUNKY_WORKER_TOKEN_FILE=/etc/chunky/worker.token
+Environment=CHUNKY_OLLAMA_URL=http://127.0.0.1:11434
+Environment=CHUNKY_VLLM_URL=http://127.0.0.1:8000
+Environment=CHUNKY_EMBEDDING_MODEL=qwen3-embedding
+ExecStart=/opt/chunky/worker/.venv/bin/chunky-worker
+Restart=on-failure
+RestartSec=3
+
+# The token file is root-owned and mode 0600. The service user must be able
+# to read it (for example group chunky, mode 0640). Never put the token here.
+
+[Install]
+WantedBy=multi-user.target

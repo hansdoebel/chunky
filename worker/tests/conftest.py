@@ -103,6 +103,13 @@ class FakeEmbeddings:
         return [[float(i), 0.1, 0.2] for i, _ in enumerate(texts)]
 
 
+TEST_TOKEN = "test-token"
+
+
+def auth_headers(token: str = TEST_TOKEN) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
 @pytest.fixture
 def tmp_settings(tmp_path: Path) -> Settings:
     return Settings(
@@ -112,7 +119,9 @@ def tmp_settings(tmp_path: Path) -> Settings:
         work_dir=tmp_path / "work",
         scripts_dir=tmp_path / "scripts",
         ollama_url="http://127.0.0.1:11434",
+        vllm_url="http://127.0.0.1:8000",
         embedding_model="qwen3-embedding",
+        token=TEST_TOKEN,
     )
 
 
@@ -134,7 +143,7 @@ def client(tmp_settings, pipeline, embeddings):
         embeddings=embeddings,
         store=JobStore(),
     )
-    with TestClient(app) as test_client:
+    with TestClient(app, headers=auth_headers(tmp_settings.token or "")) as test_client:
         yield test_client
 
 

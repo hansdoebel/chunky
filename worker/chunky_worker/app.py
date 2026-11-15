@@ -8,15 +8,16 @@ import logging
 from pathlib import Path
 from typing import Annotated
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import JSONResponse, StreamingResponse
 
+from chunky_worker.auth import require_bearer
 from chunky_worker.embeddings import EmbeddingBackend, OllamaEmbeddingBackend
 from chunky_worker.jobs import TERMINAL, JobRunner, JobStore
 from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import Job, JobSettings, JobStatus
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
-from chunky_worker.settings import Settings
+from chunky_worker.settings import Settings, is_loopback_url
 
 log = logging.getLogger(__name__)
 
@@ -61,6 +62,11 @@ def create_app(
     app.state.embeddings = embeddings
     app.state.store = store
     app.state.runner = runner
+    _log_startup(settings)
+
+    # /v1/health stays open so a reachability probe and systemd can check the
+    # process without the bearer token. Every other /v1 route requires it.
+    api = APIRouter(dependencies=[Depends(require_bearer)])
 
     @app.get("/v1/health")
     def health() -> dict:
@@ -78,7 +84,7 @@ def create_app(
             },
         }
 
-    @app.get("/v1/models")
+    @api.get("/v1/models")
     def models() -> dict:
         names, error = embeddings.list_models()
         embedding_models = [{"name": name, "available": True} for name in names]
@@ -100,7 +106,7 @@ def create_app(
             "embeddings_error": error,
         }
 
-    @app.post("/v1/jobs", status_code=202)
+    @api.post("/v1/jobs", status_code=202)
     async def create_job(
         file: Annotated[UploadFile, File()],
         settings_raw: Annotated[str | None, Form(alias="settings")] = None,
@@ -129,14 +135,14 @@ def create_app(
         runner.start(job.id, dest)
         return {"id": job.id, "status": job.status.value}
 
-    @app.get("/v1/jobs/{job_id}")
+    @api.get("/v1/jobs/{job_id}")
     def get_job(job_id: str) -> dict:
         job = store.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job not found")
         return _job_payload(job)
 
-    @app.post("/v1/jobs/{job_id}/cancel")
+    @api.post("/v1/jobs/{job_id}/cancel")
     def cancel_job(job_id: str) -> JSONResponse:
         job = store.request_cancel(job_id)
         if job is None:
@@ -148,7 +154,7 @@ def create_app(
             )
         return JSONResponse(status_code=200, content={"id": job.id, "status": "canceled"})
 
-    @app.get("/v1/jobs/{job_id}/events")
+    @api.get("/v1/jobs/{job_id}/events")
     async def job_events(job_id: str, request: Request) -> StreamingResponse:
         if store.get(job_id) is None:
             raise HTTPException(status_code=404, detail="Job not found")
@@ -168,7 +174,25 @@ def create_app(
 
         return StreamingResponse(stream(), media_type="text/event-stream")
 
+    app.include_router(api)
     return app
+
+
+def _log_startup(settings: Settings) -> None:
+    if settings.token:
+        log.info("Bearer auth enabled for /v1 routes except /v1/health")
+    else:
+        log.warning("No worker token configured; protected /v1 routes will return 401")
+    log.info("Bind host %s port %s", settings.host, settings.port)
+    if settings.host in {"0.0.0.0", "::"}:
+        log.warning(
+            "Worker is bound to every interface. Prefer CHUNKY_WORKER_HOST set to the 10GbE address "
+            "and a firewall that allows only the Mac."
+        )
+    if not is_loopback_url(settings.ollama_url):
+        log.warning("Ollama URL is not loopback: %s", settings.ollama_url)
+    if not is_loopback_url(settings.vllm_url):
+        log.warning("vLLM URL is not loopback: %s", settings.vllm_url)
 
 
 def _job_payload(job: Job) -> dict:

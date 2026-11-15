@@ -19,15 +19,77 @@ Docling, Ollama, or a GPU.
 | `GET` | `/v1/jobs/{id}` | Job status and result (chunks, optional embeddings) |
 | `GET` | `/v1/jobs/{id}/events` | SSE progress `{type, message, percent}` |
 | `POST` | `/v1/jobs/{id}/cancel` | Request cancellation |
-| `GET` | `/v1/health` | Docling import and embedding-backend reachability |
-| `GET` | `/v1/models` | Embedding model names and known VLM ids |
+| `GET` | `/v1/health` | Docling import and embedding-backend reachability. **No token.** |
+| `GET` | `/v1/models` | Embedding model names and known VLM ids. **Bearer token.** |
 
 `settings.mode` is `chunk_only` (default) or `chunk_and_embed`. Other fields
 match the `docling_daemon.py` convert command (for example `vlm_model`,
 `accelerator`, `chunk_max_tokens`, `ollama_url`, `embedding_model`).
 
-Bearer-token auth and binding to the 10GbE interface are PER-47. Qdrant ingest
-is PER-48 — this worker returns artifacts (and embeddings) only.
+Qdrant ingest is not implemented yet (PER-48 / PER-50). This worker returns
+artifacts (and embeddings) only.
+
+## Authentication and bind address
+
+Every `/v1` route except `GET /v1/health` requires:
+
+```
+Authorization: Bearer <token>
+```
+
+`/v1/health` stays open so a reachability probe and systemd can see that the
+process is up before the token is checked. `/v1/models` and the job routes
+return **401** when the token is missing, wrong, or not configured. A token in
+the query string is ignored (it would show up in access logs). The token is
+never written to the worker log.
+
+The token comes from, in order:
+
+1. `CHUNKY_WORKER_TOKEN` (non-empty). An empty value disables the file fallback.
+2. `CHUNKY_WORKER_TOKEN_FILE` (the file must exist).
+3. `$XDG_CONFIG_HOME/chunky/worker.token`, or `~/.config/chunky/worker.token` when that file exists.
+
+Generate one (printed to stdout only; optional file is mode `0600`):
+
+```bash
+.venv/bin/chunky-worker --generate-token
+.venv/bin/chunky-worker --generate-token --token-file /etc/chunky/worker.token
+```
+
+Put that value in the Mac Keychain. Do not commit it.
+
+**Bind address.** The default is `127.0.0.1:8080` (`CHUNKY_WORKER_HOST` /
+`CHUNKY_WORKER_PORT`, or `--host` / `--port`). On the devbox, set
+`CHUNKY_WORKER_HOST` to the static address of the 10GbE NIC. Do not hardcode
+that address in the repo. Binding `0.0.0.0` logs a warning; prefer the single
+interface plus a firewall that allows the worker port only from the Mac's
+10GbE address:
+
+```bash
+# placeholders — use your own addresses
+sudo ufw allow from MAC_10GBE_IP to DEVBOX_10GBE_IP port 8080 proto tcp
+sudo ufw deny 8080/tcp
+```
+
+**Model servers stay on loopback.** Ollama defaults to
+`http://127.0.0.1:11434` (`CHUNKY_OLLAMA_URL`). vLLM defaults to
+`http://127.0.0.1:8000` (`CHUNKY_VLLM_URL`). Do not publish them on the LAN.
+A non-loopback URL logs a warning at startup.
+
+## systemd
+
+`deploy/chunky-worker.service` is a plain-venv unit (no Docker). Install the
+venv under `/opt/chunky/worker/.venv`, write the token file, set
+`CHUNKY_WORKER_HOST` to the 10GbE address, then:
+
+```bash
+sudo cp deploy/chunky-worker.service /etc/systemd/system/chunky-worker.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now chunky-worker
+curl -sS "http://127.0.0.1:8080/v1/health"
+curl -sS -H "Authorization: Bearer $(sudo cat /etc/chunky/worker.token)" \
+  "http://127.0.0.1:8080/v1/models"
+```
 
 ## Run
 
@@ -38,6 +100,8 @@ python3 -m venv .venv
 # On the devbox, also install docling (not mlx-vlm):
 # .venv/bin/pip install docling
 .venv/bin/chunky-worker --host 127.0.0.1 --port 8080
+# On the devbox, bind the 10GbE address instead of loopback:
+# CHUNKY_WORKER_HOST=<devbox-10gbe-ip> .venv/bin/chunky-worker
 ```
 
 Logs go to `$XDG_STATE_HOME/chunky/logs` (default `~/.local/state/chunky/logs`),

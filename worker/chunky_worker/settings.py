@@ -5,6 +5,7 @@ from __future__ import annotations
 import os
 from dataclasses import dataclass, field
 from pathlib import Path
+from urllib.parse import urlparse
 
 
 def default_state_dir() -> Path:
@@ -28,6 +29,48 @@ def default_work_dir() -> Path:
     return default_state_dir() / "chunky" / "work"
 
 
+def default_config_dir() -> Path:
+    xdg = os.environ.get("XDG_CONFIG_HOME")
+    if xdg:
+        return Path(xdg)
+    return Path.home() / ".config"
+
+
+def default_token_file() -> Path:
+    override = os.environ.get("CHUNKY_WORKER_TOKEN_FILE")
+    if override:
+        return Path(override)
+    return default_config_dir() / "chunky" / "worker.token"
+
+
+def load_token() -> str | None:
+    """Load the bearer token. Env wins over a file. Never logs the value.
+
+    ``CHUNKY_WORKER_TOKEN`` set to a non-empty string is used as-is (stripped).
+    An explicitly empty env value disables the file fallback.
+    ``CHUNKY_WORKER_TOKEN_FILE`` is required to exist when set.
+    Otherwise ``$XDG_CONFIG_HOME/chunky/worker.token`` (default
+    ``~/.config/chunky/worker.token``) is used when that file exists.
+    """
+    if "CHUNKY_WORKER_TOKEN" in os.environ:
+        value = os.environ.get("CHUNKY_WORKER_TOKEN", "").strip()
+        return value or None
+
+    path = default_token_file()
+    explicit_file = "CHUNKY_WORKER_TOKEN_FILE" in os.environ
+    if not path.is_file():
+        if explicit_file:
+            raise FileNotFoundError(f"CHUNKY_WORKER_TOKEN_FILE does not exist: {path}")
+        return None
+    value = path.read_text(encoding="utf-8").strip()
+    return value or None
+
+
+def is_loopback_url(url: str) -> bool:
+    host = (urlparse(url).hostname or "").lower().strip("[]")
+    return host in {"127.0.0.1", "localhost", "::1"}
+
+
 def default_scripts_dir() -> Path:
     override = os.environ.get("CHUNKY_SCRIPTS_DIR")
     if override:
@@ -45,7 +88,10 @@ class Settings:
     work_dir: Path = field(default_factory=default_work_dir)
     scripts_dir: Path = field(default_factory=default_scripts_dir)
     ollama_url: str = "http://127.0.0.1:11434"
+    vllm_url: str = "http://127.0.0.1:8000"
     embedding_model: str = "qwen3-embedding"
+    # None means protected routes reject every request (fail closed).
+    token: str | None = None
 
     @classmethod
     def from_env(cls) -> "Settings":
@@ -56,5 +102,7 @@ class Settings:
             work_dir=default_work_dir(),
             scripts_dir=default_scripts_dir(),
             ollama_url=os.environ.get("CHUNKY_OLLAMA_URL", "http://127.0.0.1:11434"),
+            vllm_url=os.environ.get("CHUNKY_VLLM_URL", "http://127.0.0.1:8000"),
             embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding"),
+            token=load_token(),
         )
