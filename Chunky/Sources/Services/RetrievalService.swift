@@ -536,6 +536,7 @@ struct RetrievalHit: Identifiable, Equatable, Sendable {
     var page: Int?
     var pageEnd: Int?
     var headings: [String]
+    var pageLabels: [String]
     var payload: [String: String]
 
     init(result: SearchResult) {
@@ -556,6 +557,7 @@ struct RetrievalHit: Identifiable, Equatable, Sendable {
         self.page = result.page
         self.pageEnd = Int(result.metadata["page_end"] ?? "")
         self.headings = result.headings
+        self.pageLabels = Self.pageLabels(from: result.metadata["page_labels"])
         self.payload = payload
     }
 
@@ -568,7 +570,8 @@ struct RetrievalHit: Identifiable, Equatable, Sendable {
         headings: [String],
         payload: [String: String],
         docTitle: String = "",
-        pageEnd: Int? = nil
+        pageEnd: Int? = nil,
+        pageLabels: [String] = []
     ) {
         self.id = id
         self.score = score
@@ -578,6 +581,7 @@ struct RetrievalHit: Identifiable, Equatable, Sendable {
         self.page = page
         self.pageEnd = pageEnd ?? Int(payload["page_end"] ?? "")
         self.headings = headings
+        self.pageLabels = pageLabels.isEmpty ? Self.pageLabels(from: payload["page_labels"]) : pageLabels
         self.payload = payload
     }
 }
@@ -1344,7 +1348,8 @@ extension RetrievalHit {
             headings: headings,
             payload: flat,
             docTitle: docTitle,
-            pageEnd: pageEnd
+            pageEnd: pageEnd,
+            pageLabels: Self.pageLabels(from: payloadObject["page_labels"])
         )
     }
 
@@ -1367,6 +1372,23 @@ extension RetrievalHit {
         }
         if let text = value as? String, !text.isEmpty {
             return text.components(separatedBy: " > ")
+        }
+        return []
+    }
+
+    static func pageLabels(from value: Any?) -> [String] {
+        if let list = value as? [String] {
+            return list.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        if let list = value as? [Any] {
+            return list.compactMap { stringValue($0) }.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+        }
+        if let text = value as? String {
+            return text
+                .components(separatedBy: "\n")
+                .flatMap { $0.components(separatedBy: " > ") }
+                .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                .filter { !$0.isEmpty }
         }
         return []
     }

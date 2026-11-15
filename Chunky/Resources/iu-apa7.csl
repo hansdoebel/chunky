@@ -1,0 +1,226 @@
+<?xml version="1.0" encoding="utf-8"?>
+<style xmlns="http://purl.org/net/xbiblio/csl" class="in-text" version="1.0" demote-non-dropping-particle="never" default-locale="de-DE" page-range-format="expanded">
+  <info>
+    <title>APA 7 (IU Zitierleitfaden)</title>
+    <title-short>IU APA 7</title-short>
+    <id>https://github.com/hansdoebel/chunky/blob/main/Chunky/Resources/iu-apa7.csl</id>
+    <link href="https://github.com/hansdoebel/chunky/blob/main/Chunky/Resources/iu-apa7.csl" rel="self"/>
+    <link href="https://res.cloudinary.com/iugroup/image/upload/v1764593394/Zitierleitfaden-IU_yl1quy.pdf" rel="documentation"/>
+    <author>
+      <name>Chunky</name>
+    </author>
+    <category citation-format="author-date"/>
+    <updated>2026-11-15T16:00:00+00:00</updated>
+    <rights license="https://creativecommons.org/licenses/by-sa/4.0/">This style encodes APA 7 as adapted by the IU Allgemeiner Zitierleitfaden, Stand 01.10.2025, Anhang C.</rights>
+    <summary>Author-date citations for Typst. Printed pages are expected on every in-text cite. The reference list uses German terms, a German date, no comma before the ampersand, no retrieval date, and the current edition year only.</summary>
+  </info>
+  <locale xml:lang="de">
+    <date form="text">
+      <date-part name="day" form="numeric" suffix=". "/>
+      <date-part name="month" suffix=" "/>
+      <date-part name="year"/>
+    </date>
+    <terms>
+      <term name="month-01">Januar</term>
+      <term name="month-02">Februar</term>
+      <term name="month-03">März</term>
+      <term name="month-04">April</term>
+      <term name="month-05">Mai</term>
+      <term name="month-06">Juni</term>
+      <term name="month-07">Juli</term>
+      <term name="month-08">August</term>
+      <term name="month-09">September</term>
+      <term name="month-10">Oktober</term>
+      <term name="month-11">November</term>
+      <term name="month-12">Dezember</term>
+      <term name="and">und</term>
+      <term name="and" form="symbol">&amp;</term>
+      <term name="et-al">et al.</term>
+      <term name="editor" form="short">Hrsg.</term>
+      <term name="editor" form="verb-short">Hrsg.</term>
+      <term name="chapter" form="short">Kap.</term>
+      <term name="edition" form="short">Aufl.</term>
+      <term name="page" form="short">
+        <single>S.</single>
+        <multiple>S.</multiple>
+      </term>
+      <term name="paragraph" form="short">Abs.</term>
+      <term name="cited">zitiert nach</term>
+      <term name="no date">n.d.</term>
+      <term name="in">in</term>
+    </terms>
+  </locale>
+  <macro name="author-short">
+    <names variable="author">
+      <name and="symbol" delimiter=", " delimiter-precedes-last="never" form="short"/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="title"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="author-bib">
+    <names variable="author">
+      <name and="symbol" delimiter=", " delimiter-precedes-last="never" et-al-min="21" et-al-use-first="19" et-al-use-last="true" initialize-with=". " name-as-sort-order="all" sort-separator=", "/>
+      <substitute>
+        <names variable="editor"/>
+        <text variable="title"/>
+      </substitute>
+    </names>
+  </macro>
+  <macro name="year">
+    <choose>
+      <if variable="issued">
+        <date variable="issued">
+          <date-part name="year"/>
+        </date>
+      </if>
+      <else>
+        <text term="no date"/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="year-bib">
+    <group prefix="(" suffix=")">
+      <text macro="year"/>
+    </group>
+  </macro>
+  <macro name="issued-text">
+    <choose>
+      <if variable="issued">
+        <date variable="issued" form="text"/>
+      </if>
+      <else>
+        <text term="no date"/>
+      </else>
+    </choose>
+  </macro>
+  <macro name="locator">
+    <group delimiter=" " prefix=", ">
+      <label variable="locator" form="short"/>
+      <text variable="locator"/>
+    </group>
+  </macro>
+  <macro name="doi-or-url">
+    <choose>
+      <if variable="DOI">
+        <text variable="DOI" prefix="https://doi.org/"/>
+      </if>
+      <else-if variable="URL">
+        <text variable="URL"/>
+      </else-if>
+    </choose>
+  </macro>
+  <macro name="edition">
+    <choose>
+      <if variable="edition">
+        <group delimiter=" " prefix="(" suffix=")">
+          <number variable="edition" form="ordinal"/>
+          <label variable="edition" form="short"/>
+        </group>
+      </if>
+    </choose>
+  </macro>
+  <macro name="article">
+    <group delimiter=". ">
+      <text macro="author-bib"/>
+      <text macro="year-bib"/>
+      <text variable="title"/>
+      <group delimiter=", ">
+        <text variable="container-title" font-style="italic"/>
+        <group delimiter="">
+          <text variable="volume" font-style="italic"/>
+          <text variable="issue" prefix="(" suffix=")"/>
+        </group>
+        <text variable="page"/>
+      </group>
+    </group>
+    <choose>
+      <if variable="page volume" match="none">
+        <text value="Vorab-Onlinepublikation" prefix=". "/>
+      </if>
+    </choose>
+    <text macro="doi-or-url" prefix=". "/>
+  </macro>
+  <macro name="book">
+    <group delimiter=". ">
+      <text macro="author-bib"/>
+      <text macro="year-bib"/>
+      <group delimiter=" ">
+        <text variable="title" font-style="italic"/>
+        <text macro="edition"/>
+      </group>
+      <text variable="publisher"/>
+    </group>
+    <text macro="doi-or-url" prefix=". "/>
+  </macro>
+  <macro name="chapter">
+    <group delimiter=". ">
+      <text macro="author-bib"/>
+      <text macro="year-bib"/>
+      <text variable="title"/>
+      <group delimiter=" ">
+        <text term="in" text-case="capitalize-first"/>
+        <names variable="editor">
+          <name and="symbol" delimiter=", " delimiter-precedes-last="never" initialize-with=". " name-as-sort-order="first"/>
+          <label form="short" prefix=" (" suffix=")"/>
+        </names>
+        <group delimiter=" ">
+          <text variable="container-title" font-style="italic"/>
+          <text macro="edition"/>
+        </group>
+      </group>
+      <group delimiter=", ">
+        <text variable="page" prefix="S. "/>
+        <text variable="publisher"/>
+      </group>
+    </group>
+    <text macro="doi-or-url" prefix=". "/>
+  </macro>
+  <macro name="web">
+    <group delimiter=". ">
+      <text macro="author-bib"/>
+      <group prefix="(" suffix=")">
+        <text macro="issued-text"/>
+      </group>
+      <text variable="title"/>
+      <text variable="container-title" font-style="italic"/>
+    </group>
+    <text macro="doi-or-url" prefix=". "/>
+  </macro>
+  <citation et-al-min="3" et-al-use-first="1" disambiguate-add-year-suffix="true">
+    <sort>
+      <key variable="author"/>
+      <key variable="issued"/>
+    </sort>
+    <layout prefix="(" suffix=")" delimiter="; ">
+      <group delimiter=", ">
+        <text macro="author-short"/>
+        <text macro="year"/>
+      </group>
+      <text macro="locator"/>
+    </layout>
+  </citation>
+  <bibliography hanging-indent="true">
+    <sort>
+      <key variable="author"/>
+      <key variable="issued"/>
+    </sort>
+    <layout>
+      <choose>
+        <if type="article-journal article-magazine article-newspaper" match="any">
+          <text macro="article"/>
+        </if>
+        <else-if type="chapter paper-conference" match="any">
+          <text macro="chapter"/>
+        </else-if>
+        <else-if type="webpage post post-weblog" match="any">
+          <text macro="web"/>
+        </else-if>
+        <else>
+          <text macro="book"/>
+        </else>
+      </choose>
+    </layout>
+  </bibliography>
+</style>

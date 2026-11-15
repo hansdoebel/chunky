@@ -240,6 +240,8 @@ private func extractMetadata(from payload: [String: PayloadValue]?) -> [String: 
             meta[key] = s
         } else if let number = value.integerValue {
             meta[key] = String(number)
+        } else if let items = value.arrayValue?.compactMap({ $0.stringValue }).filter({ !$0.isEmpty }), !items.isEmpty {
+            meta[key] = items.joined(separator: " > ")
         }
     }
     return meta

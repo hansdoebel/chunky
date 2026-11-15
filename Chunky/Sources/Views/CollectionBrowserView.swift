@@ -72,6 +72,21 @@ struct CollectionBrowserView: View {
                 .buttonStyle(.plain)
                 .help("Refresh points")
 
+                if !selectedIds.isEmpty {
+                    Button("Copy Typst cite") {
+                        CitationClipboard.copy(CitationExport.typstCites(selectedRecords))
+                    }
+                    Button("Export .bib") {
+                        CitationClipboard.save(CitationExport.biblatex(selectedRecords), suggestedName: "refs.bib")
+                    }
+                    Button("Export .yml") {
+                        CitationClipboard.save(CitationExport.hayagriva(selectedRecords), suggestedName: "refs.yml")
+                    }
+                    Button("Export CSL") {
+                        CitationClipboard.saveStyle()
+                    }
+                }
+
                 Button {
                     showDeleteConfirmation = true
                 } label: {
@@ -128,6 +143,12 @@ struct CollectionBrowserView: View {
                 List(filteredPoints, id: \.id, selection: $selectedIds) { point in
                     PointRowView(point: point)
                         .contextMenu {
+                            Button("Copy Typst cite") {
+                                CitationClipboard.copy(CitationExport.typstCites([CitationSource(point: point)]))
+                            }
+                            Button("Copy BibTeX") {
+                                CitationClipboard.copy(CitationExport.biblatex([CitationSource(point: point)]))
+                            }
                             Button("Delete", role: .destructive) {
                                 Task { await appState.deletePoints(ids: [point.id]) }
                             }
@@ -169,6 +190,10 @@ struct CollectionBrowserView: View {
         } message: {
             Text("Delete \(selectedIds.count) point(s)? This cannot be undone.")
         }
+    }
+
+    private var selectedRecords: [CitationSource] {
+        filteredPoints.filter { selectedIds.contains($0.id) }.map(CitationSource.init(point:))
     }
 
     private var filteredPoints: [QdrantPoint] {
