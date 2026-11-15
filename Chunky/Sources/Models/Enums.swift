@@ -6,6 +6,7 @@ enum ViewMode: String, CaseIterable {
     case queue = "Queue"
     case collections = "Collections"
     case retrieval = "Retrieval"
+    case eval = "Eval"
     case analytics = "Analytics"
     case benchmark = "Benchmark"
 }
