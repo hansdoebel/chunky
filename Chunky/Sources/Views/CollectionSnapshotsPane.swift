@@ -107,6 +107,7 @@ struct CollectionSnapshotsScreen: View {
         guard !collection.isEmpty else { return }
         do {
             snapshots = try await client.list(baseURL: endpoint.url, apiKey: endpoint.apiKey, collection: collection)
+            appState.settings.noteQdrantSuccess()
         } catch {
             status = error.localizedDescription
         }

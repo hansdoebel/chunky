@@ -195,6 +195,7 @@ class AppState: ObservableObject {
 
             let sources = Set(points.map { $0.source }).filter { !$0.isEmpty }
             browserSources = Array(sources).sorted()
+            settings.noteQdrantSuccess()
             print("Loaded \(points.count) points with \(sources.count) unique sources: \(sources)")
         } catch {
             print("Failed to load browser points: \(error)")
@@ -238,6 +239,7 @@ class AppState: ObservableObject {
             let collections = CollectionPlanStore.mergedNames(server: try await service.listCollections())
             availableCollections = collections.isEmpty ? ["documents"] : collections
             qdrantConnectionError = nil
+            settings.noteQdrantSuccess()
             print("Fetched \(collections.count) collections: \(collections)")
         } catch {
             print("Failed to fetch collections: \(error)")

@@ -368,9 +368,42 @@ class AppSettings: ObservableObject {
         set { setSecret(KeychainService.qdrantCloudURLKey, newValue) }
     }
 
+    func noteQdrantSuccess(at date: Date = Date()) {
+        qdrantLastSuccessAt = date
+    }
+
+    var qdrantThrottleCount: Double? {
+        get {
+            let key = prefix + "qdrantThrottleCount"
+            guard defaults.object(forKey: key) != nil else { return nil }
+            return defaults.double(forKey: key)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue, forKey: prefix + "qdrantThrottleCount")
+            } else {
+                defaults.removeObject(forKey: prefix + "qdrantThrottleCount")
+            }
+        }
+    }
+
     var qdrantAPIKey: String {
         get { secret(KeychainService.qdrantAPIKeyKey) }
         set { setSecret(KeychainService.qdrantAPIKeyKey, newValue) }
+    }
+
+    var qdrantLastSuccessAt: Date? {
+        get {
+            let value = defaults.double(forKey: prefix + "qdrantLastSuccessAt")
+            return value == 0 ? nil : Date(timeIntervalSince1970: value)
+        }
+        set {
+            if let newValue {
+                defaults.set(newValue.timeIntervalSince1970, forKey: prefix + "qdrantLastSuccessAt")
+            } else {
+                defaults.removeObject(forKey: prefix + "qdrantLastSuccessAt")
+            }
+        }
     }
 
     init(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) {
