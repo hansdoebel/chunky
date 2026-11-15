@@ -227,7 +227,12 @@ struct VerificationScreen: View {
 struct VerificationPagePreview: View {
     var image: NSImage?
     var bbox: VerificationBBox?
+    var boxes: [VerificationBBox] = []
     var pageSize: VerificationReport.PageSize
+
+    private var drawnBoxes: [VerificationBBox] {
+        boxes.isEmpty ? (bbox.map { [$0] } ?? []) : boxes
+    }
 
     var body: some View {
         GeometryReader { geo in
@@ -243,8 +248,8 @@ struct VerificationPagePreview: View {
                         .frame(width: area.width, height: area.height)
                         .offset(x: area.minX, y: area.minY)
                 }
-                if let bbox {
-                    let rect = bbox.rect(pageWidth: pageSize.width, pageHeight: pageSize.height, in: area)
+                ForEach(Array(drawnBoxes.enumerated()), id: \.offset) { _, box in
+                    let rect = box.rect(pageWidth: pageSize.width, pageHeight: pageSize.height, in: area)
                     Rectangle()
                         .fill(AppTheme.statusOrange.opacity(0.35))
                         .overlay(Rectangle().stroke(AppTheme.statusOrange, lineWidth: 2))

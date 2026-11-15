@@ -94,6 +94,7 @@ def test_payload_matches_mac_field_names():
     assert payload["ingested_at"] == "2026-11-15T00:00:00Z"
     assert payload["content_hash"] == content_hash("Hello world", "qwen3-embedding")
     assert payload["embedding_text"] == "Hello world"
+    assert "source_path" not in payload
     assert "picture_description" not in payload
     assert "picture_class" not in payload
     assert "table_markdown" not in payload
@@ -109,6 +110,19 @@ def test_payload_matches_mac_field_names():
     assert "content_types" in KEYWORD_PAYLOAD_INDEXES
     assert "doi" in KEYWORD_PAYLOAD_INDEXES
     assert isinstance(payload["chunk_index"], str)
+
+
+def test_source_path_is_stored_when_the_local_file_is_known():
+    settings = JobSettings(source_path="/Users/me/papers/paper.pdf")
+    points = build_points(
+        [{"text": "Hello", "embedding_text": "Hello", "page": 1}],
+        [[0.1, 0.2]],
+        source="paper.pdf",
+        settings=settings,
+        embedding_model="qwen3-embedding",
+    )
+    assert points[0].payload["source_path"] == "/Users/me/papers/paper.pdf"
+    assert points[0].payload["source"] == "paper.pdf"
 
 
 def test_bibliography_metadata_wins_over_docling_fields():

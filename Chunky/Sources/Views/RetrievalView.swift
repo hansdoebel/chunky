@@ -112,6 +112,7 @@ struct RetrievalPlayground: View {
     var isAnswering: Bool
     var onAsk: () -> Void
     var onSelectCitation: (RAGCitation) -> Void
+    var onShowPDF: (RetrievalHit) -> Void = { _ in }
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -326,6 +327,9 @@ struct RetrievalPlayground: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            Button("Show in PDF") { onShowPDF(hit) }
+                .buttonStyle(.bordered)
+                .controlSize(.small)
             Text(payloadLine(hit.payload))
                 .font(.system(.caption2, design: .monospaced))
                 .foregroundStyle(.tertiary)
@@ -393,6 +397,7 @@ struct RetrievalScreen: View {
     @State private var answer = ""
     @State private var citations: [RAGCitation] = []
     @State private var selectedHitID: String?
+    @State private var citationPDF: CitationHighlight?
     @State private var isAnswering = false
     @State private var answerTask: Task<Void, Never>?
     private let service: RetrievalService
@@ -454,6 +459,7 @@ struct RetrievalScreen: View {
                 answer = ""
                 citations = []
                 selectedHitID = nil
+                citationPDF = nil
                 Task { await runSearch() }
             },
             generationModel: $generationModel,
@@ -465,8 +471,25 @@ struct RetrievalScreen: View {
                 answerTask?.cancel()
                 answerTask = Task { await ask() }
             },
-            onSelectCitation: { citation in selectedHitID = citation.id }
+            onSelectCitation: { citation in
+                selectedHitID = citation.id
+                citationPDF = CitationPDF.highlight(
+                    citation: citation,
+                    hit: hits.first { $0.id == citation.id },
+                    known: knownPDFs
+                )
+            },
+            onShowPDF: { hit in
+                selectedHitID = hit.id
+                citationPDF = CitationPDF.highlight(hit: hit, known: knownPDFs)
+            }
         )
+        .sheet(item: $citationPDF) { highlight in
+            CitationPDFScreen(highlight: highlight, pageImage: { page in
+                guard let url = highlight.pdfURL else { return nil }
+                return PDFPageRenderer.render(url: url, page: page)
+            })
+        }
         .onDisappear {
             answerTask?.cancel()
             answerTask = nil
@@ -481,6 +504,10 @@ struct RetrievalScreen: View {
                 generationModel = appState.settings.chatModel
             }
         }
+    }
+
+    private var knownPDFs: [URL] {
+        appState.jobs.map(\.sourceURL)
     }
 
     private var route: RetrievalRoute {

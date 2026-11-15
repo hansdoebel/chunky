@@ -112,8 +112,8 @@ jobs:
 
       - name: Build and run ChunkyTests
         run: |
-          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots
-          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots
+          rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots
+          mkdir -p /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
@@ -183,4 +183,19 @@ jobs:
         with:
           name: bibliography-screenshots
           path: bibliography-screenshots/*.png
+          if-no-files-found: error
+
+      - name: Stage citation screenshots
+        if: always()
+        run: |
+          mkdir -p citation-screenshots
+          cp -f /tmp/chunky-citation-screenshots/*.png citation-screenshots/ || true
+          ls -la citation-screenshots
+
+      - name: Upload citation screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: citation-screenshots
+          path: citation-screenshots/*.png
           if-no-files-found: error

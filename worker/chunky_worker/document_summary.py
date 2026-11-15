@@ -75,6 +75,7 @@ def summary_payload(
     authors: Any,
     year: int | None,
     document_id: str | None,
+    source_path: str | None = None,
 ) -> dict[str, Any]:
     payload: dict[str, Any] = {
         "text": text,
@@ -96,4 +97,6 @@ def summary_payload(
         payload["year"] = int(year)
     if document_id:
         payload["document_id"] = document_id
+    if source_path:
+        payload["source_path"] = source_path
     return payload
