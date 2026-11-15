@@ -61,7 +61,7 @@
   </macro>
   <macro name="author-bib">
     <names variable="author">
-      <name and="symbol" delimiter=", " delimiter-precedes-last="never" et-al-min="21" et-al-use-first="19" initialize-with=". " name-as-sort-order="all" sort-separator=", "/>
+      <name and="symbol" delimiter=", " delimiter-precedes-last="never" et-al-min="21" et-al-use-first="19" et-al-use-last="true" initialize-with=". " name-as-sort-order="all" sort-separator=", "/>
       <substitute>
         <names variable="editor"/>
         <text variable="title"/>
@@ -79,6 +79,11 @@
         <text term="no date"/>
       </else>
     </choose>
+  </macro>
+  <macro name="year-bib">
+    <group prefix="(" suffix=")">
+      <text macro="year"/>
+    </group>
   </macro>
   <macro name="issued-text">
     <choose>
@@ -119,7 +124,7 @@
   <macro name="article">
     <group delimiter=". ">
       <text macro="author-bib"/>
-      <text macro="year"/>
+      <text macro="year-bib"/>
       <text variable="title"/>
       <group delimiter=", ">
         <text variable="container-title" font-style="italic"/>
@@ -140,7 +145,7 @@
   <macro name="book">
     <group delimiter=". ">
       <text macro="author-bib"/>
-      <text macro="year"/>
+      <text macro="year-bib"/>
       <group delimiter=" ">
         <text variable="title" font-style="italic"/>
         <text macro="edition"/>
@@ -152,7 +157,7 @@
   <macro name="chapter">
     <group delimiter=". ">
       <text macro="author-bib"/>
-      <text macro="year"/>
+      <text macro="year-bib"/>
       <text variable="title"/>
       <group delimiter=" ">
         <text term="in" text-case="capitalize-first"/>
@@ -175,7 +180,9 @@
   <macro name="web">
     <group delimiter=". ">
       <text macro="author-bib"/>
-      <text macro="issued-text"/>
+      <group prefix="(" suffix=")">
+        <text macro="issued-text"/>
+      </group>
       <text variable="title"/>
       <text variable="container-title" font-style="italic"/>
     </group>

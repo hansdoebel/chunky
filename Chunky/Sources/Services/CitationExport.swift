@@ -69,26 +69,26 @@ enum CitationExport {
     }
 
     static func entries(_ sources: [CitationSource]) -> [Entry] {
-        var used: Set<String> = []
-        return sources.map { source in
-            let base = preferredKey(source)
-            var key = base
-            var suffix = 2
-            while used.contains(key) {
-                key = "\(base)-\(suffix)"
-                suffix += 1
-            }
-            used.insert(key)
-            return Entry(key: key, source: source)
+        sources.map { source in
+            Entry(key: preferredKey(source), source: source)
+        }
+    }
+
+    static func bibliographyEntries(_ sources: [CitationSource]) -> [Entry] {
+        var seen: Set<String> = []
+        return entries(sources).filter { entry in
+            if seen.contains(entry.key) { return false }
+            seen.insert(entry.key)
+            return true
         }
     }
 
     static func biblatex(_ sources: [CitationSource]) -> String {
-        entries(sources).map(biblatexEntry).joined(separator: "\n\n")
+        bibliographyEntries(sources).map(biblatexEntry).joined(separator: "\n\n")
     }
 
     static func hayagriva(_ sources: [CitationSource]) -> String {
-        entries(sources).map(hayagrivaEntry).joined(separator: "\n")
+        bibliographyEntries(sources).map(hayagrivaEntry).joined(separator: "\n")
     }
 
     static func typstCites(_ sources: [CitationSource]) -> String {
@@ -99,27 +99,59 @@ enum CitationExport {
         guard let span = pageSpan(source) else {
             return "#cite(<\(key)>)"
         }
-        return "#cite(<\(key)>, supplement: [S. \(span.display)])"
+        return "#cite(<\(key)>, supplement: [S. \(typstLiteral(span))])"
     }
 
     static func preferredKey(_ source: CitationSource) -> String {
         let imported = sanitize(source.citeKey, allowHyphen: true)
         if !imported.isEmpty {
-            return imported
+            return finishKey(imported)
         }
         let family = sanitize(familyName(source.authors.first ?? ""), allowHyphen: false)
         let year = source.year.map(String.init) ?? "nd"
         let doi = sanitize(source.doi, allowHyphen: false)
         let stem = sanitize((source.fileName as NSString).deletingPathExtension, allowHyphen: false)
-        var parts = [family.isEmpty ? stem : family, year]
+        let title = sanitize(source.title, allowHyphen: false)
+        var parts: [String] = []
+        if family.isEmpty {
+            parts.append(stem.isEmpty ? (title.isEmpty ? "untitled" : title) : stem)
+        } else {
+            parts.append(family)
+        }
+        parts.append(year)
         if !doi.isEmpty {
             parts.append(doi)
+        } else if !family.isEmpty {
+            if !stem.isEmpty {
+                parts.append(stem)
+            } else if !title.isEmpty {
+                parts.append(String(title.prefix(48)))
+            }
         }
-        let joined = parts.filter { !$0.isEmpty }.joined(separator: "-")
-        let key = sanitize(joined, allowHyphen: true)
+        return finishKey(parts.filter { !$0.isEmpty }.joined(separator: "-"))
+    }
+
+    private static func finishKey(_ raw: String) -> String {
+        let key = sanitize(raw, allowHyphen: true)
         if key.isEmpty { return "untitled" }
         if key.first?.isNumber == true { return "k\(key)" }
         return key
+    }
+
+    static func typstLiteral(_ raw: String) -> String {
+        var out = ""
+        for character in raw {
+            switch character {
+            case "\\", "#", "$", "@", "*", "_", "`", "<", ">", "[", "]", "~":
+                out.append("\\")
+                out.append(character)
+            case "\n", "\r":
+                out.append(" ")
+            default:
+                out.append(character)
+            }
+        }
+        return out
     }
 
     static func familyName(_ name: String) -> String {
@@ -156,31 +188,24 @@ enum CitationExport {
         return collapsed.lowercased()
     }
 
-    private struct PageSpan {
-        var display: String
-        var bib: String
-        var yaml: String
-    }
-
-    private static func pageSpan(_ source: CitationSource) -> PageSpan? {
+    private static func pageSpan(_ source: CitationSource) -> String? {
         let labels = source.pageLabels.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
         if labels.count == 1 {
-            return PageSpan(display: labels[0], bib: labels[0], yaml: labels[0])
+            return labels[0]
         }
         if labels.count == 2 {
-            return PageSpan(display: "\(labels[0])–\(labels[1])", bib: "\(labels[0])--\(labels[1])", yaml: "\(labels[0])-\(labels[1])")
+            return "\(labels[0])–\(labels[1])"
         }
         if labels.count > 2 {
-            let joined = labels.joined(separator: ", ")
-            return PageSpan(display: joined, bib: joined, yaml: joined)
+            return labels.joined(separator: ", ")
         }
         guard let page = source.page else { return nil }
         if let pageEnd = source.pageEnd, pageEnd != page {
             let start = min(page, pageEnd)
             let end = max(page, pageEnd)
-            return PageSpan(display: "\(start)–\(end)", bib: "\(start)--\(end)", yaml: "\(start)-\(end)")
+            return "\(start)–\(end)"
         }
-        return PageSpan(display: "\(page)", bib: "\(page)", yaml: "\(page)")
+        return "\(page)"
     }
 
     private static func biblatexEntry(_ entry: Entry) -> String {
@@ -206,9 +231,6 @@ enum CitationExport {
         }
         if !source.url.isEmpty {
             lines.append("  url = {\(bibtexEscape(source.url))},")
-        }
-        if let span = pageSpan(source) {
-            lines.append("  pages = {\(bibtexEscape(span.bib))},")
         }
         if !source.abstract.isEmpty {
             lines.append("  abstract = {\(bibtexEscape(source.abstract))},")
@@ -251,9 +273,9 @@ enum CitationExport {
             lines.append("  author:")
             for name in source.authors {
                 let parts = splitName(name)
-                lines.append("    - family: \(yamlQuote(parts.family))")
+                lines.append("    - name: \(yamlQuote(parts.family))")
                 if !parts.given.isEmpty {
-                    lines.append("      given: \(yamlQuote(parts.given))")
+                    lines.append("      given-name: \(yamlQuote(parts.given))")
                 }
             }
         }
@@ -268,9 +290,6 @@ enum CitationExport {
         }
         if !source.abstract.isEmpty {
             lines.append("  abstract: \(yamlQuote(source.abstract))")
-        }
-        if let span = pageSpan(source) {
-            lines.append("  page-range: \(yamlQuote(span.yaml))")
         }
         if !source.venue.isEmpty {
             lines.append("  parent:")

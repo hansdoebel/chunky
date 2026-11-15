@@ -297,7 +297,7 @@ struct RetrievalPlayground: View {
     private var answerBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             RAGAnswerText(text: answer.isEmpty && isAnswering ? "Answering…" : answer, citations: citations, onSelect: onSelectCitation)
-            if !citations.isEmpty {
+            if !answerRecords.isEmpty {
                 Button("Copy answer bibliography") {
                     CitationClipboard.copy(CitationExport.hayagriva(answerRecords))
                 }
@@ -362,8 +362,7 @@ struct RetrievalPlayground: View {
             if case .citation(let citation) = segment { return citation.id }
             return nil
         })
-        let chosen = hits.filter { used.contains($0.id) }
-        return (chosen.isEmpty ? hits : chosen).map(CitationSource.init(hit:))
+        return hits.filter { used.contains($0.id) }.map(CitationSource.init(hit:))
     }
 
     private func payloadLine(_ payload: [String: String]) -> String {

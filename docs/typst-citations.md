@@ -4,7 +4,7 @@ Chunky exports a bibliography the Typst compiler can load, plus a cite you can p
 
 The style file is `Chunky/Resources/iu-apa7.csl`. Export CSL from Retrieval or the collection browser writes that same file. Hayagriva (`.yml`) and BibLaTeX (`.bib`) use one stable key: the cite key from Zotero or BibTeX when the chunk has one, otherwise author, year, and DOI.
 
-Printed `page_labels` are used first. The PDF page index is used only when the chunk has no printed label. A single page is `S. 12`. A range is `S. 12–14`.
+Printed `page_labels` are used first, and only in the cite supplement. The PDF page index is used only when the chunk has no printed label. A single page is `S. 12`. A range is `S. 12–14`. The bibliography entry does not repeat that chunk page. A label is written as Typst text, so a character such as `#` cannot start code.
 
 ## Typst document
 

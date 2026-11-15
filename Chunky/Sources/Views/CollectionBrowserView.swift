@@ -82,6 +82,9 @@ struct CollectionBrowserView: View {
                     Button("Export .yml") {
                         CitationClipboard.save(CitationExport.hayagriva(selectedRecords), suggestedName: "refs.yml")
                     }
+                    Button("Export CSL") {
+                        CitationClipboard.saveStyle()
+                    }
                 }
 
                 Button {

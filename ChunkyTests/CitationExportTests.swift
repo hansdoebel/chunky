@@ -35,17 +35,18 @@ struct CitationExportTests {
         #expect(bib.contains("year = {2020},"))
         #expect(bib.contains("journal = {Nature},"))
         #expect(bib.contains("doi = {10.1000/xyz},"))
-        #expect(bib.contains("pages = {12--14},"))
+        #expect(!bib.contains("pages ="))
         #expect(bib.contains("abstract = {A \\& B 100\\%},"))
         let yml = CitationExport.hayagriva([source])
         #expect(yml.contains("lovelace2020:"))
         #expect(yml.contains("type: article"))
         #expect(yml.contains("title: \"Analytical Engine\""))
-        #expect(yml.contains("family: \"Lovelace\""))
-        #expect(yml.contains("given: \"Ada\""))
-        #expect(yml.contains("family: \"Turing\""))
+        #expect(yml.contains("name: \"Lovelace\""))
+        #expect(yml.contains("given-name: \"Ada\""))
+        #expect(yml.contains("name: \"Turing\""))
+        #expect(!yml.contains("family:"))
         #expect(yml.contains("date: 2020"))
-        #expect(yml.contains("page-range: \"12-14\""))
+        #expect(!yml.contains("page-range:"))
         #expect(yml.contains("title: \"Nature\""))
     }
 
@@ -60,8 +61,8 @@ struct CitationExportTests {
             payload: ["doc_title": "Notes", "authors": "Ada Lovelace", "year": "1999"],
             pageEnd: 5
         ))
-        #expect(CitationExport.typstCites([source]) == "#cite(<lovelace-1999>, supplement: [S. 3–5])")
-        #expect(CitationExport.biblatex([source]).contains("pages = {3--5},"))
+        #expect(CitationExport.typstCites([source]) == "#cite(<lovelace-1999-paper>, supplement: [S. 3–5])")
+        #expect(!CitationExport.biblatex([source]).contains("pages ="))
     }
 
     @Test func singlePrintedLabelBeatsThePdfIndex() {
@@ -119,14 +120,43 @@ struct CitationExportTests {
             payload: ["doc_title": "Partizipation", "authors": "Hella von Unger", "year": "2014"]
         ))
         #expect(CitationExport.familyName("Hella von Unger") == "von Unger")
+        let together = CitationExport.typstCites([first, second])
+        #expect(together.contains("#cite(<vonunger-2014-a>, supplement: [S. 1])"))
+        #expect(together.contains("#cite(<vonunger-2014-b>, supplement: [S. 1])"))
+        #expect(CitationExport.typstCites([second]) == "#cite(<vonunger-2014-b>, supplement: [S. 1])")
         let bib = CitationExport.biblatex([first, second])
         #expect(bib.contains("author = {von Unger, Hella},"))
-        #expect(bib.contains("@misc{vonunger-2014,"))
-        #expect(bib.contains("@misc{vonunger-2014-2,"))
-        let yml = CitationExport.hayagriva([first, second])
-        #expect(yml.contains("vonunger-2014:"))
-        #expect(yml.contains("vonunger-2014-2:"))
-        #expect(yml.contains("family: \"von Unger\""))
+        #expect(bib.contains("@misc{vonunger-2014-a,"))
+        #expect(bib.contains("@misc{vonunger-2014-b,"))
+        let samePaper = CitationSource(hit: RetrievalHit(
+            id: "c",
+            score: 1,
+            text: "Later page",
+            source: "a.pdf",
+            page: 2,
+            headings: [],
+            payload: ["doc_title": "Partizipation", "authors": "Hella von Unger", "year": "2014"]
+        ))
+        let shared = CitationExport.biblatex([first, samePaper])
+        #expect(shared.components(separatedBy: "@misc").count == 2)
+        let yml = CitationExport.hayagriva([first])
+        #expect(yml.contains("name: \"von Unger\""))
+        #expect(yml.contains("given-name: \"Hella\""))
+    }
+
+    @Test func pageLabelsStayLiteralTypstText() {
+        let source = CitationSource(hit: RetrievalHit(
+            id: "p",
+            score: 1,
+            text: "Label",
+            source: "paper.pdf",
+            page: 1,
+            headings: [],
+            payload: ["doc_title": "Notes", "cite_key": "notes", "page_labels": "#read(\"notes.txt\")"]
+        ))
+        let cite = CitationExport.typstCites([source])
+        #expect(cite == "#cite(<notes>, supplement: [S. \\#read(\"notes.txt\")])")
+        #expect(!cite.contains("[S. #read"))
     }
 
     @Test func styleFileCarriesTheAnhangCDeviations() throws {
@@ -142,6 +172,8 @@ struct CitationExportTests {
         #expect(text.contains("Kap."))
         #expect(text.contains("Aufl."))
         #expect(text.contains("Vorab-Onlinepublikation"))
+        #expect(text.contains("et-al-use-last=\"true\""))
+        #expect(text.contains("name=\"year-bib\""))
         #expect(text.contains("Januar"))
         #expect(text.contains("<single>S.</single>"))
         #expect(!text.contains("original-date"))
