@@ -55,7 +55,7 @@ struct WatchedFolderRow: View {
                 Spacer()
                 Text(folder.paused ? "Paused" : "Watching")
                     .font(.caption.weight(.semibold))
-                    .foregroundStyle(folder.paused ? .secondary : .green)
+                    .foregroundStyle(folder.paused ? Color.secondary : Color.green)
             }
             Text(folder.path)
                 .font(.caption)
