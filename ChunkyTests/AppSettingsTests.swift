@@ -44,7 +44,7 @@ struct AppSettingsTests {
 
         // Model should be a valid value
         #expect(!settings.doclingModel.isEmpty)
-        #expect(settings.doclingWorkers >= 1 && settings.doclingWorkers <= 6)
+        #expect(settings.doclingWorkers >= 1 && settings.doclingWorkers <= 12)
         #expect(settings.doclingTimeout >= 60 && settings.doclingTimeout <= 600)
         #expect(settings.doclingMaxPages >= 0)  // 0 means unlimited
         #expect(settings.maxTokensPerChunk >= 128 && settings.maxTokensPerChunk <= 2048)

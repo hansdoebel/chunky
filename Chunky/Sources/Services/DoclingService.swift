@@ -131,7 +131,7 @@ actor DoclingService {
         var inputFormat: String?
         var extractionSchemaPath: String?
         var layoutModel: String = "default"
-        var workers: Int = 2
+        var workers: Int = 8
         var timeout: Int = 120
         var pythonPath: String = "~/.chunky-venv/bin/python3".expandingTildeInPath
         var enableChunking: Bool = false

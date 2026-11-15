@@ -144,6 +144,36 @@ def test_picture_presets_map_to_docling_options():
     assert quality["picture_description_preset"] == "granite_vision"
 
 
+def test_batch_plan_matches_the_host_and_keeps_page_batches_large_enough():
+    from presets import DOCUMENTED_NVIDIA_VLM_CONCURRENCY, batch_plan
+
+    mac = batch_plan(host="mac", workers=8)
+    assert mac["pipeline"] == "pdf"
+    assert mac["table_former_device"] == "cpu"
+    assert mac["table_batch_size"] == 1
+    assert mac["ocr_batch_size"] == 2
+    assert mac["workers"] <= 4
+
+    shared = batch_plan(host="devbox", vlm_resident=True)
+    assert shared["pipeline"] == "threaded"
+    assert shared["ocr_batch_size"] == 8
+    assert shared["layout_batch_size"] == 16
+    assert shared["table_batch_size"] == 4
+    assert shared["page_batch_size"] >= shared["vlm_concurrency"]
+
+    dedicated = batch_plan(host="devbox", vlm_resident=False)
+    assert dedicated["pipeline"] == "threaded"
+    assert dedicated["ocr_batch_size"] == 64
+    assert dedicated["layout_batch_size"] == 64
+    assert dedicated["table_batch_size"] == 4
+    assert dedicated["vlm_concurrency"] < DOCUMENTED_NVIDIA_VLM_CONCURRENCY
+    assert dedicated["vlm_max_tokens"] == 4096
+    assert dedicated["vlm_timeout"] == 90
+
+    override = batch_plan(host="devbox", ocr_batch_size=12)
+    assert override["ocr_batch_size"] == 12
+
+
 def test_cli_forwards_picture_preset_and_server(monkeypatch):
     import docling_convert
 

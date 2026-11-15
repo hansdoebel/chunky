@@ -41,6 +41,77 @@ def layout_preset_id(layout_model: str | None) -> str | None:
     return LAYOUT_PRESETS.get(layout_model)
 
 
+DOCUMENTED_NVIDIA_VLM_CONCURRENCY = 64
+
+
+def _is_mac(host: str | None) -> bool:
+    return (host or default_chart_host()).strip().lower() in {"mac", "darwin", "local", "localmac"}
+
+
+def batch_plan(
+    *,
+    host: str | None = None,
+    vlm_resident: bool = False,
+    workers: int = 8,
+    ocr_batch_size: int = 0,
+    layout_batch_size: int = 0,
+    table_batch_size: int = 0,
+) -> dict:
+    """Batch sizes for the standard pipeline.
+
+    A devbox with no vision model resident uses Docling's GPU starting point
+    (OCR and layout 64, tables 4). Sharing the GPU uses 8 to 16. The Mac stays
+    small and keeps TableFormer on the CPU. Docling's published vLLM
+    concurrency of 64 was measured on NVIDIA hardware and is not applied here.
+    """
+    mac = _is_mac(host)
+    if mac:
+        plan = {
+            "pipeline": "pdf",
+            "ocr_batch_size": 2,
+            "layout_batch_size": 2,
+            "table_batch_size": 1,
+            "table_former_device": "cpu",
+            "page_batch_size": 2,
+            "vlm_concurrency": 1,
+            "workers": max(1, min(workers, 4)),
+        }
+    elif vlm_resident:
+        plan = {
+            "pipeline": "threaded",
+            "ocr_batch_size": 8,
+            "layout_batch_size": 16,
+            "table_batch_size": 4,
+            "table_former_device": "cuda",
+            "page_batch_size": 8,
+            "vlm_concurrency": 8,
+            "workers": max(1, workers),
+        }
+    else:
+        plan = {
+            "pipeline": "threaded",
+            "ocr_batch_size": 64,
+            "layout_batch_size": 64,
+            "table_batch_size": 4,
+            "table_former_device": "cuda",
+            "page_batch_size": 8,
+            "vlm_concurrency": 8,
+            "workers": max(1, workers),
+        }
+    if ocr_batch_size > 0:
+        plan["ocr_batch_size"] = ocr_batch_size
+    if layout_batch_size > 0:
+        plan["layout_batch_size"] = layout_batch_size
+    if table_batch_size > 0:
+        plan["table_batch_size"] = table_batch_size
+    if plan["page_batch_size"] < plan["vlm_concurrency"] and not mac:
+        plan["page_batch_size"] = plan["vlm_concurrency"]
+    plan["vlm_timeout"] = 90
+    plan["vlm_max_tokens"] = 4096
+    plan["documented_nvidia_vlm_concurrency"] = DOCUMENTED_NVIDIA_VLM_CONCURRENCY
+    return plan
+
+
 def default_chart_host() -> str:
     return "mac" if sys.platform == "darwin" else "devbox"
 

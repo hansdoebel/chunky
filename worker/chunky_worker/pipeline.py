@@ -112,6 +112,15 @@ class DoclingPipeline:
             input_format=settings.input_format,
             layout_model=settings.layout_model,
             workers=settings.workers,
+            vlm_resident=bool(
+                vlm_model
+                or settings.do_picture_description
+                or settings.do_chart_extraction
+                or self.vlm_engine == "vllm"
+            ),
+            ocr_batch_size=settings.ocr_batch_size,
+            layout_batch_size=settings.layout_batch_size,
+            table_batch_size=settings.table_batch_size,
             chunk=settings.chunk,
             chunk_max_tokens=settings.chunk_max_tokens,
             chunk_merge_peers=settings.chunk_merge_peers,

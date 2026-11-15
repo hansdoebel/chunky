@@ -53,6 +53,12 @@ vllm serve ibm-granite/granite-vision-4.1-4b \
 
 Then set `CHUNKY_CHART_VLLM_URL=http://127.0.0.1:8001`. `0.3` is a starting point beside the document server and the embedding model. If the GPU cannot hold all three, keep charts on Transformers and start that process only for a chart job, or lower the document server's utilization.
 
+## Batch sizes
+
+The standard pipeline on the devbox uses Docling's threaded PDF pipeline. With no vision model resident, OCR and layout batches start at 64 and tables at 4. When granite-docling, picture description, or chart extraction is also on the GPU, those drop to 8 and 16 so the card is shared. The Mac keeps batches of 2 and 1, and TableFormer stays on the CPU.
+
+Docling's GPU guide lists a vLLM concurrency of 64 with `max_tokens` 4096 and a 90 second timeout. That concurrency was measured on NVIDIA hardware. This worker keeps concurrency at 8 until it is checked on the R9700. `page_batch_size` stays at least that concurrency. `max_tokens` stays 4096 and the timeout stays 90.
+
 ## Picture description on 32 GB
 
 The devbox default description model is Granite Vision 3.3-2B (`granite_vision`). The Mac default is SmolVLM-256M, which also has an MLX build. Qwen2.5-VL-3B is the larger picker choice. The VLM server URL is only for the API preset. It is separate from Ollama, which stays the embedding server.
