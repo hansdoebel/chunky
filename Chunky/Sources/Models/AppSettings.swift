@@ -189,6 +189,35 @@ class AppSettings: ObservableObject {
     @Published var chunkTokenizer: String {
         didSet { defaults.set(chunkTokenizer, forKey: prefix + "chunkTokenizer") }
     }
+    @Published var recordedDoclingVersion: String {
+        didSet { defaults.set(recordedDoclingVersion, forKey: prefix + "recordedDoclingVersion") }
+    }
+    @Published var chunkCacheLimitMB: Int {
+        didSet { defaults.set(chunkCacheLimitMB, forKey: prefix + "chunkCacheLimitMB") }
+    }
+
+    var chunkCacheLimitBytes: Int {
+        chunkCacheLimitMB <= 0 ? 0 : chunkCacheLimitMB * 1024 * 1024
+    }
+
+    var chunkCacheOptions: String {
+        [
+            "maxPages=\(doclingMaxPages)",
+            "ocr=\(doOCR ? 1 : 0)",
+            "ocrLanguage=\(ocrLanguage)",
+            "merge=\(chunkMergePeers ? 1 : 0)",
+            "tables=\(doTableExtraction ? 1 : 0)",
+            "tableMode=\(tableMode)",
+            "pictures=\(doPictureDescription ? 1 : 0)",
+            "pictureClass=\(doPictureClassification ? 1 : 0)",
+            "formula=\(doFormulaEnrichment ? 1 : 0)",
+            "code=\(doCodeEnrichment ? 1 : 0)",
+            "chart=\(doChartExtraction ? 1 : 0)",
+            "layout=\(layoutModel)",
+            "images=\(imageExportMode)",
+            "cleanup=\(doTextCleanup ? 1 : 0)",
+        ].joined(separator: ";")
+    }
     @Published var doTableExtraction: Bool {
         didSet { defaults.set(doTableExtraction, forKey: prefix + "doTableExtraction") }
     }
@@ -379,6 +408,8 @@ class AppSettings: ObservableObject {
         self.chunkOverlap = defaults.object(forKey: prefix + "chunkOverlap") as? Int ?? 64
         self.chunkMergePeers = defaults.object(forKey: prefix + "chunkMergePeers") as? Bool ?? true
         self.chunkTokenizer = defaults.string(forKey: prefix + "chunkTokenizer") ?? ""
+        self.recordedDoclingVersion = defaults.string(forKey: prefix + "recordedDoclingVersion") ?? ""
+        self.chunkCacheLimitMB = defaults.object(forKey: prefix + "chunkCacheLimitMB") as? Int ?? 2048
         self.doTableExtraction = defaults.object(forKey: prefix + "doTableExtraction") as? Bool ?? true
         self.tableMode = defaults.string(forKey: prefix + "tableMode") ?? TableMode.accurate.rawValue
         self.doOCR = defaults.object(forKey: prefix + "doOCR") as? Bool ?? false

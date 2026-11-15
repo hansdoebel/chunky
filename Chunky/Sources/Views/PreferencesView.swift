@@ -1064,6 +1064,15 @@ struct PreferencesView: View {
             }
 
             Section {
+                ChunkCacheSettingsPane(
+                    limitMB: $appState.settings.chunkCacheLimitMB,
+                    onClear: clearChunkCache
+                )
+            } header: {
+                Text("Chunk cache")
+            }
+
+            Section {
                 Link(
                     "GitHub Repository",
                     destination: URL(string: "https://github.com/hansdoebel/psd")!)
@@ -1085,6 +1094,13 @@ struct PreferencesView: View {
         Bundle.main.infoDictionary?["CFBundleShortVersionString"] as? String ?? "1.0"
     }
 
+    private func clearChunkCache() {
+        try? ChunkCacheStore(
+            directory: ChunkCacheLocation.macDirectory(),
+            limitBytes: appState.settings.chunkCacheLimitBytes
+        ).clear()
+    }
+
     private func checkDoclingVersion() async {
         isCheckingDocling = true
         doclingUpdateStatus = nil
@@ -1101,6 +1117,9 @@ struct PreferencesView: View {
         do {
             let version = try await getDoclingVersionViaPip(pipPath: pipPath)
             doclingVersion = version
+            if version.range(of: #"^\d"#, options: .regularExpression) != nil {
+                appState.settings.recordedDoclingVersion = version
+            }
         } catch {
             doclingVersion = "Not installed"
         }

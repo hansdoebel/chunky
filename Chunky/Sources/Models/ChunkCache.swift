@@ -12,6 +12,7 @@ struct ChunkCacheKey: Equatable, Sendable {
     var pipeline: String
     var tokenizer: String
     var maxTokens: Int
+    var options: String = ""
 
     var canonical: String {
         [
@@ -20,6 +21,7 @@ struct ChunkCacheKey: Equatable, Sendable {
             pipeline.trimmingCharacters(in: .whitespacesAndNewlines),
             tokenizer.trimmingCharacters(in: .whitespacesAndNewlines),
             String(maxTokens),
+            options.trimmingCharacters(in: .whitespacesAndNewlines),
         ].joined(separator: "\n")
     }
 
@@ -51,6 +53,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
     var year: Int?
     var doi: String?
     var source: String
+    var url: String?
+    var language: String?
     var contentType: String
     var chunkIndex: Int
     var tokenCount: Int
@@ -94,6 +98,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
             year: intValue(raw["year"]),
             doi: text(raw["doi"]),
             source: text(raw["source"]) ?? "",
+            url: text(raw["url"]),
+            language: text(raw["language"]),
             contentType: text(raw["content_type"]) ?? "text",
             chunkIndex: intValue(raw["chunk_index"]) ?? 0,
             tokenCount: intValue(raw["token_count"]) ?? 0,
@@ -127,6 +133,8 @@ struct ChunkCacheChunk: Equatable, Sendable {
             "year": year as Any? ?? NSNull(),
             "doi": doi as Any? ?? NSNull(),
             "source": source,
+            "url": url as Any? ?? NSNull(),
+            "language": language as Any? ?? NSNull(),
             "content_type": contentType,
             "chunk_index": chunkIndex,
             "token_count": tokenCount,
@@ -497,6 +505,27 @@ extension ChunkCacheChunk {
     }
 }
 
+struct URLSessionChunkCacheHTTP: ChunkCacheHTTP {
+    var baseURL: String
+    var token: String
+
+    func request(method: String, path: String, body: Data?) async throws -> (status: Int, body: Data) {
+        let trimmed = baseURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: trimmed + path) else { throw ChunkCacheError.unreadable }
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        request.httpBody = body
+        if body != nil {
+            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        }
+        if !token.isEmpty {
+            request.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        }
+        let (data, response) = try await URLSession.shared.data(for: request)
+        return ((response as? HTTPURLResponse)?.statusCode ?? 0, data)
+    }
+}
+
 protocol ChunkCacheHTTP {
     func request(method: String, path: String, body: Data?) async throws -> (status: Int, body: Data)
 }
@@ -507,7 +536,8 @@ struct WorkerChunkCache {
     func lookup(
         _ key: ChunkCacheKey,
         embeddingModel: String? = nil,
-        embeddingDimension: Int? = nil
+        embeddingDimension: Int? = nil,
+        includeDocument: Bool = false
     ) async throws -> ChunkCacheHit {
         var body: [String: Any] = [
             "content_sha256": key.contentSHA256,
@@ -515,6 +545,8 @@ struct WorkerChunkCache {
             "pipeline": key.pipeline,
             "tokenizer": key.tokenizer,
             "max_tokens": key.maxTokens,
+            "options": key.options,
+            "include_document": includeDocument,
         ]
         if let embeddingModel, !embeddingModel.isEmpty {
             body["embedding_model"] = embeddingModel
@@ -532,12 +564,18 @@ struct WorkerChunkCache {
         }
         let chunks = (object["chunks"] as? [[String: Any]] ?? []).map(ChunkCacheChunk.normalize)
         let vectors = object["vectors"] as? [[Any]]
+        let document: Data?
+        if let value = object["document"] as? [String: Any], JSONSerialization.isValidJSONObject(value) {
+            document = try? JSONSerialization.data(withJSONObject: value)
+        } else {
+            document = nil
+        }
         return ChunkCacheHit(
             id: object["id"] as? String ?? key.id,
             chunks: chunks,
             vectorHit: object["vector_hit"] as? Bool ?? false,
             vectors: vectors?.map { row in row.compactMap { ChunkCacheChunk.doubleValuePublic($0) } },
-            document: nil
+            document: document
         )
     }
 }

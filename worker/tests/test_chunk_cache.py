@@ -24,7 +24,7 @@ KEY = {
 
 def test_entry_id_is_stable():
     assert entry_id("abc", "2.64.0", "standard", "", 512) == (
-        "71d568677ac1aeaaf2e1d1d762fb6c2b630ce1a6f27abdd7ee9779dfbdba38d6"
+        "3636fff3a40669cb435b521f6960f2888b9555317a5077458119ae261d853611"
     )
     assert entry_id("ABC", "2.64.0", "standard", "", 512) == entry_id("abc", "2.64.0", "standard", "", 512)
 

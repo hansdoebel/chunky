@@ -50,6 +50,18 @@ def docling_import_status() -> tuple[bool, str | None]:
         return False, str(exc)
     return True, None
 
+
+def docling_version() -> str | None:
+    try:
+        import docling
+    except ImportError:
+        return None
+    version = getattr(docling, "__version__", None)
+    if not isinstance(version, str):
+        return None
+    version = version.strip()
+    return version or None
+
 def create_app(
     settings: Settings | None = None,
     pipeline: DocumentPipeline | None = None,
@@ -105,7 +117,7 @@ def create_app(
         status = "ok" if docling_ok and embed_ok else "degraded"
         return {
             "status": status,
-            "docling": {"importable": docling_ok, "error": docling_error},
+            "docling": {"importable": docling_ok, "error": docling_error, "version": docling_version()},
             "embeddings": {
                 "reachable": embed_ok,
                 "backend": settings.embedding_backend,
@@ -404,6 +416,7 @@ def create_app(
             "pipeline": str(body["pipeline"]).strip(),
             "tokenizer": str(body.get("tokenizer") or ""),
             "max_tokens": max_tokens,
+            "options": str(body.get("options") or ""),
         }
 
     def cache_error(exc: ChunkCacheError) -> HTTPException:

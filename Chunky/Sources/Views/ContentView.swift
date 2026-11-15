@@ -443,6 +443,9 @@ struct FileRowView: View {
                         Text("Ready")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
+                        Toggle("Reconvert", isOn: $job.forceReconvert)
+                            .toggleStyle(.switch)
+                            .controlSize(.mini)
                     } else if job.status == .completed {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(job.chunksCount) chunks")
@@ -452,6 +455,11 @@ struct FileRowView: View {
                                 Text(timing)
                                     .font(.system(size: 10, design: .monospaced))
                                     .foregroundStyle(.tertiary)
+                            }
+                            if let cache = job.cacheStatus {
+                                Text("cache \(cache)")
+                                    .font(.caption)
+                                    .foregroundStyle(.secondary)
                             }
                         }
                     } else if job.status == .failed {

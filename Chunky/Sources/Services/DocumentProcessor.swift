@@ -99,23 +99,79 @@ class DocumentProcessor: ObservableObject {
             doclingOptions.chunkTokenizer = settings.chunkTokenizer
             doclingOptions.useDaemon = settings.useDaemonMode
 
+            await refreshDoclingVersion(settings: settings)
+            let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+            let bridge = cacheBridge(settings: settings)
             let convertStart = CFAbsoluteTimeGetCurrent()
-            let result = try await doclingService.convert(
-                inputURL: job.sourceURL,
-                options: doclingOptions
-            ) { [weak job] message, percent in
-                Task { @MainActor in
-                    job?.statusMessage = message
-                    if let percent = percent {
-                        job?.progress = percent / 100.0
+            let result: DoclingService.ConversionResult
+            if let cached = await bridge.load(digest: digest, force: job.forceReconvert),
+               !cached.chunks.compactMap({ $0.pythonChunk() }).isEmpty {
+                let pythonChunks = cached.chunks.compactMap { $0.pythonChunk() }
+                job.cacheStatus = ChunkCachePolicy.use(
+                    force: false,
+                    chunkCount: pythonChunks.count,
+                    vectorCount: cached.vectors?.count
+                ).rawValue
+                result = DoclingService.ConversionResult(
+                    success: true,
+                    inputFile: job.sourceURL.path,
+                    outputFile: nil,
+                    outputFormat: "json",
+                    pageCount: pythonChunks.compactMap(\.page).max(),
+                    textItemsCount: pythonChunks.count,
+                    tableCount: nil,
+                    error: nil,
+                    errorType: nil,
+                    extractionOutput: nil,
+                    extractionCount: nil,
+                    chunks: pythonChunks,
+                    docTitle: cached.chunks.first?.docTitle,
+                    authors: cached.chunks.first?.authors,
+                    doi: cached.chunks.first?.doi,
+                    docURL: cached.chunks.first?.url,
+                    year: cached.chunks.first?.year,
+                    language: cached.chunks.first?.language
+                )
+                job.preparedEmbeddings = cached.vectors?.map { row in row.map(Float.init) }
+            } else {
+                job.cacheStatus = ChunkCacheUse.miss.rawValue
+                result = try await doclingService.convert(
+                    inputURL: job.sourceURL,
+                    options: doclingOptions
+                ) { [weak job] message, percent in
+                    Task { @MainActor in
+                        job?.statusMessage = message
+                        if let percent = percent {
+                            job?.progress = percent / 100.0
+                        }
                     }
                 }
+                if let output = result.outputFile,
+                   let document = try? Data(contentsOf: URL(fileURLWithPath: output)),
+                   let chunks = result.chunks, !chunks.isEmpty {
+                    let records = chunks.map {
+                        ChunkCacheChunk(
+                            chunk: $0,
+                            source: job.fileName,
+                            docTitle: result.docTitle,
+                            authors: result.authors,
+                            year: result.year,
+                            doi: result.doi,
+                            url: result.docURL,
+                            language: result.language
+                        )
+                    }
+                    try? bridge.store(digest: digest, document: document, chunks: records, vectors: nil)
+                }
             }
-            job.conversionTime = CFAbsoluteTimeGetCurrent() - convertStart
+            job.conversionTime = job.cacheStatus == ChunkCacheUse.miss.rawValue
+                ? CFAbsoluteTimeGetCurrent() - convertStart
+                : 0
             job.pageCount = result.pageCount
             try Task.checkCancellation()
 
-            guard let outputPath = result.outputFile else {
+            let outputPath = result.outputFile
+            if outputPath == nil && (result.chunks ?? []).isEmpty {
                 throw QdrantError.operationFailed("Docling did not produce output file")
             }
 
@@ -160,7 +216,7 @@ class DocumentProcessor: ObservableObject {
                 chunkOptions.includeTableContent = settings.doTableExtraction || isVLMMode
 
                 chunks = try await chunkingService.chunkDoclingJSON(
-                    fileURL: URL(fileURLWithPath: outputPath),
+                    fileURL: URL(fileURLWithPath: outputPath ?? ""),
                     source: job.fileName,
                     options: chunkOptions
                 )
@@ -377,7 +433,17 @@ class DocumentProcessor: ObservableObject {
             let ingestedAt = ISO8601DateFormatter().string(from: Date())
             let embedStart = CFAbsoluteTimeGetCurrent()
 
-            if settings.streamingPipeline {
+            if let prepared = job.preparedEmbeddings, prepared.count == chunks.count {
+                try await processSequential(
+                    job: job,
+                    chunks: chunks,
+                    settings: settings,
+                    ollama: ollama,
+                    createOptions: createOptions,
+                    ingestedAt: ingestedAt,
+                    preparedEmbeddings: prepared
+                )
+            } else if settings.streamingPipeline {
                 try await processStreaming(
                     job: job,
                     chunks: chunks,
@@ -393,7 +459,8 @@ class DocumentProcessor: ObservableObject {
                     settings: settings,
                     ollama: ollama,
                     createOptions: createOptions,
-                    ingestedAt: ingestedAt
+                    ingestedAt: ingestedAt,
+                    preparedEmbeddings: nil
                 )
             }
 
@@ -422,6 +489,146 @@ class DocumentProcessor: ObservableObject {
             job.error = error.localizedDescription
             job.statusMessage = "Failed: \(error.localizedDescription)"
         }
+    }
+
+    private func refreshDoclingVersion(settings: AppSettings) async {
+        if settings.processingHost == .devbox, let version = await remoteDoclingVersion(settings: settings) {
+            settings.recordedDoclingVersion = version
+            return
+        }
+        let python = ("~/.chunky-venv/bin/python3" as NSString).expandingTildeInPath
+        let report = await doclingService.checkInstallation(pythonPath: python)
+        if let version = report.version, !version.isEmpty {
+            settings.recordedDoclingVersion = version
+        }
+    }
+
+    private func remoteDoclingVersion(settings: AppSettings) async -> String? {
+        let trimmed = settings.devboxWorkerURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+        guard let url = URL(string: trimmed + "/v1/health") else { return nil }
+        guard let (data, response) = try? await URLSession.shared.data(from: url),
+              (response as? HTTPURLResponse)?.statusCode == 200,
+              let object = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+              let docling = object["docling"] as? [String: Any],
+              let version = docling["version"] as? String,
+              !version.isEmpty
+        else { return nil }
+        return version
+    }
+
+    private func finishFromCache(
+        job: ProcessingJob,
+        settings: AppSettings,
+        mode: ProcessingMode,
+        cached: (chunks: [ChunkCacheChunk], vectors: [[Double]]?),
+        started: CFAbsoluteTime
+    ) async throws -> Bool {
+        var vectors = (cached.vectors ?? []).map { row in row.map(Float.init) }
+        if mode == .full, vectors.count != cached.chunks.count {
+            let ollama = try getOllamaService(baseURL: settings.ollamaURL)
+            let texts = cached.chunks.map { $0.embeddingText.isEmpty ? $0.text : $0.embeddingText }
+            vectors = try await ollama.embedBatch(texts: texts, model: settings.embeddingModel)
+            let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+            try? cacheBridge(settings: settings).storeVectors(
+                digest: digest,
+                vectors: vectors.map { row in row.map(Double.init) }
+            )
+            job.cacheStatus = ChunkCacheUse.hit.rawValue
+        } else {
+            job.cacheStatus = ChunkCachePolicy.use(
+                force: false,
+                chunkCount: cached.chunks.count,
+                vectorCount: vectors.count
+            ).rawValue
+        }
+        job.conversionTime = 0
+        job.chunksCount = cached.chunks.count
+        job.retainedChunks = cached.chunks.map { chunk in
+            ChunkingService.DocumentChunk(
+                text: chunk.text,
+                source: job.fileName,
+                page: chunk.page,
+                headings: chunk.headings,
+                tokenCount: chunk.tokenCount,
+                formattedContent: chunk.embeddingText,
+                chunkIndex: chunk.chunkIndex,
+                contentType: chunk.contentType,
+                docTitle: chunk.docTitle,
+                authors: chunk.authors,
+                doi: chunk.doi,
+                year: chunk.year,
+                language: chunk.language,
+                embeddingText: chunk.embeddingText,
+                pageEnd: chunk.pageEnd
+            )
+        }
+        if mode == .chunkOnly {
+            job.totalTime = CFAbsoluteTimeGetCurrent() - started
+            job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+            job.statusMessage = "\(cached.chunks.count) cached chunks"
+            job.status = .completed
+            await refreshVerification(job: job, settings: settings, chunks: job.retainedChunks)
+            return true
+        }
+        guard vectors.count == cached.chunks.count, !vectors.isEmpty else { return false }
+        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        let supplied: QdrantService?
+        if options.target == .qdrantCloud {
+            let cloud = QdrantService()
+            let apiKey = settings.qdrantAPIKey.isEmpty ? nil : settings.qdrantAPIKey
+            try await cloud.configure(url: settings.qdrantCloudURL, apiKey: apiKey)
+            try await cloud.connect(timeout: settings.qdrantTimeout)
+            supplied = cloud
+        } else {
+            supplied = nil
+        }
+        let rawChunks = cached.chunks.map { chunk -> [String: Any] in
+            var object = chunk.jsonObject()
+            object["source"] = job.fileName
+            return object
+        }
+        let parsed = ParsedWorkerJob(
+            status: "succeeded",
+            error: nil,
+            errorType: nil,
+            chunks: rawChunks,
+            embeddings: vectors,
+            embeddingDim: vectors.first?.count ?? settings.embeddingDimensions,
+            docTitle: cached.chunks.first?.docTitle,
+            authors: cached.chunks.first?.authors ?? [],
+            language: cached.chunks.first?.language,
+            year: cached.chunks.first?.year,
+            ingestUpserted: nil,
+            ingestCollection: settings.defaultCollection,
+            pageCount: cached.chunks.compactMap(\.page).max(),
+            tokenCount: cached.chunks.reduce(0) { $0 + $1.tokenCount },
+            metrics: nil
+        )
+        job.status = .uploading
+        let uploadStarted = CFAbsoluteTimeGetCurrent()
+        try await ingestReturnedVectors(job: job, settings: settings, parsed: parsed, qdrant: supplied)
+        job.uploadTime = CFAbsoluteTimeGetCurrent() - uploadStarted
+        job.totalTime = CFAbsoluteTimeGetCurrent() - started
+        job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+        job.status = .completed
+        await refreshVerification(job: job, settings: settings, chunks: job.retainedChunks)
+        return true
+    }
+
+    private func cacheBridge(settings: AppSettings) -> ChunkCacheBridge {
+        let remote: WorkerChunkCache?
+        if settings.processingHost == .devbox, !settings.devboxWorkerURL.isEmpty, !settings.workerToken.isEmpty {
+            remote = WorkerChunkCache(
+                http: URLSessionChunkCacheHTTP(baseURL: settings.devboxWorkerURL, token: settings.workerToken)
+            )
+        } else {
+            remote = nil
+        }
+        return ChunkCacheBridge(
+            settings: settings,
+            directory: ChunkCacheLocation.macDirectory(),
+            remote: remote
+        )
     }
 
     private static func bboxesJSON(_ value: Any?) -> String? {
@@ -515,7 +722,8 @@ class DocumentProcessor: ObservableObject {
         settings: AppSettings,
         ollama: OllamaService,
         createOptions: CollectionCreateOptions,
-        ingestedAt: String
+        ingestedAt: String,
+        preparedEmbeddings: [[Float]]? = nil
     ) async throws {
         var chunksToEmbed = chunks
         var cachedPoints: [ChunkPoint] = []
@@ -573,21 +781,35 @@ class DocumentProcessor: ObservableObject {
 
         if !chunksToEmbed.isEmpty {
             let vectorSize = try await probedVectorSize(settings: settings, ollama: ollama)
-            let texts = chunksToEmbed.map { $0.embeddingText ?? $0.text }
-
-            let embedStarted = CFAbsoluteTimeGetCurrent()
-            let embeddings = try await ollama.embedWithProgress(
-                texts: texts,
-                model: settings.embeddingModel,
-                batchSize: settings.embeddingBatchSize,
-                concurrency: settings.embeddingConcurrency
-            ) { [weak job] completed, total in
-                Task { @MainActor in
-                    job?.progress = Double(completed) / Double(total)
-                    job?.statusMessage = "Embedding batch \(completed)/\(total)..."
+            let embeddings: [[Float]]
+            if let preparedEmbeddings, preparedEmbeddings.count == chunks.count, chunksToEmbed.count == chunks.count {
+                embeddings = preparedEmbeddings
+                job.embeddingTime = 0
+                job.cacheStatus = ChunkCacheUse.vectors.rawValue
+            } else {
+                let texts = chunksToEmbed.map { $0.embeddingText ?? $0.text }
+                let embedStarted = CFAbsoluteTimeGetCurrent()
+                embeddings = try await ollama.embedWithProgress(
+                    texts: texts,
+                    model: settings.embeddingModel,
+                    batchSize: settings.embeddingBatchSize,
+                    concurrency: settings.embeddingConcurrency
+                ) { [weak job] completed, total in
+                    Task { @MainActor in
+                        job?.progress = Double(completed) / Double(total)
+                        job?.statusMessage = "Embedding batch \(completed)/\(total)..."
+                    }
                 }
+                job.embeddingTime = (job.embeddingTime ?? 0) + (CFAbsoluteTimeGetCurrent() - embedStarted)
             }
-            job.embeddingTime = (job.embeddingTime ?? 0) + (CFAbsoluteTimeGetCurrent() - embedStarted)
+
+            if job.cacheStatus != ChunkCacheUse.vectors.rawValue, embeddings.count == chunks.count {
+                let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+                try? cacheBridge(settings: settings).storeVectors(
+                    digest: digest,
+                    vectors: embeddings.map { row in row.map(Double.init) }
+                )
+            }
 
             if let actual = embeddings.first?.count, actual != vectorSize {
                 throw EmbeddingDimensionError.batchMismatch(
@@ -705,6 +927,7 @@ class DocumentProcessor: ObservableObject {
         try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: firstPoints, batchSize: settings.qdrantBatchSize)
         uploadSeconds += CFAbsoluteTimeGetCurrent() - firstUploadStarted
 
+        var savedEmbeddings = firstEmbeddings
         var embeddedSoFar = firstChunkBatch.count
         job.statusMessage = "Embedding & uploading batch 1/\(totalBatches)..."
         job.progress = 1.0 / Double(totalBatches)
@@ -727,6 +950,7 @@ class DocumentProcessor: ObservableObject {
             try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: batchPoints, batchSize: settings.qdrantBatchSize)
             uploadSeconds += CFAbsoluteTimeGetCurrent() - batchUploadStarted
 
+            savedEmbeddings.append(contentsOf: batchEmbeddings)
             embeddedSoFar += batchChunks.count
             job.progress = Double(batchIndex + 1) / Double(totalBatches)
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
@@ -735,6 +959,13 @@ class DocumentProcessor: ObservableObject {
         job.embeddedCount = embeddedSoFar
         job.embeddingTime = embedSeconds
         job.uploadTime = uploadSeconds
+        if savedEmbeddings.count == chunks.count {
+            let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+            try? cacheBridge(settings: settings).storeVectors(
+                digest: digest,
+                vectors: savedEmbeddings.map { row in row.map(Double.init) }
+            )
+        }
     }
 
     @MainActor
@@ -799,6 +1030,22 @@ class DocumentProcessor: ObservableObject {
         }
         let payload = DevboxJobPayload.settings(from: settings, mode: mode)
         do {
+            await refreshDoclingVersion(settings: settings)
+            let digest = RunHistory.contentHash(ofFile: job.sourceURL)
+            if let cached = await cacheBridge(settings: settings).load(digest: digest, force: job.forceReconvert),
+               !cached.chunks.isEmpty {
+                let finished = try await finishFromCache(
+                    job: job,
+                    settings: settings,
+                    mode: mode,
+                    cached: cached,
+                    started: started
+                )
+                if finished {
+                    return
+                }
+            }
+            job.cacheStatus = ChunkCacheUse.miss.rawValue
             let parsed = try await devboxService.run(
                 fileURL: job.sourceURL,
                 settings: payload,
@@ -833,6 +1080,16 @@ class DocumentProcessor: ObservableObject {
                 return
             }
             job.chunksCount = parsed.chunks.count
+            let records = parsed.chunks.map { ChunkCacheChunk.normalize($0) }
+            if !records.isEmpty {
+                let vectors = parsed.embeddings.map { row in row.map(Double.init) }
+                try? cacheBridge(settings: settings).store(
+                    digest: digest,
+                    document: Data("{}".utf8),
+                    chunks: records,
+                    vectors: vectors.isEmpty ? nil : vectors
+                )
+            }
             job.pageCount = parsed.pageCount
             job.tokenCount = (parsed.tokenCount ?? 0) > 0 ? parsed.tokenCount : nil
             switch payload["ingest_target"] as? String {
@@ -938,7 +1195,7 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob) async throws {
+    private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob, qdrant supplied: QdrantService? = nil) async throws {
         guard parsed.embeddings.count == parsed.chunks.count, !parsed.embeddings.isEmpty else {
             throw DevboxClientError.http(
                 url: settings.devboxWorkerURL,
@@ -947,9 +1204,15 @@ class DocumentProcessor: ObservableObject {
             )
         }
         let vectorSize = parsed.embeddingDim ?? parsed.embeddings[0].count
-        guard let appState else { throw QdrantError.notConnected }
-        try await appState.ensureQdrantConnection()
-        guard let qdrant = appState.qdrantService else { throw QdrantError.notConnected }
+        let qdrant: QdrantService
+        if let supplied {
+            qdrant = supplied
+        } else {
+            guard let appState else { throw QdrantError.notConnected }
+            try await appState.ensureQdrantConnection()
+            guard let connected = appState.qdrantService else { throw QdrantError.notConnected }
+            qdrant = connected
+        }
         if try await qdrant.collectionExists(settings.defaultCollection) {
             let info = try await qdrant.getCollectionInfo(settings.defaultCollection)
             try EmbeddingDimensionError.validate(
@@ -963,7 +1226,7 @@ class DocumentProcessor: ObservableObject {
             ChunkingService.DocumentChunk(
                 id: raw["id"] as? String ?? UUID().uuidString,
                 text: raw["text"] as? String ?? "",
-                source: raw["source"] as? String ?? job.fileName,
+                source: job.fileName,
                 page: (raw["page"] as? NSNumber)?.intValue,
                 headings: (raw["headings"] as? [Any])?.compactMap { $0 as? String } ?? [],
                 chunkIndex: (raw["chunk_index"] as? NSNumber)?.intValue ?? index,
