@@ -49,7 +49,7 @@ struct SectionExpansionTests {
     }
 
     @Test func documentHitsStayInPlace() {
-        var paper = hit("doc", source: "paper.pdf", headings: [], page: nil, text: "Abstract")
+        var paper = hit("doc", source: "paper.pdf", headings: [], page: 1, text: "Abstract")
         paper.payload["record_type"] = "document"
         let passage = hit("a", source: "paper.pdf", headings: ["Methods"], page: 2, text: "Body")
         let merged = SectionExpansion.merge(hits: [paper, passage], siblings: [], threshold: 0.5)
