@@ -26,6 +26,9 @@ class ProcessingJob: ObservableObject, Identifiable {
     var analyticsPending = false
     var analyticsRuntime: String?
     var workerJobID: String?
+    var retainedChunks: [ChunkingService.DocumentChunk] = []
+    var ingestCollection: String?
+    var ingestCloud = false
     @Published var verification: VerificationReport?
     @Published var verificationNote: String?
 

@@ -96,7 +96,10 @@ private enum VerificationRenderer {
         let size = NSSize(width: 900, height: 640)
         let view = VerificationScreen(
             documents: [VerificationDocument(id: "paper", filename: "paper.pdf", report: report, note: nil)],
-            pageImage: { _, _ in pageImage() },
+            pageImage: { _, _ in
+                let image = pageImage()
+                return (image, VerificationReport.PageSize(width: image.size.width, height: image.size.height))
+            },
             onReverify: { _ in }
         )
         .frame(width: size.width, height: size.height, alignment: .top)

@@ -11,14 +11,14 @@ struct VerificationDocument: Identifiable, Equatable {
 
 struct VerificationScreen: View {
     var documents: [VerificationDocument]
-    var pageImage: (String, Int) -> NSImage?
+    var pageImage: (String, Int) -> (image: NSImage, size: VerificationReport.PageSize)?
     var onReverify: (String) -> Void
     @State private var selectedID: String?
     @State private var page: Int
 
     init(
         documents: [VerificationDocument],
-        pageImage: @escaping (String, Int) -> NSImage? = { _, _ in nil },
+        pageImage: @escaping (String, Int) -> (image: NSImage, size: VerificationReport.PageSize)? = { _, _ in nil },
         onReverify: @escaping (String) -> Void = { _ in },
         selectedID: String? = nil,
         page: Int? = nil
@@ -101,14 +101,19 @@ struct VerificationScreen: View {
             VStack(alignment: .leading, spacing: 16) {
                 if let selected {
                     header(selected)
+                    if let note = selected.note, !note.isEmpty {
+                        Text(note)
+                            .font(.callout)
+                            .foregroundStyle(AppTheme.statusOrange)
+                    }
                     if let report = selected.report {
                         pageStrip(report)
                         HStack(alignment: .top, spacing: 16) {
                             preview(report, documentID: selected.id)
                             findings(report)
                         }
-                    } else {
-                        Text(selected.note ?? "This document has not been verified yet.")
+                    } else if selected.note == nil {
+                        Text("This document has not been verified yet.")
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -164,9 +169,10 @@ struct VerificationScreen: View {
     }
 
     private func preview(_ report: VerificationReport, documentID: String) -> some View {
-        let image = pageImage(documentID, page)
-        let box = report.spotChecks.first { $0.page == page }?.bbox ?? report.spotChecks.first?.bbox
-        return VerificationPagePreview(image: image, bbox: box, pageSize: report.pageSize)
+        let rendered = pageImage(documentID, page)
+        let box = report.spotChecks.first { $0.page == page }?.bbox
+        let size = rendered?.size ?? report.pageSize
+        return VerificationPagePreview(image: rendered?.image, bbox: box, pageSize: size)
             .frame(width: 280, height: 360)
     }
 
@@ -297,7 +303,7 @@ private struct VerificationObserved: View {
             },
             pageImage: { id, page in
                 guard let match = jobs.first(where: { $0.id.uuidString == id }) else { return nil }
-                return PDFPageRenderer.image(url: match.sourceURL, page: page)
+                return PDFPageRenderer.render(url: match.sourceURL, page: page)
             },
             onReverify: { id in
                 guard let match = jobs.first(where: { $0.id.uuidString == id }) else { return }
@@ -310,7 +316,7 @@ private struct VerificationObserved: View {
 }
 
 enum PDFPageRenderer {
-    static func image(url: URL, page: Int) -> NSImage? {
+    static func render(url: URL, page: Int) -> (image: NSImage, size: VerificationReport.PageSize)? {
         guard page > 0, let document = PDFDocument(url: url), let pdfPage = document.page(at: page - 1) else {
             return nil
         }
@@ -323,6 +329,6 @@ enum PDFPageRenderer {
             pdfPage.draw(with: .mediaBox, to: context)
         }
         image.unlockFocus()
-        return image
+        return (image, VerificationReport.PageSize(width: bounds.width, height: bounds.height))
     }
 }

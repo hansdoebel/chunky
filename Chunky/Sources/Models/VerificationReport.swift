@@ -225,13 +225,6 @@ extension VerificationReport.SpotCheck {
 }
 
 extension VerificationReport.CheckBlock {
-    init(status: String, issues: [Issue] = [], samples: [Sample] = [], queries: [Query] = []) {
-        self.status = status
-        self.issues = issues
-        self.samples = samples
-        self.queries = queries
-    }
-
     init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         status = try container.decodeIfPresent(String.self, forKey: .status) ?? "skipped"
@@ -354,11 +347,11 @@ enum VerificationPayload {
         }
     }
 
-    static func qdrantTarget(settings: AppSettings) -> (url: String, key: String, collection: String) {
-        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
-        if options.target == .qdrantCloud {
-            return (settings.qdrantCloudURL, settings.qdrantAPIKey, settings.defaultCollection)
+    static func qdrantTarget(settings: AppSettings, collection: String?, cloud: Bool) -> (url: String, key: String, collection: String) {
+        let name = (collection?.isEmpty == false ? collection! : settings.defaultCollection)
+        if cloud {
+            return (settings.qdrantCloudURL, settings.qdrantAPIKey, name)
         }
-        return (settings.qdrantURL, "", settings.defaultCollection)
+        return ("", "", name)
     }
 }

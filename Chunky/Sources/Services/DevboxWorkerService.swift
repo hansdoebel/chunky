@@ -463,7 +463,8 @@ final class DevboxWorkerService {
         qdrantKey: String,
         collection: String
     ) async throws -> VerificationReport {
-        var body: [String: Any] = ["qdrant_collection": collection]
+        var body: [String: Any] = [:]
+        if !collection.isEmpty { body["qdrant_collection"] = collection }
         if !qdrantURL.isEmpty { body["qdrant_url"] = qdrantURL }
         if !qdrantKey.isEmpty { body["qdrant_api_key"] = qdrantKey }
         let data = try await authorizedData(

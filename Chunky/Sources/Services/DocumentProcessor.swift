@@ -46,6 +46,7 @@ class DocumentProcessor: ObservableObject {
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
         defer { appState?.storeFinishedRun(job, settings: settings) }
+        rememberIngestTarget(job: job, settings: settings)
         if settings.processingHost == .devbox {
             await processOnDevbox(job: job, settings: settings, mode: mode)
             return
@@ -406,6 +407,7 @@ class DocumentProcessor: ObservableObject {
             let timing = job.timingSummary ?? ""
             job.statusMessage = "\(chunks.count) chunks | \(timing)"
             job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+            job.retainedChunks = chunks
             await refreshVerification(job: job, settings: settings, chunks: chunks)
             job.status = .completed
 
@@ -870,8 +872,14 @@ class DocumentProcessor: ObservableObject {
         }
     }
 
+    private func rememberIngestTarget(job: ProcessingJob, settings: AppSettings) {
+        let options = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
+        job.ingestCollection = settings.defaultCollection
+        job.ingestCloud = options.target == .qdrantCloud
+    }
+
     func reverify(job: ProcessingJob, settings: AppSettings) async {
-        await refreshVerification(job: job, settings: settings, chunks: nil, rerun: true)
+        await refreshVerification(job: job, settings: settings, chunks: job.retainedChunks, rerun: true)
     }
 
     private func refreshVerification(
@@ -885,7 +893,11 @@ class DocumentProcessor: ObservableObject {
             job.verificationNote = "Set the devbox worker URL to verify this document."
             return
         }
-        let target = VerificationPayload.qdrantTarget(settings: settings)
+        let target = VerificationPayload.qdrantTarget(
+            settings: settings,
+            collection: job.ingestCollection,
+            cloud: job.ingestCloud
+        )
         do {
             let report: VerificationReport
             if let workerJobID = job.workerJobID, rerun {
@@ -893,9 +905,9 @@ class DocumentProcessor: ObservableObject {
                     jobID: workerJobID,
                     baseURL: base,
                     token: settings.workerToken,
-                    qdrantURL: target.url,
+                    qdrantURL: "",
                     qdrantKey: target.key,
-                    collection: target.collection
+                    collection: ""
                 )
             } else if let workerJobID = job.workerJobID {
                 report = try await devboxService.fetchVerification(
