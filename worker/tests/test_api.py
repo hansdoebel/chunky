@@ -6,7 +6,7 @@ import json
 
 from chunky_worker.app import MLX_VLM_MODELS, TRANSFORMERS_VLM_MODELS, create_app
 from chunky_worker.jobs import JobStore
-from tests.conftest import FakeEmbeddings, FakePipeline, wait_for_status
+from tests.conftest import FakeEmbeddings, FakePipeline, auth_headers, wait_for_status
 
 
 def _upload(client, content=b"hello", filename="note.txt", settings=None):
@@ -120,7 +120,7 @@ def test_conversion_failure_marks_job_failed(tmp_settings, embeddings):
         embeddings=embeddings,
         store=JobStore(),
     )
-    with TestClient(app) as client:
+    with TestClient(app, headers=auth_headers()) as client:
         job_id = _upload(client).json()["id"]
         body = wait_for_status(client, job_id, "failed")
     assert body["error"] == "broken pdf"
@@ -144,7 +144,7 @@ def test_cancel_running_job(tmp_settings, embeddings):
         embeddings=embeddings,
         store=JobStore(),
     )
-    with TestClient(app) as client:
+    with TestClient(app, headers=auth_headers()) as client:
         job_id = _upload(client).json()["id"]
         wait_for_status(client, job_id, "running", "queued")
         canceled = client.post(f"/v1/jobs/{job_id}/cancel")
