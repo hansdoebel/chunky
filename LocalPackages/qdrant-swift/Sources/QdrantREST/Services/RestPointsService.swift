@@ -487,10 +487,20 @@ public final class RestPointsService: Sendable {
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool = true
+        wait: Bool = true,
+        isTenant: Bool = false
     ) async throws {
-        let request = CreateFieldIndexRequest(fieldName: fieldName, fieldSchema: fieldType)
         let queryItems = [URLQueryItem(name: "wait", value: wait ? "true" : "false")]
+        if isTenant, fieldType == .keyword {
+            let request = TenantKeywordIndexRequest(fieldName: fieldName)
+            let _: PointsOperationResponse = try await client.put(
+                path: "/collections/\(collection)/index",
+                body: request,
+                queryItems: queryItems
+            )
+            return
+        }
+        let request = CreateFieldIndexRequest(fieldName: fieldName, fieldSchema: fieldType)
         let _: PointsOperationResponse = try await client.put(
             path: "/collections/\(collection)/index",
             body: request,
@@ -589,6 +599,16 @@ struct ClearPayloadRequest: Encodable {
 struct CreateFieldIndexRequest: Encodable {
     let fieldName: String
     let fieldSchema: FieldType
+}
+
+struct TenantKeywordIndexRequest: Encodable {
+    let fieldName: String
+    let fieldSchema = TenantKeywordSchema()
+
+    struct TenantKeywordSchema: Encodable {
+        let type = "keyword"
+        let isTenant = true
+    }
 }
 
 struct OverwritePayloadRequest: Encodable {

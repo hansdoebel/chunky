@@ -121,6 +121,16 @@ struct ChunkyMCPTests {
         #expect(properties?["year_from"] != nil)
         #expect(properties?["author"] != nil)
         #expect(properties?["heading"] != nil)
+        #expect(properties?["library"] != nil)
+        #expect(properties?["all_libraries"] != nil)
+        let selected = try ChunkyMCPDispatch.searchRequest(["query": "revenue", "libraries": ["thesis", "default"]])
+        #expect(selected.librarySearch == .selected)
+        #expect(selected.libraryIDs == ["thesis", "default"])
+        let everyone = try ChunkyMCPDispatch.searchRequest(["query": "revenue", "all_libraries": true])
+        #expect(everyone.librarySearch == .all)
+        let active = try ChunkyMCPDispatch.searchRequest(["query": "revenue"])
+        #expect(active.librarySearch == .active)
+        #expect(active.libraryIDs.isEmpty)
     }
 
     @Test func retrievalServiceReceivesTheSavedSearch() async throws {

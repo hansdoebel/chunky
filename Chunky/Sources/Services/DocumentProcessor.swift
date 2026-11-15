@@ -742,6 +742,7 @@ class DocumentProcessor: ObservableObject {
             "content_type": "document",
         ]
         if settings.metadataIncludeTimestamp { metadata["ingested_at"] = ingestedAt }
+        metadata[PaperLibrary.field] = LibraryFilter.assignedID(settings.activeLibraryID)
         if settings.metadataIncludeDocTitle, !title.isEmpty { metadata["doc_title"] = title }
         if settings.metadataIncludeAuthors, let authors = chunks.compactMap(\.authors).first, !authors.isEmpty {
             metadata["authors"] = authors.joined(separator: "; ")
@@ -820,6 +821,7 @@ class DocumentProcessor: ObservableObject {
             if settings.metadataIncludeURL, let u = chunk.url { metadata["url"] = u }
             if settings.metadataIncludeLanguage, let l = chunk.language { metadata["language"] = l }
             if settings.metadataIncludeTimestamp { metadata["ingested_at"] = ingestedAt }
+            metadata[PaperLibrary.field] = LibraryFilter.assignedID(settings.activeLibraryID)
             if settings.enableEmbeddingCache {
                 metadata["content_hash"] = contentHash(text: chunk.embeddingText ?? chunk.text, model: settings.embeddingModel)
             }

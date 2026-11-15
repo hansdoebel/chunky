@@ -244,6 +244,12 @@ class AppSettings: ObservableObject {
     @Published var imageExportMode: String {
         didSet { defaults.set(imageExportMode, forKey: prefix + "imageExportMode") }
     }
+    @Published var activeLibraryID: String {
+        didSet { defaults.set(activeLibraryID, forKey: prefix + "activeLibraryID") }
+    }
+    @Published var paperLibrariesJSON: String {
+        didSet { defaults.set(paperLibrariesJSON, forKey: prefix + "paperLibrariesJSON") }
+    }
     @Published var doFormulaEnrichment: Bool {
         didSet { defaults.set(doFormulaEnrichment, forKey: prefix + "doFormulaEnrichment") }
     }
@@ -485,6 +491,8 @@ class AppSettings: ObservableObject {
         self.ocrLanguage = defaults.string(forKey: prefix + "ocrLanguage") ?? OCRLanguage.german.rawValue
 
         self.imageExportMode = defaults.string(forKey: prefix + "imageExportMode") ?? ImageExportMode.embedded.rawValue
+        self.activeLibraryID = defaults.string(forKey: prefix + "activeLibraryID") ?? PaperLibrary.defaultID
+        self.paperLibrariesJSON = defaults.string(forKey: prefix + "paperLibrariesJSON") ?? PaperLibrary.defaultJSON
         self.doFormulaEnrichment = defaults.object(forKey: prefix + "doFormulaEnrichment") as? Bool ?? false
         self.doCodeEnrichment = defaults.object(forKey: prefix + "doCodeEnrichment") as? Bool ?? false
         self.doChartExtraction = defaults.object(forKey: prefix + "doChartExtraction") as? Bool ?? false

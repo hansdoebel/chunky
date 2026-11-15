@@ -53,6 +53,8 @@ struct RetrievalFilter: Equatable, Sendable {
     var lt: Double?
     var lte: Double?
     var negated: Bool = false
+    var should: Bool = false
+    var matchEmpty: Bool = false
 
     var hasRange: Bool {
         gt != nil || gte != nil || lt != nil || lte != nil
@@ -72,6 +74,9 @@ struct RetrievalFilter: Equatable, Sendable {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return [] }
         var items: [Condition] = []
+        if matchEmpty {
+            items.append(.isEmpty(key: trimmed))
+        }
         if let match {
             if trimmed == "content_type", let clause = Self.elementClause(match) {
                 items.append(clause)
@@ -116,6 +121,12 @@ struct RetrievalFilter: Equatable, Sendable {
         }
         if negated {
             object["negate"] = true
+        }
+        if should {
+            object["should"] = true
+        }
+        if matchEmpty {
+            object["empty"] = true
         }
         if let gt { object["gt"] = gt }
         if let gte { object["gte"] = gte }
@@ -187,8 +198,12 @@ struct RetrievalFilter: Equatable, Sendable {
     }
 
     static func qdrantFilter(_ filters: [RetrievalFilter]) -> Filter? {
-        let must = filters.filter { !$0.negated }.flatMap { $0.conditions() }
+        var must = filters.filter { !$0.negated && !$0.should }.flatMap { $0.conditions() }
+        let should = filters.filter { $0.should && !$0.negated }.flatMap { $0.conditions() }
         let mustNot = filters.filter(\.negated).flatMap { $0.conditions() }
+        if !should.isEmpty {
+            must.append(.filter(Filter(should: should)))
+        }
         guard !must.isEmpty || !mustNot.isEmpty else { return nil }
         return Filter(must: must, mustNot: mustNot)
     }
@@ -324,16 +339,26 @@ struct RetrievalFilter: Equatable, Sendable {
     }
 
     static func keeps(_ payload: [String: Any], filters: [RetrievalFilter]) -> Bool {
-        filters.allSatisfy { filter in
+        let required = filters.filter { !$0.should }
+        let optional = filters.filter(\.should)
+        let requiredMatch = required.allSatisfy { filter in
             let matched = filter.matches(payload)
             return filter.negated ? !matched : matched
         }
+        guard requiredMatch else { return false }
+        guard !optional.isEmpty else { return true }
+        return optional.contains { $0.matches(payload) }
     }
 
     func matches(_ payload: [String: Any]) -> Bool {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return true }
         let value = payload[trimmed]
+        if matchEmpty {
+            let text = value as? String
+            let missing = value == nil || text?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == true
+            if !missing { return false }
+        }
         if let match {
             if trimmed == "content_type", Self.elementClause(match) != nil {
                 return Self.elementMatches(payload, match)
@@ -434,6 +459,9 @@ struct RetrievalRequest: Equatable, Sendable {
     var expandPapers: Bool = false
     var expandSection: Bool = false
     var sectionRatio: Double = SectionExpansion.defaultThreshold
+    var libraryID: String = PaperLibrary.defaultID
+    var libraryIDs: [String] = []
+    var librarySearch: LibrarySearch = .active
     var rrfWeights: [Double]?
     var rerank: RerankConfig?
 
@@ -450,6 +478,8 @@ struct RetrievalRequest: Equatable, Sendable {
         expandPapers: Bool = false,
         expandSection: Bool = false,
         sectionRatio: Double = SectionExpansion.defaultThreshold,
+        libraryIDs: [String] = [],
+        librarySearch: LibrarySearch = .active,
         rrfWeights: [Double]? = nil,
         rerank: RerankConfig? = nil,
         settings: AppSettings
@@ -482,6 +512,9 @@ struct RetrievalRequest: Equatable, Sendable {
             expandPapers: expandPapers,
             expandSection: expandSection,
             sectionRatio: sectionRatio,
+            libraryID: settings.activeLibraryID,
+            libraryIDs: libraryIDs,
+            librarySearch: librarySearch,
             rrfWeights: rrfWeights,
             rerank: rerank
         )
@@ -495,7 +528,11 @@ struct RetrievalRequest: Equatable, Sendable {
         } else {
             items.append(RetrievalFilter(key: "record_type", match: .text(DocumentSummary.documentRecord), negated: true))
         }
-        return items
+        return items + LibraryFilter.filters(
+            activeID: libraryID,
+            selectedIDs: libraryIDs,
+            scope: librarySearch
+        )
     }
 
     func workerJSON() -> [String: Any] {
@@ -508,7 +545,7 @@ struct RetrievalRequest: Equatable, Sendable {
             "embedding_model": embeddingModel,
             "embedding_backend": embeddingBackend,
             "embedding_url": embeddingURL,
-            "filters": filters.map { $0.jsonObject() },
+            "filters": (filters + LibraryFilter.filters(activeID: libraryID, selectedIDs: libraryIDs, scope: librarySearch)).map { $0.jsonObject() },
             "papers_first": papersFirst,
             "expand_documents": expandPapers,
             "expand_section": expandSection,
@@ -815,10 +852,21 @@ enum HybridQuery {
 
     static func restFilter(_ filters: [RetrievalFilter]) -> [String: Any]? {
         var must: [[String: Any]] = []
+        var should: [[String: Any]] = []
         var mustNot: [[String: Any]] = []
         for item in filters {
             let key = item.key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { continue }
+            if item.matchEmpty {
+                let condition: [String: Any] = ["is_empty": ["key": key]]
+                if item.should {
+                    should.append(condition)
+                } else if item.negated {
+                    mustNot.append(condition)
+                } else {
+                    must.append(condition)
+                }
+            }
             if let match = item.match {
                 let condition: [String: Any]
                 switch match {
@@ -833,7 +881,9 @@ enum HybridQuery {
                 case .anyText(let values):
                     condition = ["key": key, "match": ["any": values]]
                 }
-                if item.negated {
+                if item.should {
+                    should.append(condition)
+                } else if item.negated {
                     mustNot.append(condition)
                 } else {
                     must.append(condition)
@@ -852,6 +902,9 @@ enum HybridQuery {
                     must.append(condition)
                 }
             }
+        }
+        if !should.isEmpty {
+            must.append(["should": should])
         }
         var body: [String: Any] = [:]
         if !must.isEmpty { body["must"] = must }

@@ -11,6 +11,9 @@ struct CollectionBrowserView: View {
     @State private var showSnapshots = false
     @State private var showHealth = false
     @State private var showPacking = false
+    @State private var showAddLibrary = false
+    @State private var newLibraryName = ""
+    @State private var showMoveLibrary = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -39,6 +42,18 @@ struct CollectionBrowserView: View {
                 .frame(maxWidth: 180)
                 .fixedSize()
 
+                Picker(selection: $appState.settings.activeLibraryID) {
+                    ForEach(PaperLibrary.load(appState.settings.paperLibrariesJSON)) { library in
+                        Text(library.name).tag(library.id)
+                    }
+                } label: {
+                    Text("Library")
+                }
+                .frame(maxWidth: 160)
+                Button("Add") { showAddLibrary = true }
+                    .buttonStyle(.bordered)
+                    .help("Add a paper library")
+
                 HStack(spacing: 8) {
                     Image(systemName: "magnifyingglass")
                         .foregroundStyle(.tertiary)
@@ -65,6 +80,10 @@ struct CollectionBrowserView: View {
 
                 Button("New") { showNewCollection = true }
                     .buttonStyle(.bordered)
+                Button("Move") { showMoveLibrary = true }
+                    .buttonStyle(.bordered)
+                    .disabled(selectedIds.isEmpty)
+                    .help("Move the selected points to the active library without embedding them again")
                 Button("Snapshots") { showSnapshots = true }
                     .buttonStyle(.bordered)
                 Button("Health") { showHealth = true }
@@ -193,6 +212,39 @@ struct CollectionBrowserView: View {
             selectedIds.removeAll()
             Task { await appState.loadBrowserPoints() }
         }
+        .sheet(isPresented: $showAddLibrary) {
+            VStack(alignment: .leading, spacing: 12) {
+                Text("New library")
+                    .font(.headline)
+                TextField("Name", text: $newLibraryName, prompt: Text("Thesis"))
+                    .textFieldStyle(.roundedBorder)
+                HStack {
+                    Button("Cancel") { showAddLibrary = false }
+                    Button("Add") {
+                        appState.addPaperLibrary(name: newLibraryName)
+                        newLibraryName = ""
+                        showAddLibrary = false
+                    }
+                    .buttonStyle(.borderedProminent)
+                    .disabled(newLibraryName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
+            }
+            .padding(20)
+            .frame(width: 320)
+        }
+        .alert("Move to \(libraryName)?", isPresented: $showMoveLibrary) {
+            Button("Cancel", role: .cancel) { }
+            Button("Move") {
+                let ids = Array(selectedIds)
+                let libraryID = appState.settings.activeLibraryID
+                Task {
+                    await appState.movePoints(ids: ids, libraryID: libraryID)
+                    selectedIds.removeAll()
+                }
+            }
+        } message: {
+            Text("Moves \(selectedIds.count) point(s) into that library. The vectors stay as they are.")
+        }
         .alert("Delete Points?", isPresented: $showDeleteConfirmation) {
             Button("Cancel", role: .cancel) { }
             Button("Delete", role: .destructive) {
@@ -208,6 +260,11 @@ struct CollectionBrowserView: View {
 
     private var selectedRecords: [CitationSource] {
         filteredPoints.filter { selectedIds.contains($0.id) }.map(CitationSource.init(point:))
+    }
+
+    private var libraryName: String {
+        PaperLibrary.load(appState.settings.paperLibrariesJSON)
+            .first { $0.id == appState.settings.activeLibraryID }?.name ?? appState.settings.activeLibraryID
     }
 
     private var filteredPoints: [QdrantPoint] {

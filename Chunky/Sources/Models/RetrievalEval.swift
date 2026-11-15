@@ -426,7 +426,7 @@ struct RetrievalEvalRunner {
             reranker: config.reranker,
             setIdentity: RetrievalEvalSets.identity(name: set.name, queries: set.queries),
             score: RetrievalEvalMetrics.summarize(rows, k: config.k),
-            scope: RetrievalFilter.scopeLabel(config.filters)
+            scope: RetrievalFilter.scopeLabel(config.filters + [RetrievalFilter(key: PaperLibrary.field, match: .text(LibraryFilter.assignedID(settings.activeLibraryID)))])
         )
     }
 }

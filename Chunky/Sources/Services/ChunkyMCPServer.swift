@@ -70,7 +70,10 @@ nonisolated enum ChunkyMCPDispatch {
                     "doi": ["type": "string"],
                     "title": ["type": "string"],
                     "heading": ["type": "string"],
-                    "content_type": ["type": "string"]
+                    "content_type": ["type": "string"],
+                    "library": ["type": "string"],
+                    "libraries": ["type": "array", "items": ["type": "string"]],
+                    "all_libraries": ["type": "boolean"]
                 ],
                 "required": ["query"]
             ]
@@ -120,7 +123,15 @@ nonisolated enum ChunkyMCPDispatch {
             throw ChunkySearchError.invalidArguments("top_k must be from 1 to 100")
         }
         let filters = PiJSONL.dictionaries(arguments["filters"]).compactMap(filter) + scopeFilters(arguments)
-        return ChunkySearchRequest(query: query, collection: collection, topK: topK, filters: filters)
+        let libraries = Self.libraries(arguments)
+        return ChunkySearchRequest(
+            query: query,
+            collection: collection,
+            topK: topK,
+            filters: filters,
+            libraryIDs: libraries.ids,
+            librarySearch: libraries.scope
+        )
     }
 
     static func scopeFilters(_ arguments: [String: Any]) -> [ChunkySearchFilter] {
@@ -141,6 +152,20 @@ nonisolated enum ChunkyMCPDispatch {
                 lte: item.lte
             )
         }
+    }
+
+    static func libraries(_ arguments: [String: Any]) -> (ids: [String], scope: LibrarySearch) {
+        if arguments["all_libraries"] as? Bool == true {
+            return ([], .all)
+        }
+        if let values = arguments["libraries"] as? [String] {
+            let ids = values.map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }.filter { !$0.isEmpty }
+            if !ids.isEmpty { return (ids, .selected) }
+        }
+        if let one = string(arguments["library"]), !one.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            return ([one], .selected)
+        }
+        return ([], .active)
     }
 
     private static func string(_ value: Any?) -> String {

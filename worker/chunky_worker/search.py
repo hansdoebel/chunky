@@ -32,6 +32,8 @@ class PayloadFilter(BaseModel):
     text: str | None = None
     any: list[str] | None = None
     negate: bool = False
+    empty: bool = False
+    should: bool = False
     gt: float | None = None
     gte: float | None = None
     lt: float | None = None
@@ -70,8 +72,8 @@ class PayloadFilter(BaseModel):
         return text
 
     def check_complete(self) -> None:
-        if self.match is None and self.text is None and not self.any and not self.has_range():
-            raise ValueError(f"Filter {self.key!r} needs a match, text, any, or a range")
+        if self.match is None and self.text is None and not self.any and not self.empty and not self.has_range():
+            raise ValueError(f"Filter {self.key!r} needs a match, text, any, empty, or a range")
 
 class SearchRequest(BaseModel):
     query: str
@@ -255,6 +257,7 @@ def build_query_filter(filters: list[PayloadFilter]):
     from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchText, MatchValue, Range
 
     must = []
+    should = []
     must_not = []
     for item in filters:
         item.check_complete()
@@ -262,8 +265,15 @@ def build_query_filter(filters: list[PayloadFilter]):
             expanded = _element_request(item)
             if expanded is not None:
                 clause = _element_clause(*expanded)
-                (must_not if item.negate else must).append(clause)
+                target = should if item.should else must_not if item.negate else must
+                target.append(clause)
                 continue
+        if item.empty:
+            from qdrant_client.models import IsEmptyCondition, PayloadField
+            condition = IsEmptyCondition(is_empty=PayloadField(key=item.key))
+            target = should if item.should else must_not if item.negate else must
+            target.append(condition)
+            continue
         kwargs: dict[str, Any] = {"key": item.key}
         if item.text is not None:
             kwargs["match"] = MatchText(text=item.text)
@@ -273,8 +283,11 @@ def build_query_filter(filters: list[PayloadFilter]):
             kwargs["match"] = MatchValue(value=item.match)
         if item.has_range():
             kwargs["range"] = Range(gt=item.gt, gte=item.gte, lt=item.lt, lte=item.lte)
-        target = must_not if item.negate else must
-        target.append(FieldCondition(**kwargs))
+        condition = FieldCondition(**kwargs)
+        target = should if item.should else must_not if item.negate else must
+        target.append(condition)
+    if should:
+        must.append(Filter(should=should))
     if not must and not must_not:
         return None
     return Filter(must=must or None, must_not=must_not or None)

@@ -88,7 +88,8 @@ public protocol PointsServiceProtocol: Sendable {
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool
+        wait: Bool,
+        isTenant: Bool
     ) async throws
 
     func deleteFieldIndex(
@@ -96,6 +97,23 @@ public protocol PointsServiceProtocol: Sendable {
         fieldName: String,
         wait: Bool
     ) async throws
+}
+
+extension PointsServiceProtocol {
+    public func createFieldIndex(
+        collection: String,
+        fieldName: String,
+        fieldType: FieldType,
+        wait: Bool
+    ) async throws {
+        try await createFieldIndex(
+            collection: collection,
+            fieldName: fieldName,
+            fieldType: fieldType,
+            wait: wait,
+            isTenant: false
+        )
+    }
 }
 
 public enum FieldType: Sendable {

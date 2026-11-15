@@ -86,6 +86,10 @@ struct RetrievalPlayground: View {
     @Binding var doi: String
     @Binding var title: String
     @Binding var heading: String
+    @Binding var libraryID: String
+    @Binding var libraryScope: String
+    @Binding var libraryList: String
+    var libraries: [PaperLibrary]
     @Binding var papersFirst: Bool
     @Binding var expandPapers: Bool
     @Binding var expandSection: Bool
@@ -215,6 +219,20 @@ struct RetrievalPlayground: View {
                 .textFieldStyle(.roundedBorder)
             TextField("Heading contains", text: $heading, prompt: Text("Heading contains"))
                 .textFieldStyle(.roundedBorder)
+            Picker("Library", selection: $libraryID) {
+                ForEach(libraryChoices) { library in
+                    Text(library.name).tag(library.id)
+                }
+            }
+            Picker("Library scope", selection: $libraryScope) {
+                Text("Active library").tag(LibrarySearch.active.rawValue)
+                Text("Selected libraries").tag(LibrarySearch.selected.rawValue)
+                Text("All libraries").tag(LibrarySearch.all.rawValue)
+            }
+            if libraryScope == LibrarySearch.selected.rawValue {
+                TextField("Libraries", text: $libraryList, prompt: Text("thesis, notes"))
+                    .textFieldStyle(.roundedBorder)
+            }
             Picker("Content", selection: $contentType) {
                 Text("Any").tag("")
                 Text("text").tag("text")
@@ -250,6 +268,17 @@ struct RetrievalPlayground: View {
             Spacer(minLength: 0)
         }
         .padding(16)
+    }
+
+    private var libraryChoices: [PaperLibrary] {
+        var items = libraries
+        if !items.contains(where: { $0.id == libraryID }) {
+            items.insert(PaperLibrary(id: libraryID, name: libraryID), at: 0)
+        }
+        if items.isEmpty {
+            items = [PaperLibrary.starter]
+        }
+        return items
     }
 
     private var collectionChoices: [String] {
@@ -402,6 +431,8 @@ struct RetrievalScreen: View {
     @State private var doi = ""
     @State private var title = ""
     @State private var heading = ""
+    @State private var libraryScope = LibrarySearch.active.rawValue
+    @State private var libraryList = ""
     @State private var papersFirst = false
     @State private var expandPapers = false
     @State private var expandSection = false
@@ -462,6 +493,10 @@ struct RetrievalScreen: View {
             doi: $doi,
             title: $title,
             heading: $heading,
+            libraryID: $appState.settings.activeLibraryID,
+            libraryScope: $libraryScope,
+            libraryList: $libraryList,
+            libraries: PaperLibrary.load(appState.settings.paperLibrariesJSON),
             papersFirst: $papersFirst,
             expandPapers: $expandPapers,
             expandSection: $expandSection,
@@ -564,6 +599,14 @@ struct RetrievalScreen: View {
         }
     }
 
+    private var selectedLibraryIDs: [String] {
+        guard libraryScope == LibrarySearch.selected.rawValue else { return [] }
+        let typed = libraryList.split(separator: ",").map {
+            $0.trimmingCharacters(in: .whitespacesAndNewlines)
+        }.filter { !$0.isEmpty }
+        return typed.isEmpty ? [appState.settings.activeLibraryID] : typed
+    }
+
     private func runSearch(question: String? = nil) async {
         isSearching = true
         error = nil
@@ -592,6 +635,8 @@ struct RetrievalScreen: View {
             expandPapers: expandPapers,
             expandSection: expandSection,
             sectionRatio: Double(sectionRatio.trimmingCharacters(in: .whitespacesAndNewlines)) ?? SectionExpansion.defaultThreshold,
+            libraryIDs: selectedLibraryIDs,
+            librarySearch: LibrarySearch(rawValue: libraryScope) ?? .active,
             rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
             rerank: rerankEnabled
                 ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: rerankAPIKey)

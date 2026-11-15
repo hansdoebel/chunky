@@ -717,3 +717,16 @@ def test_request_model_rejects_a_negative_offset():
         assert "offset" in str(exc)
     else:
         raise AssertionError("negative offset was accepted")
+
+def test_library_filter_is_a_required_or_and_excludes_the_other_library():
+    query_filter = build_query_filter([
+        PayloadFilter(key="library_id", any=["default"], should=True),
+        PayloadFilter(key="library_id", empty=True, should=True),
+    ])
+    assert query_filter is not None
+    assert len(query_filter.must) == 1
+    nested = query_filter.must[0]
+    assert len(nested.should) == 2
+    thesis = build_query_filter([PayloadFilter(key="library_id", match="thesis")])
+    assert thesis.must[0].key == "library_id"
+    assert thesis.must[0].match.value == "thesis"

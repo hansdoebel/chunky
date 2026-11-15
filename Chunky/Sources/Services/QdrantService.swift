@@ -219,6 +219,13 @@ class QdrantService: ObservableObject {
                 collection: collection, fieldName: field, fieldType: .integer, wait: false
             )
         }
+        try? await client.points.createFieldIndex(
+            collection: collection,
+            fieldName: PaperLibrary.field,
+            fieldType: .keyword,
+            wait: false,
+            isTenant: true
+        )
     }
 
     func deleteCollection(_ name: String) async throws {
@@ -412,6 +419,21 @@ class QdrantService: ObservableObject {
             collection: collectionName,
             ids: ids.map { PointID.uuid($0) },
             payload: fields.mapValues { PayloadValue.string($0) },
+            wait: true
+        )
+    }
+
+    func movePoints(collectionName: String, ids: [String], libraryID: String) async throws {
+        guard let client = client else {
+            throw QdrantServiceError.notConnected
+        }
+        let plan = LibraryMove.plan(ids: ids, libraryID: libraryID)
+        guard !plan.ids.isEmpty, !plan.reembed else { return }
+        let payload = plan.payload.mapValues { PayloadValue.string($0) }
+        try await client.points.setPayload(
+            collection: collectionName,
+            ids: plan.ids.map { PointID.uuid($0) },
+            payload: payload,
             wait: true
         )
     }
