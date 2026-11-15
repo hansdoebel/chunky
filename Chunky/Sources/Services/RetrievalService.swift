@@ -42,6 +42,7 @@ enum RetrievalMatch: Equatable, Sendable {
     case integer(Int)
     case boolean(Bool)
     case contains(String)
+    case anyText([String])
 }
 
 struct RetrievalFilter: Equatable, Sendable {
@@ -51,6 +52,7 @@ struct RetrievalFilter: Equatable, Sendable {
     var gte: Double?
     var lt: Double?
     var lte: Double?
+    var negated: Bool = false
 
     var hasRange: Bool {
         gt != nil || gte != nil || lt != nil || lte != nil
@@ -81,6 +83,8 @@ struct RetrievalFilter: Equatable, Sendable {
                 encoded = .boolean(value)
             case .contains(let value):
                 encoded = .text(value)
+            case .anyText(let values):
+                encoded = .anyKeyword(values)
             }
             items.append(.field(key: trimmed, match: encoded))
         }
@@ -101,8 +105,13 @@ struct RetrievalFilter: Equatable, Sendable {
             object["match"] = value
         case .contains(let value):
             object["text"] = value
+        case .anyText(let values):
+            object["any"] = values
         case nil:
             break
+        }
+        if negated {
+            object["negate"] = true
         }
         if let gt { object["gt"] = gt }
         if let gte { object["gte"] = gte }
@@ -112,9 +121,10 @@ struct RetrievalFilter: Equatable, Sendable {
     }
 
     static func qdrantFilter(_ filters: [RetrievalFilter]) -> Filter? {
-        let must = filters.flatMap { $0.conditions() }
-        guard !must.isEmpty else { return nil }
-        return Filter(must: must)
+        let must = filters.filter { !$0.negated }.flatMap { $0.conditions() }
+        let mustNot = filters.filter(\.negated).flatMap { $0.conditions() }
+        guard !must.isEmpty || !mustNot.isEmpty else { return nil }
+        return Filter(must: must, mustNot: mustNot)
     }
 
     static func encodedSummaries(_ filters: [RetrievalFilter]) -> [EncodedFilterSummary] {
@@ -233,7 +243,10 @@ struct RetrievalFilter: Equatable, Sendable {
     }
 
     static func keeps(_ payload: [String: Any], filters: [RetrievalFilter]) -> Bool {
-        filters.allSatisfy { $0.matches(payload) }
+        filters.allSatisfy { filter in
+            let matched = filter.matches(payload)
+            return filter.negated ? !matched : matched
+        }
     }
 
     func matches(_ payload: [String: Any]) -> Bool {
@@ -250,6 +263,8 @@ struct RetrievalFilter: Equatable, Sendable {
                 if (value as? Bool) != expected { return false }
             case .contains(let expected):
                 if !Self.contains(value, expected) { return false }
+            case .anyText(let expected):
+                if !Self.equalsAny(value, expected) { return false }
             }
         }
         if hasRange {
@@ -260,6 +275,12 @@ struct RetrievalFilter: Equatable, Sendable {
             if let lte, number > lte { return false }
         }
         return true
+    }
+
+    private static func equalsAny(_ value: Any?, _ expected: [String]) -> Bool {
+        if let text = value as? String { return expected.contains(text) }
+        if let values = value as? [String] { return values.contains { expected.contains($0) } }
+        return false
     }
 
     private static func equals(_ value: Any?, _ expected: String) -> Bool {
@@ -325,6 +346,8 @@ struct RetrievalRequest: Equatable, Sendable {
     var workerURL: String
     var workerToken: String
     var filters: [RetrievalFilter]
+    var papersFirst: Bool = false
+    var expandPapers: Bool = false
     var rrfWeights: [Double]?
     var rerank: RerankConfig?
 
@@ -337,6 +360,8 @@ struct RetrievalRequest: Equatable, Sendable {
         backend: String? = nil,
         model: String? = nil,
         filters: [RetrievalFilter] = [],
+        papersFirst: Bool = false,
+        expandPapers: Bool = false,
         rrfWeights: [Double]? = nil,
         rerank: RerankConfig? = nil,
         settings: AppSettings
@@ -365,9 +390,21 @@ struct RetrievalRequest: Equatable, Sendable {
             workerURL: settings.devboxWorkerURL,
             workerToken: settings.workerToken,
             filters: filters,
+            papersFirst: papersFirst,
+            expandPapers: expandPapers,
             rrfWeights: rrfWeights,
             rerank: rerank
         )
+    }
+
+    func scopedFilters() -> [RetrievalFilter] {
+        var items = filters.filter { $0.key != "record_type" }
+        if papersFirst {
+            items.append(RetrievalFilter(key: "record_type", match: .text(DocumentSummary.documentRecord)))
+        } else {
+            items.append(RetrievalFilter(key: "record_type", match: .text(DocumentSummary.documentRecord), negated: true))
+        }
+        return items
     }
 
     func workerJSON() -> [String: Any] {
@@ -381,6 +418,8 @@ struct RetrievalRequest: Equatable, Sendable {
             "embedding_backend": embeddingBackend,
             "embedding_url": embeddingURL,
             "filters": filters.map { $0.jsonObject() },
+            "papers_first": papersFirst,
+            "expand_documents": expandPapers,
         ]
         if let rrfWeights {
             body["rrf_weights"] = rrfWeights
@@ -672,19 +711,28 @@ enum HybridQuery {
 
     static func restFilter(_ filters: [RetrievalFilter]) -> [String: Any]? {
         var must: [[String: Any]] = []
+        var mustNot: [[String: Any]] = []
         for item in filters {
             let key = item.key.trimmingCharacters(in: .whitespacesAndNewlines)
             guard !key.isEmpty else { continue }
             if let match = item.match {
+                let condition: [String: Any]
                 switch match {
                 case .text(let text):
-                    must.append(["key": key, "match": ["value": text]])
+                    condition = ["key": key, "match": ["value": text]]
                 case .integer(let number):
-                    must.append(["key": key, "match": ["value": number]])
+                    condition = ["key": key, "match": ["value": number]]
                 case .boolean(let flag):
-                    must.append(["key": key, "match": ["value": flag]])
+                    condition = ["key": key, "match": ["value": flag]]
                 case .contains(let text):
-                    must.append(["key": key, "match": ["text": text]])
+                    condition = ["key": key, "match": ["text": text]]
+                case .anyText(let values):
+                    condition = ["key": key, "match": ["any": values]]
+                }
+                if item.negated {
+                    mustNot.append(condition)
+                } else {
+                    must.append(condition)
                 }
             }
             if item.hasRange {
@@ -693,10 +741,18 @@ enum HybridQuery {
                 if let value = item.gte { range["gte"] = value }
                 if let value = item.lt { range["lt"] = value }
                 if let value = item.lte { range["lte"] = value }
-                must.append(["key": key, "range": range])
+                let condition = ["key": key, "range": range]
+                if item.negated {
+                    mustNot.append(condition)
+                } else {
+                    must.append(condition)
+                }
             }
         }
-        return must.isEmpty ? nil : ["must": must]
+        var body: [String: Any] = [:]
+        if !must.isEmpty { body["must"] = must }
+        if !mustNot.isEmpty { body["must_not"] = mustNot }
+        return body.isEmpty ? nil : body
     }
 
     static func indexBody() -> [String: Any] {
@@ -896,7 +952,11 @@ struct RetrievalService {
         switch request.route {
         case .localQdrant:
             guard let index else { throw RetrievalError.notConnected }
-            page = try await searchLocal(request, index: index)
+            if request.papersFirst && request.expandPapers {
+                page = try await searchPapersThenChunks(request, index: index)
+            } else {
+                page = try await searchLocal(request, index: index)
+            }
         case .worker:
             guard !request.workerURL.isEmpty, !request.workerToken.isEmpty else {
                 throw RetrievalError.missingWorker
@@ -933,6 +993,22 @@ struct RetrievalService {
         updated.hits = ordered
         updated.reranked = true
         return updated
+    }
+
+    private func searchPapersThenChunks(_ request: RetrievalRequest, index: any RetrievalIndex) async throws -> RetrievalPage {
+        var papersRequest = request
+        papersRequest.expandPapers = false
+        let papers = try await searchLocal(papersRequest, index: index)
+        let sources = Array(Set(papers.hits.map(\.source))).filter { !$0.isEmpty }
+        guard !sources.isEmpty else { return papers }
+        var chunksRequest = request
+        chunksRequest.papersFirst = false
+        chunksRequest.expandPapers = false
+        chunksRequest.filters.append(RetrievalFilter(key: "source", match: .anyText(sources)))
+        let chunks = try await searchLocal(chunksRequest, index: index)
+        var page = papers
+        page.hits = papers.hits + chunks.hits
+        return page
     }
 
     private func searchLocal(_ request: RetrievalRequest, index: any RetrievalIndex) async throws -> RetrievalPage {
@@ -980,7 +1056,7 @@ struct RetrievalService {
                 limit: request.limit,
                 offset: request.offset,
                 weights: request.rrfWeights,
-                filters: request.filters
+                filters: request.scopedFilters()
             )
             hits = try await index.hybridRRF(
                 collection: request.collection,
@@ -994,7 +1070,7 @@ struct RetrievalService {
                 vector: vector,
                 limit: request.limit,
                 offset: request.offset,
-                filter: RetrievalFilter.qdrantFilter(request.filters),
+                filter: RetrievalFilter.qdrantFilter(request.scopedFilters()),
                 vectorName: vectorName
             ).map(RetrievalHit.init(result:))
         }

@@ -200,7 +200,7 @@ class QdrantService: ObservableObject {
             throw QdrantServiceError.notConnected
         }
 
-        let keywordFields = ["source", "content_type", "language", "doi", "picture_class"]
+        let keywordFields = ["source", "content_type", "language", "doi", "picture_class", "record_type"]
         let textFields = ["doc_title", "authors", "headings", "picture_description", "table_markdown", "embedding_text"]
         let integerFields = ["page", "page_end", "year"]
 

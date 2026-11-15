@@ -14,6 +14,7 @@ from chunky_worker.exceptions import JobCanceled
 from chunky_worker.qdrant_ingest import (
     DimensionMismatch,
     IngestError,
+    PreparedPoint,
     QdrantCloudIngestor,
     QdrantIngestor,
     build_points,
@@ -188,6 +189,33 @@ class JobRunner:
             event["percent"] = percent
         self.store.append_event(job_id, event)
 
+    def _with_summary_point(self, points, *, chunks, job, result, model):
+        from chunky_worker.document_summary import resolve_summary, summary_payload
+
+        text, kind = resolve_summary(chunks, result.doc_title, generated=None)
+        if not text or not points:
+            return points
+        backend = self.backend_for(job.settings)
+        vectors = backend.embed([text], model)
+        if not vectors or len(vectors[0]) != len(points[0].vector):
+            return points
+        document_id = None
+        for chunk in chunks:
+            if chunk.get("document_id"):
+                document_id = str(chunk["document_id"])
+                break
+        payload = summary_payload(
+            text=text,
+            kind=kind,
+            source=job.filename,
+            doc_title=result.doc_title,
+            authors=result.authors,
+            year=result.year,
+            document_id=document_id,
+        )
+        points.append(PreparedPoint(id=str(uuid.uuid4()), vector=list(vectors[0]), payload=payload))
+        return points
+
     def _apply_ingest(
         self,
         job_id: str,
@@ -225,6 +253,7 @@ class JobRunner:
             language=result.language,
             year=result.year,
         )
+        points = self._with_summary_point(points, chunks=chunks, job=job, result=result, model=model)
         self._emit(job_id, f"Upserting {len(points)} points", 97)
 
         def on_batch(done: int, total: int) -> None:

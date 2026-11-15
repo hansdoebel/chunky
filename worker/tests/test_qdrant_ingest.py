@@ -220,7 +220,7 @@ def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, 
     assert result["metrics"]["embeddings_per_s"] is not None
     assert result["metrics"]["embeddings_per_s"] > 0
     assert result["ingest"]["target"] == "qdrant_cloud"
-    assert result["ingest"]["upserted"] == 2
+    assert result["ingest"]["upserted"] == 3
     assert result["ingest"]["collection"] == "documents"
     assert result["ingest"]["vector_size"] == 3
     assert result["ingest"]["distance"] == "cosine"
@@ -232,6 +232,8 @@ def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, 
     assert call["vector_size"] == 3
     assert call["points"][0].payload["text"] == "Hello world"
     assert call["points"][0].payload["doc_title"] == "Fixture Doc"
+    assert call["points"][-1].payload["record_type"] == "document"
+    assert call["points"][-1].payload["summary_kind"] in {"abstract", "extract", "generated"}
     log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
     assert API_KEY not in log_text
 

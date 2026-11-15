@@ -172,6 +172,7 @@ KEYWORD_PAYLOAD_INDEXES = (
     "language",
     "doi",
     "picture_class",
+    "record_type",
 )
 INTEGER_PAYLOAD_INDEXES = (
     "page",

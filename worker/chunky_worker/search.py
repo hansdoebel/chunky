@@ -30,6 +30,8 @@ class PayloadFilter(BaseModel):
     key: str
     match: str | int | bool | None = None
     text: str | None = None
+    any: list[str] | None = None
+    negate: bool = False
     gt: float | None = None
     gte: float | None = None
     lt: float | None = None
@@ -68,8 +70,8 @@ class PayloadFilter(BaseModel):
         return text
 
     def check_complete(self) -> None:
-        if self.match is None and self.text is None and not self.has_range():
-            raise ValueError(f"Filter {self.key!r} needs a match, text, or a range")
+        if self.match is None and self.text is None and not self.any and not self.has_range():
+            raise ValueError(f"Filter {self.key!r} needs a match, text, any, or a range")
 
 class SearchRequest(BaseModel):
     query: str
@@ -84,6 +86,8 @@ class SearchRequest(BaseModel):
     offset: int = Field(default=0, ge=0)
     score_threshold: float | None = None
     filters: list[PayloadFilter] = Field(default_factory=list)
+    papers_first: bool = False
+    expand_documents: bool = False
     rrf_weights: list[float] | None = None
 
     @field_validator("query", "collection")
@@ -200,20 +204,26 @@ def hybrid_query_arguments(
 def build_query_filter(filters: list[PayloadFilter]):
     if not filters:
         return None
-    from qdrant_client.models import FieldCondition, Filter, MatchText, MatchValue, Range
+    from qdrant_client.models import FieldCondition, Filter, MatchAny, MatchText, MatchValue, Range
 
     must = []
+    must_not = []
     for item in filters:
         item.check_complete()
         kwargs: dict[str, Any] = {"key": item.key}
         if item.text is not None:
             kwargs["match"] = MatchText(text=item.text)
+        elif item.any:
+            kwargs["match"] = MatchAny(any=item.any)
         elif item.match is not None:
             kwargs["match"] = MatchValue(value=item.match)
         if item.has_range():
             kwargs["range"] = Range(gt=item.gt, gte=item.gte, lt=item.lt, lte=item.lte)
-        must.append(FieldCondition(**kwargs))
-    return Filter(must=must)
+        target = must_not if item.negate else must
+        target.append(FieldCondition(**kwargs))
+    if not must and not must_not:
+        return None
+    return Filter(must=must or None, must_not=must_not or None)
 
 def _http_url(value: str, label: str) -> str:
     parsed = urlparse(value)
@@ -282,6 +292,14 @@ def parse_search_request(payload: Any) -> SearchRequest:
             raise SearchError(str(exc)) from None
     return request
 
+def record_scope(filters: list[PayloadFilter], papers_first: bool) -> list[PayloadFilter]:
+    scoped = [item for item in filters if item.key != "record_type"]
+    if papers_first:
+        scoped.append(PayloadFilter(key="record_type", match="document"))
+    else:
+        scoped.append(PayloadFilter(key="record_type", match="document", negate=True))
+    return scoped
+
 def run_search(
     request: SearchRequest,
     *,
@@ -337,9 +355,9 @@ def run_search(
             error_type="dimension_mismatch",
         )
 
-    try:
+    def query(filters: list[PayloadFilter]) -> list[ScoredHit]:
         if request.mode == "hybrid":
-            hits = searcher.query_hybrid(
+            return searcher.query_hybrid(
                 url=url,
                 api_key=api_key,
                 collection=collection,
@@ -347,23 +365,37 @@ def run_search(
                 text=request.query,
                 limit=request.limit,
                 offset=request.offset,
-                filters=request.filters,
+                filters=filters,
                 score_threshold=request.score_threshold,
                 using=layout.using,
                 weights=request.rrf_weights,
             )
-        else:
-            hits = searcher.query_dense(
-                url=url,
-                api_key=api_key,
-                collection=collection,
-                vector=vector,
-                limit=request.limit,
-                offset=request.offset,
-                filters=request.filters,
-                score_threshold=request.score_threshold,
-                using=layout.using,
-            )
+        return searcher.query_dense(
+            url=url,
+            api_key=api_key,
+            collection=collection,
+            vector=vector,
+            limit=request.limit,
+            offset=request.offset,
+            filters=filters,
+            score_threshold=request.score_threshold,
+            using=layout.using,
+        )
+
+    try:
+        hits = query(record_scope(request.filters, request.papers_first))
+        if request.papers_first and request.expand_documents and hits:
+            sources: list[str] = []
+            for hit in hits:
+                source = str((hit.payload or {}).get("source") or "")
+                if source and source not in sources:
+                    sources.append(source)
+            if sources:
+                expanded = record_scope(
+                    request.filters + [PayloadFilter(key="source", any=sources)],
+                    False,
+                )
+                hits = hits + query(expanded)
     except SearchError:
         raise
     except Exception as exc:

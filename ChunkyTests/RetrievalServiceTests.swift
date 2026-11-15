@@ -132,6 +132,20 @@ struct RetrievalServiceTests {
         #expect((must?[1]["match"] as? [String: Any])?["text"] as? String == "Ada")
     }
 
+    @Test func papersFirstThenLoadsChunksFromThoseSources() async throws {
+        let paper = SearchResult(id: "doc", score: 0.9, text: "Abstract", source: "paper.pdf", page: 1, headings: ["Abstract"], metadata: ["record_type": "document"])
+        let chunk = SearchResult(id: "chunk", score: 0.4, text: "Body", source: "paper.pdf", page: 2, headings: ["Methods"], metadata: [:])
+        let index = FakeIndex(vectorSize: 3, hits: [])
+        index.responses = [[paper], [chunk]]
+        let service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]), worker: FakeWorker())
+        var request = localRequest()
+        request.papersFirst = true
+        request.expandPapers = true
+        let page = try await service.search(request, index: index)
+        #expect(page.hits.map(\.id) == ["doc", "chunk"])
+        #expect(index.searchCalls == 2)
+    }
+
     @Test func emptyScopeDoesNotAddFilters() {
         #expect(RetrievalFilter.scope().isEmpty)
         #expect(RetrievalFilter.playground(source: "  ", page: "nope", contentType: " ").isEmpty)
@@ -482,6 +496,7 @@ private final class FakeIndex: RetrievalIndex {
     var hits: [SearchResult]
     var searchCalls = 0
     var lastOffset: Int?
+    var responses: [[SearchResult]] = []
 
     init(vectorSize: Int?, hits: [SearchResult] = []) {
         self.vectorSize = vectorSize
@@ -511,6 +526,9 @@ private final class FakeIndex: RetrievalIndex {
         lastOffset = offset
         lastSeenName = vectorName
         _ = filter
+        if !responses.isEmpty {
+            return responses.removeFirst()
+        }
         return hits
     }
 
@@ -572,6 +590,8 @@ struct RetrievalScreenshotHost: View {
     @State private var doi = "10.1000/example"
     @State private var title = "Revenue"
     @State private var heading = "Results"
+    @State private var papersFirst = true
+    @State private var expandPapers = true
     @State private var mode = RetrievalMode.hybrid.rawValue
     @State private var denseWeight = "0.7"
     @State private var lexicalWeight = "0.3"
@@ -601,6 +621,8 @@ struct RetrievalScreenshotHost: View {
             doi: $doi,
             title: $title,
             heading: $heading,
+            papersFirst: $papersFirst,
+            expandPapers: $expandPapers,
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,

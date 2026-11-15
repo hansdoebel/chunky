@@ -449,6 +449,77 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
+    func appendSummary(
+        points: [ChunkPoint],
+        chunks: [ChunkingService.DocumentChunk],
+        settings: AppSettings,
+        ollama: OllamaService,
+        ingestedAt: String
+    ) async throws -> [ChunkPoint] {
+        let summaryChunks = chunks.map { SummaryChunk(text: $0.text, headings: $0.headings, page: $0.page) }
+        let title = chunks.compactMap(\.docTitle).first { !$0.isEmpty } ?? ""
+        var choice = DocumentSummary.resolve(chunks: summaryChunks, title: title, generated: nil)
+        if choice.kind != "abstract" {
+            if let generated = await generatedSummary(source: choice.source, settings: settings) {
+                choice = DocumentSummary.resolve(chunks: summaryChunks, title: title, generated: generated)
+            }
+        }
+        guard !choice.text.isEmpty else { return points }
+        let vectors = try await ollama.embedBatch(texts: [choice.text], model: settings.embeddingModel)
+        guard let vector = vectors.first, !vector.isEmpty else { return points }
+        var metadata = [
+            "record_type": DocumentSummary.documentRecord,
+            "summary_kind": choice.kind,
+            "content_type": "document",
+            "ingested_at": ingestedAt,
+        ]
+        if !title.isEmpty { metadata["doc_title"] = title }
+        if let authors = chunks.compactMap(\.authors).first, !authors.isEmpty {
+            metadata["authors"] = authors.joined(separator: "; ")
+        }
+        if let documentID = chunks.compactMap(\.documentId).first, !documentID.isEmpty {
+            metadata["document_id"] = documentID
+        }
+        let point = ChunkPoint(
+            vector: vector,
+            text: choice.text,
+            source: chunks.first?.source ?? "",
+            year: settings.metadataIncludeYear ? chunks.compactMap(\.year).first : nil,
+            metadata: metadata
+        )
+        return points + [point]
+    }
+
+    @MainActor
+    private func generatedSummary(source: String, settings: AppSettings) async -> String? {
+        let model = settings.chatModel.trimmingCharacters(in: .whitespacesAndNewlines)
+        let endpoint = settings.chatAPIURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !model.isEmpty, !endpoint.isEmpty, !source.isEmpty else { return nil }
+        let chat = OpenAIRAGChat(
+            client: OpenAICompatibleChatClient(
+                baseURL: endpoint,
+                model: model,
+                apiKey: settings.chatAPIKey,
+                http: URLSessionChatHTTP()
+            )
+        )
+        var text = ""
+        do {
+            for try await delta in chat.stream(
+                system: "Write a short abstract of this paper using only the supplied title, headings, and opening text.",
+                user: source
+            ) {
+                text += delta
+                if text.count > 1200 { break }
+            }
+        } catch {
+            return nil
+        }
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
+    @MainActor
     func buildPoints(
         chunks: [ChunkingService.DocumentChunk],
         embeddings: [[Float]],
@@ -596,7 +667,8 @@ class DocumentProcessor: ObservableObject {
 
             let sparseVectors = sparseVectors(for: chunksToEmbed, hybrid: createOptions.hybrid)
 
-            let newPoints = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
+            let built = buildPoints(chunks: chunksToEmbed, embeddings: embeddings, sparseVectors: sparseVectors, settings: settings, ingestedAt: ingestedAt)
+            let newPoints = try await appendSummary(points: built, chunks: chunks, settings: settings, ollama: ollama, ingestedAt: ingestedAt)
             allPoints = newPoints
 
             job.status = .uploading
@@ -727,6 +799,11 @@ class DocumentProcessor: ObservableObject {
             embeddedSoFar += batchChunks.count
             job.progress = Double(batchIndex + 1) / Double(totalBatches)
             job.statusMessage = "Embedding & uploading batch \(batchIndex + 1)/\(totalBatches)..."
+        }
+
+        let summaryPoints = try await appendSummary(points: [], chunks: chunks, settings: settings, ollama: ollama, ingestedAt: ingestedAt)
+        if !summaryPoints.isEmpty {
+            try await qdrant.upsertPoints(collectionName: settings.defaultCollection, points: summaryPoints, batchSize: settings.qdrantBatchSize)
         }
 
         job.embeddedCount = embeddedSoFar
@@ -904,13 +981,16 @@ class DocumentProcessor: ObservableObject {
             )
         }
         let createOptions = CollectionPlanStore.options(collection: settings.defaultCollection, settings: settings)
-        let points = buildPoints(
+        let ingestedAt = ISO8601DateFormatter().string(from: Date())
+        let built = buildPoints(
             chunks: documentChunks,
             embeddings: parsed.embeddings,
             sparseVectors: sparseVectors(for: documentChunks, hybrid: createOptions.hybrid),
             settings: settings,
-            ingestedAt: ISO8601DateFormatter().string(from: Date())
+            ingestedAt: ingestedAt
         )
+        let ollama = try getOllamaService(baseURL: settings.ollamaURL)
+        let points = try await appendSummary(points: built, chunks: documentChunks, settings: settings, ollama: ollama, ingestedAt: ingestedAt)
         try await uploadToQdrant(
             points: points,
             collectionName: settings.defaultCollection,
