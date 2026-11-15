@@ -12,6 +12,7 @@ from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Requ
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from chunky_worker.auth import require_bearer
+from chunky_worker.chunk_cache import ChunkCache, ChunkCacheError
 from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
 from chunky_worker.jobs import TERMINAL, JobRunner, JobStore
 from chunky_worker.model_catalog import (
@@ -59,11 +60,13 @@ def create_app(
     model_server=None,
     ollama_tags=None,
     downloader=None,
+    chunk_cache: ChunkCache | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     require_token_when_exposed(settings)
     settings.log_dir.mkdir(parents=True, exist_ok=True)
     settings.work_dir.mkdir(parents=True, exist_ok=True)
+    settings.cache_dir.mkdir(parents=True, exist_ok=True)
     configure_logging(settings.log_dir)
 
     pipeline = pipeline or DoclingPipeline(
@@ -81,6 +84,7 @@ def create_app(
     runner = JobRunner(store, settings, pipeline, embeddings, ingestor=ingestor)
     searcher = searcher or QdrantPointSearcher()
     downloads = DownloadManager(downloader, ollama_url=settings.ollama_url)
+    chunk_cache = chunk_cache or ChunkCache(settings.cache_dir, settings.cache_limit_bytes)
 
     app = FastAPI(title="Chunky worker", version="0.1.0")
     app.state.settings = settings
@@ -277,6 +281,101 @@ def create_app(
                 await asyncio.to_thread(store.wait_for_events, job_id, 0.25)
 
         return StreamingResponse(stream(), media_type="text/event-stream")
+
+    def cache_key(body: dict) -> dict:
+        missing = [
+            name
+            for name in ("content_sha256", "docling_version", "pipeline", "max_tokens")
+            if body.get(name) in (None, "")
+        ]
+        if "tokenizer" not in body:
+            missing.append("tokenizer")
+        if missing:
+            raise HTTPException(status_code=400, detail={"error_type": "invalid_cache_key", "missing": missing})
+        digest = str(body["content_sha256"]).strip().lower()
+        if len(digest) != 64 or any(char not in "0123456789abcdef" for char in digest):
+            raise HTTPException(status_code=400, detail={"error_type": "invalid_cache_key", "missing": ["content_sha256"]})
+        try:
+            max_tokens = int(body["max_tokens"])
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"error_type": "invalid_cache_key", "missing": ["max_tokens"]}) from None
+        if max_tokens < 1:
+            raise HTTPException(status_code=400, detail={"error_type": "invalid_cache_key", "missing": ["max_tokens"]})
+        return {
+            "content_sha256": digest,
+            "docling_version": str(body["docling_version"]).strip(),
+            "pipeline": str(body["pipeline"]).strip(),
+            "tokenizer": str(body.get("tokenizer") or ""),
+            "max_tokens": max_tokens,
+        }
+
+    def cache_error(exc: ChunkCacheError) -> HTTPException:
+        status = 400 if exc.error_type != "corrupt_manifest" else 500
+        return HTTPException(status_code=status, detail={"error_type": exc.error_type, "detail": str(exc)})
+
+    @api.get("/v1/cache")
+    def cache_stats() -> dict:
+        try:
+            return chunk_cache.stats()
+        except ChunkCacheError as exc:
+            raise cache_error(exc) from exc
+
+    @api.delete("/v1/cache")
+    def cache_clear() -> dict:
+        chunk_cache.clear()
+        return {"cleared": True}
+
+    @api.post("/v1/cache/lookup")
+    def cache_lookup(body: dict) -> dict:
+        key = cache_key(body)
+        model = str(body.get("embedding_model") or "").strip() or None
+        dimension = body.get("embedding_dim")
+        try:
+            found = chunk_cache.lookup(
+                key,
+                embedding_model=model,
+                embedding_dim=int(dimension) if dimension not in (None, "") else None,
+                include_document=bool(body.get("include_document")),
+            )
+        except ChunkCacheError as exc:
+            raise cache_error(exc) from exc
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"error_type": "invalid_vectors", "detail": "embedding_dim must be an integer"}) from None
+        if found is None:
+            return {"hit": False, "chunks": [], "vector_hit": False, "vectors": None}
+        return found
+
+    @api.put("/v1/cache")
+    def cache_store(body: dict) -> dict:
+        key = cache_key(body)
+        identity = {
+            "doc_title": body.get("doc_title"),
+            "authors": body.get("authors"),
+            "year": body.get("year"),
+            "doi": body.get("doi"),
+            "source": body.get("source"),
+        }
+        try:
+            stored = chunk_cache.store(key, body.get("document"), body.get("chunks") or [], identity)
+        except ChunkCacheError as exc:
+            raise cache_error(exc) from exc
+        return stored
+
+    @api.put("/v1/cache/vectors")
+    def cache_store_vectors(body: dict) -> dict:
+        key = cache_key(body)
+        try:
+            stored = chunk_cache.store_vectors(
+                key,
+                str(body.get("embedding_model") or ""),
+                int(body.get("embedding_dim") or 0),
+                body.get("vectors") or [],
+            )
+        except ChunkCacheError as exc:
+            raise cache_error(exc) from exc
+        except (TypeError, ValueError):
+            raise HTTPException(status_code=400, detail={"error_type": "invalid_vectors", "detail": "embedding_dim must be an integer"}) from None
+        return stored
 
     app.include_router(api)
     return app
