@@ -262,9 +262,8 @@ private final class UnsafeSendableCounter: @unchecked Sendable {
 }
 
 extension OllamaService {
-    /// Get the embedding dimension for a model by generating a test embedding
+    /// Get the embedding dimension for a model. Uses the cached probe.
     func getEmbeddingDimension(model: String) async throws -> Int {
-        let testEmbedding = try await embed(text: "test", model: model)
-        return testEmbedding.count
+        try await probeDimension(model: model)
     }
 }
