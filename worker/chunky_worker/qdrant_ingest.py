@@ -295,6 +295,21 @@ def _payload(
     return payload
 
 
+def dense_vector_name(info: Any) -> str | None:
+    config = getattr(info, "config", None)
+    params = getattr(config, "params", None)
+    vectors = getattr(params, "vectors", None)
+    if vectors is None and isinstance(info, dict):
+        vectors = info.get("config", {}).get("params", {}).get("vectors")
+    if not isinstance(vectors, dict):
+        return None
+    if "dense" in vectors:
+        return "dense"
+    if len(vectors) == 1:
+        return next(iter(vectors))
+    return None
+
+
 def _collection_vector_size(info: Any) -> int | None:
     config = getattr(info, "config", None)
     params = getattr(config, "params", None)

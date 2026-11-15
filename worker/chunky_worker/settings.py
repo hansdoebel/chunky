@@ -99,6 +99,8 @@ class Settings:
     embedding_model: str = "qwen3-embedding"
     embedding_backend: str = "ollama"
     embedding_url: str = ""
+    qdrant_url: str = ""
+    qdrant_api_key: str = field(default="", repr=False)
     # None means protected routes reject every request (fail closed).
     token: str | None = None
 
@@ -117,5 +119,7 @@ class Settings:
             embedding_model=os.environ.get("CHUNKY_EMBEDDING_MODEL", "qwen3-embedding"),
             embedding_backend=os.environ.get("CHUNKY_EMBEDDING_BACKEND", "ollama").strip().lower() or "ollama",
             embedding_url=os.environ.get("CHUNKY_EMBEDDING_URL", "").strip(),
+            qdrant_url=os.environ.get("CHUNKY_QDRANT_URL", "").strip(),
+            qdrant_api_key=os.environ.get("CHUNKY_QDRANT_API_KEY", "").strip(),
             token=load_token(),
         )

@@ -16,6 +16,8 @@ TOKEN_ENV = [
     "CHUNKY_VLLM_URL",
     "CHUNKY_CHART_VLLM_URL",
     "CHUNKY_VLM_ENGINE",
+    "CHUNKY_QDRANT_URL",
+    "CHUNKY_QDRANT_API_KEY",
     "XDG_CONFIG_HOME",
 ]
 
@@ -36,6 +38,8 @@ def test_defaults_are_loopback(clean_env):
     assert settings.vllm_url == "http://127.0.0.1:8000"
     assert settings.vlm_engine == "vllm"
     assert settings.token is None
+    assert settings.qdrant_url == ""
+    assert settings.qdrant_api_key == ""
     assert is_loopback_url(settings.ollama_url)
     assert is_loopback_url(settings.vllm_url)
 
@@ -98,6 +102,15 @@ def test_mlx_vlm_engine_is_rejected(clean_env, monkeypatch):
     monkeypatch.setenv("CHUNKY_VLM_ENGINE", "mlx")
     with pytest.raises(ValueError, match="vllm"):
         Settings.from_env()
+
+
+def test_qdrant_target_from_env_stays_out_of_repr(clean_env, monkeypatch):
+    monkeypatch.setenv("CHUNKY_QDRANT_URL", "https://example.cloud.qdrant.io")
+    monkeypatch.setenv("CHUNKY_QDRANT_API_KEY", "secret-key")
+    settings = Settings.from_env()
+    assert settings.qdrant_url == "https://example.cloud.qdrant.io"
+    assert settings.qdrant_api_key == "secret-key"
+    assert "secret-key" not in repr(settings)
 
 
 def test_loopback_detection():
