@@ -24,6 +24,9 @@ Docling, Ollama, or a GPU.
 | `GET` | `/v1/jobs/{id}` | Job status and result (chunks, optional embeddings) |
 | `GET` | `/v1/jobs/{id}/events` | SSE progress `{type, message, percent}` |
 | `POST` | `/v1/jobs/{id}/cancel` | Request cancellation |
+| `GET` | `/v1/jobs/{id}/verification` | Per-document verification report written next to the job |
+| `POST` | `/v1/jobs/{id}/verify` | Run the checks again. Optional JSON may include `qdrant_url`, `qdrant_api_key`, and `qdrant_collection` |
+| `POST` | `/v1/verify` | Verify an uploaded PDF. `settings` JSON may include `chunks`; otherwise the PDF-hash chunk cache is used |
 | `GET` | `/v1/health` | Docling import, embedding reachability, and the granite VLM engine plus GPU visibility. **No token.** |
 | `GET` | `/v1/models` | Embedding model names and known VLM ids. **Bearer token.** |
 | `POST` | `/v1/search` | Embed a query and search Qdrant. **Bearer token.** No web UI. |
@@ -45,6 +48,10 @@ match the `docling_daemon.py` convert command (for example `vlm_model`,
 For `qdrant_cloud`, send `qdrant_url`, `qdrant_api_key`, and optional `qdrant_collection` (default `documents`), `qdrant_distance` (`cosine`, `dot`, `euclid`), and `qdrant_batch_size` (default 250). The API key is held in memory only for that job, stripped from `GET /v1/jobs`, and never written to the log. The worker creates the collection when it is missing, using the embedding width and the requested distance. Before upsert the worker embeds the probe string `chunky` once per model, caches that width, and compares it with an existing collection. A mismatch fails the job with `error_type: dimension_mismatch` before the rest of the chunks are embedded. The same check runs again at upsert time.
 
 Payload fields match the Mac app: `text`, `source`, `page` (int), `year` (int), `headings` (string array), and string metadata `chunk_index`, `content_type`, `section`, `doc_title`, `authors` (joined with `"; "`), `doi`, `document_id`, `url`, `language`, `ingested_at`, `content_hash` (SHA-256 of embedding text, `|`, and model). Metadata flags on the job default to on, same as the Mac app.
+
+## Verification
+
+After a successful job the worker writes `verification.json` beside the upload. The report has a green, yellow, or red status per page. Checks are text coverage (pypdfium2, or pypdf when that is not installed; not Docling), page attribution from `page` through `page_end`, a Qdrant store check, a re-embedded cosine sample, and a retrieval self-test. Chunk text stays in the job result or the PDF-hash chunk cache (`chunky_worker.chunk_cache`). The report stores scores and short previews only. The Qdrant API key is not written to the report or the log.
 
 ## Search
 

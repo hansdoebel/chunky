@@ -131,6 +131,7 @@ class JobResult(BaseModel):
     embedding_dim: int | None = None
     ingest: IngestReceipt | None = None
     metrics: dict[str, Any] | None = None
+    verification_status: str | None = None
 
 class Job(BaseModel):
     id: str

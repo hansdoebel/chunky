@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import hashlib
 import importlib
+import json
 import math
 import re
 import unicodedata
@@ -29,6 +30,11 @@ RETRIEVAL_SAMPLE = 3
 REQUIRED_PAYLOAD = ("text", "source", "content_hash")
 _CACHE_FUNCTIONS = ("chunks_for_pdf_hash", "chunks_for_hash", "load_chunks")
 _STATUS_RANK = {"skipped": -1, "green": 0, "yellow": 1, "red": 2}
+
+
+def write_report(path: Path, report: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
 
 
 def hash_file(path: Path) -> str:
@@ -590,6 +596,85 @@ def fetch_qdrant_points(
     return points
 
 
+def qdrant_readers(
+    *,
+    url: str | None,
+    api_key: str | None,
+    collection: str | None,
+    ids: list[str],
+    model: str,
+    embeddings,
+    ingestor,
+    worker_settings,
+    live: bool,
+) -> tuple[list[dict[str, Any]] | None, Callable[[str], list[dict[str, Any]]] | None, str | None]:
+    """Return stored points, a search function, and a redacted error when the read fails."""
+    if not url or not collection:
+        return None, None, None
+    secret = api_key or ""
+    fetch = getattr(ingestor, "fetch_points", None)
+    search_points = getattr(ingestor, "search_points", None)
+    try:
+        if callable(fetch):
+            points = fetch(url=url, api_key=secret, collection=collection, ids=ids)
+        elif live:
+            points = fetch_qdrant_points(url=url, api_key=secret, collection=collection, ids=ids)
+        else:
+            points = None
+    except Exception as exc:
+        return None, None, redact(str(exc), secret)[:200]
+
+    if callable(search_points):
+        def search(query: str) -> list[dict[str, Any]]:
+            try:
+                return list(search_points(query) or [])
+            except Exception as exc:
+                return [{"id": "", "page": None, "detail": redact(str(exc), secret)[:200]}]
+
+        return points, search, None
+    if not live:
+        return points, None, None
+
+    from chunky_worker.search import QdrantPointSearcher, parse_search_request, run_search
+
+    searcher = getattr(ingestor, "searcher", None) or QdrantPointSearcher()
+
+    def search(query: str) -> list[dict[str, Any]]:
+        try:
+            request = parse_search_request(
+                {
+                    "query": query,
+                    "collection": collection,
+                    "qdrant_url": url,
+                    "qdrant_api_key": secret or None,
+                    "embedding_model": model or None,
+                    "limit": 5,
+                }
+            )
+            payload = run_search(
+                request,
+                settings=worker_settings,
+                embeddings=embeddings,
+                searcher=searcher,
+            )
+            return list(payload.get("results") or [])
+        except Exception as exc:
+            return [{"id": "", "page": None, "detail": redact(str(exc), secret)[:200]}]
+
+    return points, search, None
+
+
+def note_store_failure(report: dict[str, Any], message: str) -> dict[str, Any]:
+    updated = dict(report)
+    updated["store"] = {
+        "status": "red",
+        "checked": 0,
+        "issues": [{"chunk_id": "", "kind": "unavailable", "detail": message}],
+    }
+    updated["status"] = "red"
+    return updated
+
+
 def verify_document(
     *,
     pdf_path: Path | None,
@@ -627,6 +712,11 @@ def verify_document(
         ensure_chunk_ids(stamped, digest)
         for chunk, vector in zip(stamped, vectors):
             by_id[str(chunk["id"])] = list(vector)
+    elif points:
+        for point in points:
+            vector = point.get("vector") or []
+            if vector:
+                by_id[str(point.get("id"))] = list(vector)
     return build_report(
         job_id=job_id,
         filename=filename,
