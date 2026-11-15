@@ -71,7 +71,7 @@ nonisolated enum LibraryFilter {
         }
         var items = [RetrievalFilter(key: PaperLibrary.field, match: .anyText(cleaned), should: true)]
         if cleaned.contains(PaperLibrary.defaultID) {
-            items.append(RetrievalFilter(key: PaperLibrary.field, matchEmpty: true, should: true))
+            items.append(RetrievalFilter(key: PaperLibrary.field, should: true, matchEmpty: true))
         }
         return items
     }
