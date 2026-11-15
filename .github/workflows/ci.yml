@@ -7,6 +7,12 @@
 # includes Xcode 27.2 (build 27B52, SDK macosx27.2). Codesigning is disabled.
 # UI tests launch the GUI app and are excluded; ChunkyTests is the unit-test
 # bundle. qdrant-swift integration tests need a live Qdrant and are skipped.
+#
+# macOS minutes: the xcode-27 job is skipped when a push or pull request only
+# touches Python, worker, or docs paths. Skipping is a job-level `if`, so the
+# check still reports and branch protection treats it as success. The workflow
+# itself always runs (no workflow-level path filter). The vendored qdrant-swift
+# `swift test` runs only when that package or a workflow file changes.
 
 name: CI
 
@@ -15,7 +21,52 @@ on:
     branches: [main]
   pull_request:
 
+# Cancel the in-progress run for the same pull request, or for the same ref
+# on push (main). A new commit should not keep the previous xcode-27 job.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
 jobs:
+  changes:
+    name: Detect changed paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      macos: ${{ steps.filter.outputs.macos }}
+      qdrant: ${{ steps.filter.outputs.qdrant }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Push diffs against the commit before the push. Full history keeps
+          # that parent available when several commits land at once.
+          fetch-depth: 0
+
+      - name: Filter changed paths
+        uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d # v4.0.3
+        id: filter
+        with:
+          # pull_request ignores base and lists the PR files via the API.
+          # push to this ref diffs github.event.before..HEAD, the commits
+          # just pushed, not the merge-base with the default branch.
+          base: ${{ github.event_name == 'push' && github.ref || '' }}
+          predicate-quantifier: some-with-excludes
+          filters: |
+            macos:
+              - '**'
+              - '!worker/**'
+              - '!Chunky/Resources/Scripts/**'
+              - '!docs/**'
+              - '!*.md'
+              - '!requirements/**'
+              - '!pyrightconfig.json'
+            qdrant:
+              - 'LocalPackages/qdrant-swift/**'
+              - '.github/workflows/**'
+
   python:
     name: Python tests (3.12)
     runs-on: ubuntu-latest
@@ -40,6 +91,14 @@ jobs:
 
   macos:
     name: macOS build and unit tests (Xcode 27.2)
+    needs: changes
+    # Skip only when the filter explicitly reports no macOS-relevant files.
+    # A failed or empty filter still runs the job, so a broken change
+    # detector cannot waive the tests. !cancelled() replaces the default
+    # success() gate: a concurrency cancel does not start xcode-27, and a
+    # failed changes job does not skip this one. A skipped job reports
+    # success, so a required check of this name still passes.
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.macos != 'false') }}
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
@@ -66,5 +125,7 @@ jobs:
             ENABLE_HARDENED_RUNTIME=NO
 
       - name: Build qdrant-swift and run its unit tests
+        # Same fail-open rule as the job: skip only on an explicit false.
+        if: ${{ needs.changes.outputs.qdrant != 'false' }}
         working-directory: LocalPackages/qdrant-swift
         run: swift test --skip IntegrationTests
