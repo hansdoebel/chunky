@@ -309,6 +309,9 @@ def _payload(
             author_value = "; ".join(str(item) for item in author_value if item)
         put_string(True, "authors", author_value)
     put_string(settings.metadata_include_doi, "doi", chunk.get("doi"))
+    put_string(True, "venue", chunk.get("venue"))
+    put_string(True, "abstract", chunk.get("abstract"))
+    put_string(True, "metadata_source", chunk.get("metadata_source"))
     put_string(settings.metadata_include_document_id, "document_id", chunk.get("document_id"))
     put_string(settings.metadata_include_url, "url", chunk.get("url"))
     put_string(

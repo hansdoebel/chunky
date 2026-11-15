@@ -64,6 +64,11 @@ class JobSettings(BaseModel):
     chunk_merge_peers: bool = True
     chunk_tokenizer: str = ""
     page_offset: int | None = None
+    metadata_enrich: bool = False
+    metadata_crossref: bool = False
+    metadata_source: str = ""
+    metadata_chat_url: str = ""
+    metadata_model: str = ""
     ollama_url: str | None = None
     embedding_model: str | None = None
     embedding_backend: str = ""
