@@ -244,6 +244,36 @@ struct RetrievalServiceTests {
         #expect(RetrievalScreen.weights(dense: "0.7", lexical: "0.3") == [0.7, 0.3] as [Double]?)
     }
 
+    @Test func rerankReordersHitsFromAMockEndpoint() async throws {
+        let transport = FakeRerankTransport(body: Data("""
+        {"results":[{"index":1,"relevance_score":0.93},{"index":0,"relevance_score":0.11}]}
+        """.utf8))
+        let reranker = LiveReranker(transport: transport)
+        let index = FakeIndex(vectorSize: 3, hits: [
+            SearchResult(id: "a", score: 0.8, text: "first", source: "s", page: nil, headings: [], metadata: [:]),
+            SearchResult(id: "b", score: 0.4, text: "second", source: "s", page: nil, headings: [], metadata: [:]),
+        ])
+        let service = RetrievalService(
+            embedding: FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3]),
+            worker: FakeWorker(),
+            reranker: reranker
+        )
+        var request = localRequest()
+        request.rerank = RerankConfig(url: "http://127.0.0.1:8081/v1/rerank", model: "jina-reranker", apiKey: "rerank-secret")
+        let page = try await service.search(request, index: index)
+        #expect(page.reranked)
+        #expect(page.hits.map(\.id) == ["b", "a"])
+        #expect(page.hits[0].score == 0.93)
+        #expect(page.statusLine.contains("reranked"))
+        let sent = try #require(transport.bodies.first)
+        let object = try #require(JSONSerialization.jsonObject(with: sent) as? [String: Any])
+        #expect(object["model"] as? String == "jina-reranker")
+        #expect(object["query"] as? String == "revenue")
+        #expect(object["documents"] as? [String] == ["first", "second"])
+        #expect(object["top_n"] as? Int == 8)
+        #expect(transport.apiKeys == ["rerank-secret"])
+    }
+
     @Test func invalidLimitIsRejected() async {
         let service = RetrievalService(embedding: FakeEmbedding(probeSize: 3, vector: [1]), worker: FakeWorker())
         var request = localRequest()
@@ -429,6 +459,22 @@ private final class FakeIndex: RetrievalIndex {
     }
 }
 
+private final class FakeRerankTransport: RerankTransport {
+    var body: Data
+    var bodies: [Data] = []
+    var apiKeys: [String] = []
+
+    init(body: Data) {
+        self.body = body
+    }
+
+    func post(url: URL, apiKey: String, body: Data) async throws -> (status: Int, body: Data) {
+        bodies.append(body)
+        apiKeys.append(apiKey)
+        return (200, self.body)
+    }
+}
+
 private final class FakeWorker: RetrievalWorker {
     var status: Int
     var body: Data
@@ -463,6 +509,9 @@ private struct RetrievalScreenshotHost: View {
     @State private var mode = RetrievalMode.hybrid.rawValue
     @State private var denseWeight = "0.7"
     @State private var lexicalWeight = "0.3"
+    @State private var rerankEnabled = false
+    @State private var rerankURL = ""
+    @State private var rerankModel = ""
 
     var body: some View {
         RetrievalPlayground(
@@ -478,6 +527,9 @@ private struct RetrievalScreenshotHost: View {
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,
+            rerankEnabled: $rerankEnabled,
+            rerankURL: $rerankURL,
+            rerankModel: $rerankModel,
             collections: ["documents", "notes"],
             routeLabel: RetrievalRoute.localQdrant.displayName,
             statusLine: "2 results · limit 8 · offset 0 · end · Local Qdrant · ollama qwen3-embedding (1024). Browse loads at most 1000 points.",

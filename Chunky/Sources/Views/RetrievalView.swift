@@ -13,6 +13,9 @@ struct RetrievalPlayground: View {
     @Binding var mode: String
     @Binding var denseWeight: String
     @Binding var lexicalWeight: String
+    @Binding var rerankEnabled: Bool
+    @Binding var rerankURL: String
+    @Binding var rerankModel: String
     var collections: [String]
     var routeLabel: String
     var statusLine: String
@@ -86,6 +89,13 @@ struct RetrievalPlayground: View {
             Text("Limit \(limit) of \(RetrievalLimits.maximum). No silent 1,000 cap.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
+            Toggle("Rerank", isOn: $rerankEnabled)
+            if rerankEnabled {
+                TextField("Rerank URL", text: $rerankURL, prompt: Text("http://127.0.0.1:8081/v1/rerank"))
+                    .textFieldStyle(.roundedBorder)
+                TextField("Rerank model", text: $rerankModel, prompt: Text("jina-reranker"))
+                    .textFieldStyle(.roundedBorder)
+            }
             TextField("Source", text: $source, prompt: Text("Source"))
                 .textFieldStyle(.roundedBorder)
             TextField("Page", text: $page, prompt: Text("Page"))
@@ -209,6 +219,9 @@ struct RetrievalScreen: View {
     @State private var mode = RetrievalMode.dense.rawValue
     @State private var denseWeight = ""
     @State private var lexicalWeight = ""
+    @State private var rerankEnabled = false
+    @State private var rerankURL = ""
+    @State private var rerankModel = ""
     @State private var hits: [RetrievalHit] = []
     @State private var error: String?
     @State private var statusLine = RetrievalScreen.idleStatus
@@ -234,6 +247,9 @@ struct RetrievalScreen: View {
             mode: $mode,
             denseWeight: $denseWeight,
             lexicalWeight: $lexicalWeight,
+            rerankEnabled: $rerankEnabled,
+            rerankURL: $rerankURL,
+            rerankModel: $rerankModel,
             collections: appState.availableCollections,
             routeLabel: route.displayName,
             statusLine: statusLine,
@@ -271,6 +287,9 @@ struct RetrievalScreen: View {
             model: model,
             filters: RetrievalFilter.playground(source: source, page: page, contentType: contentType),
             rrfWeights: Self.weights(dense: denseWeight, lexical: lexicalWeight),
+            rerank: rerankEnabled
+                ? RerankConfig(url: rerankURL, model: rerankModel, apiKey: "")
+                : nil,
             settings: appState.settings
         )
         do {
