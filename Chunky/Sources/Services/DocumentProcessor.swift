@@ -408,6 +408,7 @@ class DocumentProcessor: ObservableObject {
 
             let timing = job.timingSummary ?? ""
             job.statusMessage = "\(chunks.count) chunks | \(timing)"
+            job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
             job.status = .completed
 
         } catch is CancellationError {
@@ -765,6 +766,7 @@ class DocumentProcessor: ObservableObject {
                 job.statusMessage = "\(parsed.chunks.count) chunks from devbox"
             }
             job.totalTime = CFAbsoluteTimeGetCurrent() - started
+            job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
             job.status = .completed
         } catch is CancellationError {
             job.status = .failed

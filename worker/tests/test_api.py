@@ -146,6 +146,11 @@ def test_chunk_only_job_returns_artifacts(client, pipeline):
     assert result["output_file"]
     assert pipeline.calls
     assert pipeline.calls[0]["settings"].mode.value == "chunk_only"
+    stages = {stage["name"]: stage for stage in result["metrics"]["stages"]}
+    assert stages["ocr"]["status"] == "skipped"
+    assert stages["embedding"]["status"] == "skipped"
+    assert stages["convert_layout"]["status"] == "ok"
+    assert result["metrics"]["host"] == "devbox"
 
 
 def test_chunk_and_embed_uses_mock_backend(client, embeddings):
