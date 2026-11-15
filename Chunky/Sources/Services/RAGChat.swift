@@ -4,8 +4,32 @@ struct RAGCitation: Equatable, Identifiable, Sendable {
     var id: String
     var marker: String
     var source: String
+    var docTitle: String
     var page: Int?
+    var pageEnd: Int?
     var score: Double
+
+    var paperLabel: String {
+        let title = docTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        let file = (source as NSString).lastPathComponent
+        if !title.isEmpty { return title }
+        return file.isEmpty ? source : file
+    }
+
+    var pageLabel: String? {
+        guard let page else { return nil }
+        if let pageEnd, pageEnd != page {
+            return "pp. \(page)–\(pageEnd)"
+        }
+        return "p. \(page)"
+    }
+
+    var citeLabel: String {
+        if let pageLabel {
+            return "\(paperLabel), \(pageLabel)"
+        }
+        return paperLabel
+    }
 }
 
 struct RAGPromptBundle: Equatable, Sendable {
@@ -25,19 +49,20 @@ enum RAGPrompt {
         var blocks: [String] = []
         for (offset, hit) in hits.enumerated() {
             let marker = "[\(offset + 1)]"
-            citations.append(
-                RAGCitation(
-                    id: hit.id,
-                    marker: marker,
-                    source: hit.source,
-                    page: hit.page,
-                    score: hit.score
-                )
+            let citation = RAGCitation(
+                id: hit.id,
+                marker: marker,
+                source: hit.source,
+                docTitle: hit.docTitle,
+                page: hit.page,
+                pageEnd: hit.pageEnd,
+                score: hit.score
             )
-            let page = hit.page.map(String.init) ?? ""
+            citations.append(citation)
+            let page = citation.pageLabel ?? ""
             blocks.append(
                 """
-                \(marker) id=\(hit.id) source=\(hit.source) page=\(page) score=\(String(format: "%.3f", hit.score))
+                \(marker) id=\(hit.id) paper=\(citation.paperLabel) source=\(hit.source) page=\(page) score=\(String(format: "%.3f", hit.score))
                 \(hit.text)
                 """
             )

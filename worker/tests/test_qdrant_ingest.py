@@ -14,6 +14,7 @@ from chunky_worker.qdrant_ingest import (
     PreparedPoint,
     QdrantCloudIngestor,
     build_points,
+    INTEGER_PAYLOAD_INDEXES,
     content_hash,
     sparse_vectors,
 )
@@ -52,6 +53,9 @@ def test_payload_matches_mac_field_names():
             "text": "Hello world",
             "embedding_text": "Hello world",
             "page": 3,
+            "page_end": 4,
+            "pages": [3, 4],
+            "bboxes": [{"page": 3, "l": 0, "t": 1, "r": 2, "b": 3}],
             "headings": ["Intro"],
             "content_type": "text",
             "chunk_index": 0,
@@ -74,6 +78,9 @@ def test_payload_matches_mac_field_names():
     assert payload["text"] == "Hello world"
     assert payload["source"] == "paper.txt"
     assert payload["page"] == 3
+    assert payload["page_end"] == 4
+    assert payload["pages"] == [3, 4]
+    assert payload["bboxes"][0]["page"] == 3
     assert payload["year"] == 2024
     assert payload["headings"] == ["Intro"]
     assert payload["chunk_index"] == "0"
@@ -89,6 +96,9 @@ def test_payload_matches_mac_field_names():
     assert "picture_class" not in payload
     assert "table_markdown" not in payload
     assert isinstance(payload["page"], int)
+    assert "page" in INTEGER_PAYLOAD_INDEXES
+    assert "page_end" in INTEGER_PAYLOAD_INDEXES
+    assert "year" in INTEGER_PAYLOAD_INDEXES
     assert isinstance(payload["chunk_index"], str)
 
 def test_picture_and_table_payloads_keep_serialized_text():

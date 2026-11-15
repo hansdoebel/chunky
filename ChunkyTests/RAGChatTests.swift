@@ -12,12 +12,27 @@ struct RAGChatTests {
         #expect(bundle.system.contains("[1]"))
         #expect(bundle.user.contains("id=p1"))
         #expect(bundle.user.contains("source=paper.pdf"))
-        #expect(bundle.user.contains("page=2"))
+        #expect(bundle.user.contains("page=p. 2"))
+        #expect(bundle.user.contains("paper=paper.pdf"))
         #expect(bundle.user.contains("score=0.912"))
         #expect(bundle.user.contains("id=p2"))
-        #expect(bundle.user.contains("page=4"))
+        #expect(bundle.user.contains("page=p. 4"))
         #expect(bundle.citations.map(\.id) == ["p1", "p2"])
         #expect(bundle.citations.map(\.marker) == ["[1]", "[2]"])
+        let span = RetrievalHit(
+            id: "span",
+            score: 0.5,
+            text: "The proof continues.",
+            source: "/papers/ada.pdf",
+            page: 3,
+            headings: ["Proof"],
+            payload: ["doc_title": "A Note on Vectors", "page_end": "5"],
+            docTitle: "A Note on Vectors",
+            pageEnd: 5
+        )
+        let cited = RAGPrompt.assemble(question: "q", hits: [span]).citations[0]
+        #expect(cited.citeLabel == "A Note on Vectors, pp. 3–5")
+        #expect(cited.paperLabel == "A Note on Vectors")
     }
 
     @Test func parserSplitsClickableCitationMarkers() {
@@ -30,6 +45,7 @@ struct RAGChatTests {
         #expect(first.id == "p1")
         #expect(first.source == "paper.pdf")
         #expect(first.page == 2)
+        #expect(first.citeLabel == "paper.pdf, p. 2")
         #expect(first.score == 0.912)
         guard case .citation(let second) = segments[3] else { Issue.record("second"); return }
         #expect(second.id == "p2")

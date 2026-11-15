@@ -175,6 +175,11 @@ KEYWORD_PAYLOAD_INDEXES = (
     "doi",
     "picture_class",
 )
+INTEGER_PAYLOAD_INDEXES = (
+    "page",
+    "page_end",
+    "year",
+)
 TEXT_PAYLOAD_INDEXES = (
     "picture_description",
     "table_markdown",
@@ -213,6 +218,7 @@ def ensure_payload_indexes(client, collection: str) -> None:
 
     specs = [(name, PayloadSchemaType.KEYWORD) for name in KEYWORD_PAYLOAD_INDEXES]
     specs += [(name, PayloadSchemaType.TEXT) for name in TEXT_PAYLOAD_INDEXES]
+    specs += [(name, PayloadSchemaType.INTEGER) for name in INTEGER_PAYLOAD_INDEXES]
     for field_name, schema in specs:
         try:
             client.create_payload_index(
@@ -250,9 +256,22 @@ def _payload(
         ("picture_class", chunk.get("picture_class")),
         ("table_markdown", chunk.get("table_markdown")),
     )
-    page = chunk.get("page")
-    if settings.metadata_include_page and page is not None:
-        payload["page"] = int(page)
+    if settings.metadata_include_page:
+        page = chunk.get("page")
+        if page is not None:
+            payload["page"] = int(page)
+        page_end = chunk.get("page_end")
+        if page_end is not None:
+            payload["page_end"] = int(page_end)
+        pages = chunk.get("pages")
+        if isinstance(pages, list) and pages:
+            payload["pages"] = [int(item) for item in pages]
+        boxes = chunk.get("bboxes")
+        if isinstance(boxes, list) and boxes:
+            payload["bboxes"] = boxes
+        labels = chunk.get("page_labels")
+        if isinstance(labels, list) and labels:
+            payload["page_labels"] = [str(item) for item in labels]
 
     resolved_year = chunk.get("year") if chunk.get("year") is not None else year
     if settings.metadata_include_year and resolved_year is not None:

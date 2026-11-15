@@ -126,6 +126,31 @@ The BEIR and MIRACL numbers are the table on the [jina-reranker-v3 model card](h
 
 Point Preferences, Retrieval, Rerank URL at a server that speaks the JSON above. The model field is the id that server expects. Leave rerank off for the first devbox test.
 
+## Scientific papers
+
+Citation-trained models such as SPECTER2 and SciNCL embed a title and abstract so that cited papers sit near each other. They are the wrong default for chunk retrieval. SPECTER2 is trained on citation pairs, mostly computer science and biomedicine, and a May 2026 citation-community audit found it behind Qwen3-Embedding-0.6B and Qwen3-Embedding-8B at matching a paper's research agenda. Use them when the task is "find similar papers," not "find the sentence that supports this claim."
+
+For chunks of a PDF, stay with `qwen3-embedding:0.6b`. Move to `qwen3-embedding:4b` when German or a denser technical vocabulary matters and you can rebuild the collection at 2560 dimensions. Qdrant's own guidance, fetched 15 Nov 2026, is the same shape we already use: dense vectors plus BM25 on a full-text payload index, fused with RRF. SPLADE and miniCOIL are FastEmbed sparse models to measure later. They are not the default, because BM25 needs no extra model at query time. ColBERT and other late-interaction multivectors are a rerank of the top 100 to 500 hits, not the first-stage index. Jina ColBERT is CC BY-NC. FastEmbed 0.9.1's built-in dense list does not include Qwen3-Embedding. We keep Qwen3 because the German and MTEB numbers above beat the small ONNX models FastEmbed ships.
+
+Conversion for a two-column paper: use the standard Docling pipeline (Heron layout, TableFormer accurate, OCR only when the page is a scan) when the page has a numeric table, footnotes, or a reference list. Use the granite-docling VLM path when the page is a scan or the formula and code must come out as DocTags. A whole-page VLM is worse at a dense table than TableFormer. Docling does not detect the printed journal page number as its own label. `page` is the PDF page index from `doc_items[].prov[].page_no`, starting at 1. A printed label is stored only when that provenance object already has `page_label`.
+
+## Citation payload
+
+Each chunk stored in Qdrant can carry:
+
+| Field | Type | Meaning |
+| --- | --- | --- |
+| `text` | string | The string that was embedded, including the heading context from the hybrid chunker. |
+| `source` | string | File name or path. |
+| `doc_title`, `authors`, `year`, `doi` | string or int | Copied from the Docling document description when that metadata is present. `authors` is joined with `"; "`. |
+| `headings` | string array | Section path from the chunker, root first. |
+| `page`, `page_end`, `pages` | int, int, int array | PDF page index. `page` is the first page of the chunk and `page_end` is the last. A one-page chunk sets them equal. |
+| `page_labels` | string array | Printed labels, only when Docling supplied them. |
+| `bboxes` | array of `{page,l,t,r,b}` | Provenance boxes in Docling's coordinate space. Not indexed. |
+| `content_hash` | string | SHA-256 of the embedded text and the model name. This is not a hash of the PDF bytes. |
+
+`page`, `page_end`, and `year` have integer payload indexes. `source`, `doc_title`, `authors`, and `doi` have keyword indexes. Retrieval and the RAG answer show the paper title when `doc_title` is set, otherwise the file name, plus `p. N` or `pp. N–M`.
+
 ## Sources
 
 - [Docling v2.150.1](https://github.com/docling-project/docling/releases) (14 Nov 2026)
@@ -142,3 +167,7 @@ Point Preferences, Retrieval, Rerank URL at a server that speaks the JSON above.
 - [granite-docling-258M-mlx](https://huggingface.co/ibm-granite/granite-docling-258M-mlx)
 - [granite-vision-4.1-4b](https://huggingface.co/ibm-granite/granite-vision-4.1-4b)
 - [jina-reranker-v3](https://huggingface.co/jinaai/jina-reranker-v3)
+- [Qdrant hybrid search](https://qdrant.tech/documentation/search-tuning/hybrid-search/) and [sparse vectors](https://qdrant.tech/documentation/search/text-search/sparse-vector-search/) (15 Nov 2026: start with BM25, then measure SPLADE or miniCOIL)
+- [Qdrant FastEmbed](https://qdrant.tech/documentation/embeddings/fastembed/) and [ColBERT late interaction](https://qdrant.tech/documentation/fastembed/fastembed-colbert/) (FastEmbed 0.9.1 model tables)
+- [SPECTER2](https://allenai.org/blog/specter2-adapting-scientific-document-embeddings-to-multiple-fields-and-task-formats-c95686c06567) and [Topic Is Not Agenda](https://arxiv.org/abs/2605.07158) (May 2026)
+- [Docling page provenance](https://github.com/docling-project/docling/issues/1070)

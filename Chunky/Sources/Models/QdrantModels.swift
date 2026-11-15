@@ -193,7 +193,11 @@ extension ChunkPoint {
         }
 
         for (key, value) in metadata {
-            payload[key] = .string(value)
+            if key == "page_end", let number = Int64(value) {
+                payload[key] = .integer(number)
+            } else {
+                payload[key] = .string(value)
+            }
         }
 
         let vectorData: VectorData
@@ -222,6 +226,8 @@ private func extractMetadata(from payload: [String: PayloadValue]?) -> [String: 
     for (key, value) in payload where !reservedPayloadKeys.contains(key) {
         if let s = value.stringValue {
             meta[key] = s
+        } else if let number = value.integerValue {
+            meta[key] = String(number)
         }
     }
     return meta
