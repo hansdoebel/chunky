@@ -249,12 +249,13 @@ final class RunHistoryStore {
     let container: ModelContainer
 
     init(inMemory: Bool) throws {
+        let schema = Schema([RunRecord.self, RetrievalEvalRecord.self])
         if inMemory {
             let configuration = ModelConfiguration(isStoredInMemoryOnly: true)
-            container = try ModelContainer(for: RunRecord.self, configurations: configuration)
+            container = try ModelContainer(for: schema, configurations: [configuration])
         } else {
             let configuration = ModelConfiguration(url: Self.diskURL())
-            container = try ModelContainer(for: RunRecord.self, configurations: configuration)
+            container = try ModelContainer(for: schema, configurations: [configuration])
         }
     }
 
@@ -291,6 +292,20 @@ final class RunHistoryStore {
 
     func aggregates(by group: RunGroup) throws -> [RunAggregate] {
         RunHistory.aggregate(try allDrafts(), by: group)
+    }
+
+    func insert(_ draft: RetrievalEvalDraft) throws {
+        let context = ModelContext(container)
+        context.insert(RetrievalEvalRecord(draft: draft))
+        try context.save()
+    }
+
+    func evalDrafts() throws -> [RetrievalEvalDraft] {
+        let context = ModelContext(container)
+        let descriptor = FetchDescriptor<RetrievalEvalRecord>(
+            sortBy: [SortDescriptor(\.createdAt, order: .reverse)]
+        )
+        return try context.fetch(descriptor).map(RetrievalEvalDraft.init(record:))
     }
 
     private static func diskURL() -> URL {

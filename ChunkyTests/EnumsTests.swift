@@ -10,9 +10,10 @@ struct EnumsTests {
         #expect(ViewMode.queue.rawValue == "Queue")
         #expect(ViewMode.collections.rawValue == "Collections")
         #expect(ViewMode.retrieval.rawValue == "Retrieval")
+        #expect(ViewMode.eval.rawValue == "Eval")
         #expect(ViewMode.analytics.rawValue == "Analytics")
         #expect(ViewMode.benchmark.rawValue == "Benchmark")
-        #expect(ViewMode.allCases.count == 5)
+        #expect(ViewMode.allCases.count == 6)
     }
 
     // MARK: - ProcessingMode Tests

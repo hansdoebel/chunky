@@ -44,6 +44,11 @@ struct SidebarView: View {
             )
             .onTapGesture { appState.viewMode = .retrieval }
             NavigationRow(
+                icon: "checklist", title: "Eval",
+                isSelected: appState.viewMode == .eval
+            )
+            .onTapGesture { appState.viewMode = .eval }
+            NavigationRow(
                 icon: "chart.bar", title: "Analytics",
                 isSelected: appState.viewMode == .analytics
             )
@@ -187,6 +192,8 @@ struct MainContentView: View {
                 CollectionBrowserView()
             } else if appState.viewMode == .retrieval {
                 RetrievalScreen()
+            } else if appState.viewMode == .eval {
+                RetrievalEvalScreen()
             } else if appState.viewMode == .analytics {
                 AnalyticsView(runs: appState.finishedRuns, warning: appState.historyWarning)
             } else {

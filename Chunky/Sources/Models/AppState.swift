@@ -25,6 +25,7 @@ class AppState: ObservableObject {
     @Published var qdrantConnectionError: String?
     let runHistory: RunHistoryStore
     @Published private(set) var finishedRuns: [RunDraft] = []
+    @Published private(set) var evalRuns: [RetrievalEvalDraft] = []
     @Published var historyWarning: String?
 
     /// The shared Qdrant service instance
@@ -79,6 +80,16 @@ class AppState: ObservableObject {
     }
     func reloadHistory() {
         finishedRuns = (try? runHistory.allDrafts()) ?? finishedRuns
+        evalRuns = (try? runHistory.evalDrafts()) ?? evalRuns
+    }
+
+    func storeEvalRun(_ draft: RetrievalEvalDraft) {
+        do {
+            try runHistory.insert(draft)
+            reloadHistory()
+        } catch {
+            historyWarning = "Could not save the eval run."
+        }
     }
 
     func storeFinishedRun(_ job: ProcessingJob, settings: AppSettings) {
