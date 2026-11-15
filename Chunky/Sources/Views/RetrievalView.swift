@@ -278,6 +278,9 @@ struct RetrievalPlayground: View {
                 if !answer.isEmpty || isAnswering {
                     answerBlock
                 }
+                if !hits.isEmpty {
+                    CitationExportBar(records: hits.map(CitationSource.init(hit:)))
+                }
                 if hits.isEmpty && error == nil && answer.isEmpty {
                     Text("Run a dense query to see scores, text, source, page, headings, and payload.")
                         .foregroundStyle(.secondary)
@@ -294,6 +297,11 @@ struct RetrievalPlayground: View {
     private var answerBlock: some View {
         VStack(alignment: .leading, spacing: 8) {
             RAGAnswerText(text: answer.isEmpty && isAnswering ? "Answering…" : answer, citations: citations, onSelect: onSelectCitation)
+            if !citations.isEmpty {
+                Button("Copy answer bibliography") {
+                    CitationClipboard.copy(CitationExport.hayagriva(answerRecords))
+                }
+            }
         }
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -321,6 +329,15 @@ struct RetrievalPlayground: View {
             Text(hit.text)
                 .font(.body)
                 .fixedSize(horizontal: false, vertical: true)
+            HStack(spacing: 8) {
+                Button("Copy BibTeX") {
+                    CitationClipboard.copy(CitationExport.biblatex([CitationSource(hit: hit)]))
+                }
+                Button("Copy Typst cite") {
+                    CitationClipboard.copy(CitationExport.typstCites([CitationSource(hit: hit)]))
+                }
+            }
+            .font(.caption)
             if !hit.headings.isEmpty {
                 Text(hit.headings.joined(separator: " › "))
                     .font(.caption)
@@ -338,6 +355,15 @@ struct RetrievalPlayground: View {
             RoundedRectangle(cornerRadius: 8)
                 .stroke(hit.id == selectedHitID ? AppTheme.accentFallback : Color.clear, lineWidth: 2)
         )
+    }
+
+    private var answerRecords: [CitationSource] {
+        let used = Set(RAGCitationParser.segments(in: answer, citations: citations).compactMap { segment -> String? in
+            if case .citation(let citation) = segment { return citation.id }
+            return nil
+        })
+        let chosen = hits.filter { used.contains($0.id) }
+        return (chosen.isEmpty ? hits : chosen).map(CitationSource.init(hit:))
     }
 
     private func payloadLine(_ payload: [String: String]) -> String {

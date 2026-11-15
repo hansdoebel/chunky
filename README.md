@@ -15,6 +15,7 @@ A native macOS application for processing documents into semantic chunks and sto
 - Retrieval over dense search or hybrid dense plus BM25 with RRF, plus an optional reranker
 - Eval sets with recall@k, MRR, nDCG, and hit rate
 - RAG chat with numbered citations, using pi or an OpenAI-compatible chat API
+- Typst citations for APA 7 as adapted by the IU Zitierleitfaden: Hayagriva `.yml`, BibLaTeX `.bib`, and `#cite(<key>, supplement: [S. 12])`. See [docs/typst-citations.md](docs/typst-citations.md)
 - A stdio MCP server (`search`, `list_collections`) for pi and other clients
 - Analytics, a fixed-PDF benchmark, a collection browser, and export to Markdown, HTML, JSON, and plain text
 
