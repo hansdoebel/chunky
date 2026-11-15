@@ -14,6 +14,7 @@ from chunky_worker.search import (
     QdrantPointSearcher,
     SearchRequest,
     build_query_filter,
+    resolve_target,
 )
 from tests.conftest import TEST_TOKEN, FakeEmbeddings, FakePipeline, auth_headers
 
@@ -312,6 +313,66 @@ def test_configured_qdrant_target_is_used_when_the_body_omits_it(tmp_settings, m
     assert opened[0] == ("http://10.0.0.8:6333", API_KEY)
     assert fake.query_calls[0]["using"] is None
     assert fake.query_calls[0]["collection_name"] == "local"
+
+
+def test_configured_key_stays_on_the_configured_url(tmp_settings):
+    tmp_settings.qdrant_url = "https://example.cloud.qdrant.io/"
+    tmp_settings.qdrant_api_key = API_KEY
+    same = SearchRequest.model_validate(
+        {"query": QUERY, "collection": "documents", "qdrant_url": "https://Example.Cloud.Qdrant.io"}
+    )
+    other = SearchRequest.model_validate(
+        {"query": QUERY, "collection": "documents", "qdrant_url": "https://attacker.example"}
+    )
+    explicit = SearchRequest.model_validate(
+        {
+            "query": QUERY,
+            "collection": "documents",
+            "qdrant_url": "https://attacker.example",
+            "qdrant_api_key": "caller-key",
+        }
+    )
+    assert resolve_target(same, tmp_settings) == ("https://Example.Cloud.Qdrant.io", API_KEY)
+    assert resolve_target(other, tmp_settings) == ("https://attacker.example", "")
+    assert resolve_target(explicit, tmp_settings) == ("https://attacker.example", "caller-key")
+
+
+def test_overridden_url_does_not_receive_the_configured_key(tmp_settings, monkeypatch):
+    _install_embed_mock(monkeypatch)
+    tmp_settings.qdrant_url = "https://example.cloud.qdrant.io"
+    tmp_settings.qdrant_api_key = API_KEY
+    fake = FakeQdrant()
+    opened = []
+    embeddings = OllamaEmbeddingBackend("http://127.0.0.1:11434")
+    with _client(tmp_settings, embeddings, fake, opened) as client:
+        response = client.post(
+            "/v1/search",
+            json={"query": QUERY, "collection": "documents", "qdrant_url": "http://127.0.0.1:6333"},
+        )
+    assert response.status_code == 200
+    assert opened[0] == ("http://127.0.0.1:6333", "")
+    assert API_KEY not in response.text
+    log_text = (tmp_settings.log_dir / "chunky-worker.log").read_text(encoding="utf-8")
+    assert API_KEY not in log_text
+
+
+def test_non_numeric_embedding_is_an_embedding_error(tmp_settings, monkeypatch):
+    def fake_post(url, json=None, timeout=None):
+        request = httpx.Request("POST", url)
+        return httpx.Response(200, json={"embeddings": [[0.1, None]]}, request=request)
+
+    monkeypatch.setattr(httpx, "post", fake_post)
+    fake = FakeQdrant()
+    embeddings = OllamaEmbeddingBackend("http://127.0.0.1:11434")
+    with _client(tmp_settings, embeddings, fake, []) as client:
+        response = client.post(
+            "/v1/search",
+            json={"query": QUERY, "collection": "documents", "qdrant_url": "http://127.0.0.1:6333"},
+        )
+    assert response.status_code == 502
+    assert response.json()["error_type"] == "embedding_error"
+    assert "non-numeric" in response.json()["detail"]
+    assert fake.query_calls == []
 
 
 def test_dimension_mismatch_is_refused_before_query(tmp_settings, monkeypatch):

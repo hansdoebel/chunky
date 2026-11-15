@@ -154,16 +154,29 @@ def _http_url(value: str, label: str) -> str:
     return value
 
 
+def _destination_key(url: str) -> str:
+    parsed = urlparse(url.strip())
+    host = (parsed.hostname or "").lower()
+    port = f":{parsed.port}" if parsed.port is not None else ""
+    path = parsed.path.rstrip("/")
+    return f"{parsed.scheme.lower()}://{host}{port}{path}"
+
+
 def resolve_target(request: SearchRequest, settings: Settings) -> tuple[str, str]:
-    raw_url = request.qdrant_url if request.qdrant_url is not None else settings.qdrant_url
-    url = (raw_url or "").strip()
+    configured_url = (settings.qdrant_url or "").strip()
+    if request.qdrant_url is not None:
+        url = request.qdrant_url.strip()
+    else:
+        url = configured_url
     if not url:
         raise SearchError("qdrant_url is required")
     url = _http_url(url, "qdrant_url")
     if request.qdrant_api_key is not None:
         api_key = request.qdrant_api_key.strip()
-    else:
+    elif configured_url and _destination_key(url) == _destination_key(configured_url):
         api_key = (settings.qdrant_api_key or "").strip()
+    else:
+        api_key = ""
     return url, api_key
 
 
@@ -245,7 +258,14 @@ def run_search(
             status_code=502,
             error_type="embedding_error",
         )
-    vector = [float(value) for value in vectors[0]]
+    try:
+        vector = [float(value) for value in vectors[0]]
+    except (TypeError, ValueError):
+        raise SearchError(
+            "Embedding backend returned a non-numeric vector",
+            status_code=502,
+            error_type="embedding_error",
+        ) from None
     if layout.vector_size is not None and layout.vector_size != len(vector):
         raise SearchError(
             f"Collection {collection!r} has vector size {layout.vector_size}, "

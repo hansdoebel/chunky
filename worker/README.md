@@ -53,9 +53,11 @@ by default, or OpenAI-compatible `/v1/embeddings` when `embedding_backend` is
 `openai`) and runs a dense Qdrant query. The web UI is out of scope.
 
 The Qdrant target is the request's `qdrant_url` and optional `qdrant_api_key`,
-or `CHUNKY_QDRANT_URL` / `CHUNKY_QDRANT_API_KEY` when the body omits them.
-Local Docker can omit the key. Cloud needs the key. The key is not returned
-and is stripped from error text and the log.
+or `CHUNKY_QDRANT_URL` / `CHUNKY_QDRANT_API_KEY` when the body omits the URL.
+The configured key is attached only for that configured URL. A different
+`qdrant_url` never receives it: send `qdrant_api_key` with that URL, or omit
+the key for a local server. The key is not returned and is stripped from
+error text and the log.
 
 `limit` is required to be explicit in the response (default 10, maximum 100;
 larger values are rejected). `offset` pages through results. A full page sets
