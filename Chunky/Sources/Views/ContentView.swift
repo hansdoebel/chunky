@@ -532,6 +532,13 @@ struct FileRowView: View {
                     .font(.system(.body, weight: .medium))
                     .lineLimit(1)
 
+                if let notice = job.localFallbackNotice {
+                    Text(notice)
+                        .font(.caption)
+                        .foregroundStyle(.orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
                 HStack(spacing: 6) {
                     Text(jobTypeBadge)
                         .font(.system(.caption2, weight: .medium))
