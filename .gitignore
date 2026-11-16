@@ -50,6 +50,9 @@ __pycache__/
 # Node
 node_modules/
 dist/
+worker/chunky_worker/web_dist/
+worker/web/test-results/
+worker/web/playwright-report/
 
 # Claude
 .claude/

@@ -37,6 +37,9 @@ chunky-worker = "chunky_worker.__main__:main"
 [tool.setuptools.packages.find]
 include = ["chunky_worker*"]
 
+[tool.setuptools.package-data]
+chunky_worker = ["web_dist/*", "web_dist/assets/*"]
+
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]

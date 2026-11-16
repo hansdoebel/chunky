@@ -33,6 +33,8 @@ class PreparedPoint:
     payload: dict[str, Any]
 
 class QdrantIngestor(Protocol):
+    def validate_identity(self, *, url: str, api_key: str, collection: str, identity: dict) -> None: ...
+
     def collection_vector_size(self, *, url: str, api_key: str, collection: str) -> int | None:
         """Return the existing dense vector size, or None when the collection is missing."""
 
@@ -54,6 +56,7 @@ class QdrantIngestor(Protocol):
         quantization_memory: str = "",
         payload_memory: str = "",
         on_progress: Callable[[int, int], None] | None = None,
+        identity: dict | None = None,
     ) -> int:
         """Create the collection when missing and upsert. Returns the point count."""
 
@@ -485,7 +488,59 @@ def _collection_vector_size(info: Any) -> int | None:
             return int(chosen["size"])
     return None
 
+def embedding_identity(*, backend: str, model: str, endpoint: str, dimensions: int, distance: str, hybrid: bool) -> dict:
+    return {
+        "schema": 1,
+        "backend": backend.strip().lower(),
+        "model": model,
+        "endpoint_sha256": hashlib.sha256(endpoint.strip().encode()).hexdigest(),
+        "dimensions": dimensions,
+        "distance": normalize_distance(distance),
+        "hybrid": hybrid,
+    }
+
+
+def _field(value, key, default=None):
+    return value.get(key, default) if isinstance(value, dict) else getattr(value, key, default)
+
+
+def validate_collection_identity(info, expected: dict) -> None:
+    config = _field(info, "config")
+    metadata = _field(config, "metadata") or {}
+    identity = _field(metadata, "chunky_embedding")
+    if identity != expected:
+        raise IngestError("Collection embedding identity is unknown or incompatible. Choose a new collection.", "embedding_identity_mismatch")
+    params = _field(config, "params")
+    vectors = _field(params, "vectors")
+    if expected["hybrid"]:
+        if not isinstance(vectors, dict) or set(vectors) != {"dense"}:
+            raise IngestError("Collection vector layout is incompatible", "embedding_identity_mismatch")
+        dense = vectors["dense"]
+    else:
+        if isinstance(vectors, dict) and "size" not in vectors:
+            raise IngestError("Collection vector layout is incompatible", "embedding_identity_mismatch")
+        dense = vectors
+    distance = _field(dense, "distance", "")
+    distance = getattr(distance, "value", distance)
+    if _field(dense, "size") != expected["dimensions"] or normalize_distance(str(distance)) != expected["distance"]:
+        raise IngestError("Collection dimensions or distance are incompatible", "embedding_identity_mismatch")
+
+
 class QdrantCloudIngestor:
+    def validate_identity(self, *, url: str, api_key: str, collection: str, identity: dict) -> None:
+        client = self._client(url, api_key)
+        try:
+            if client.collection_exists(collection_name=collection):
+                validate_collection_identity(client.get_collection(collection_name=collection), identity)
+        except IngestError:
+            raise
+        except Exception as exc:
+            raise IngestError(redact(str(exc), api_key)) from None
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
     """Upserts with ``qdrant_client``. The API key is a function argument only."""
 
     def collection_vector_size(self, *, url: str, api_key: str, collection: str) -> int | None:
@@ -532,6 +587,7 @@ class QdrantCloudIngestor:
         quantization_memory: str = "",
         payload_memory: str = "",
         on_progress: Callable[[int, int], None] | None = None,
+        identity: dict | None = None,
     ) -> int:
         if not url:
             raise IngestError("qdrant_url is required for qdrant_cloud")
@@ -556,8 +612,11 @@ class QdrantCloudIngestor:
 
         client = self._client(url, api_key)
         try:
+            created = False
             if client.collection_exists(collection_name=collection):
                 info = client.get_collection(collection_name=collection)
+                if identity is not None:
+                    validate_collection_identity(info, identity)
                 existing = _collection_vector_size(info)
                 if existing is not None and existing != vector_size:
                     raise DimensionMismatch(
@@ -566,6 +625,7 @@ class QdrantCloudIngestor:
                         "Refusing to upsert."
                     )
             else:
+                created = True
                 compression = _quantization_config(
                     quantization, on_disk=on_disk, memory=quantization_memory
                 )
@@ -585,6 +645,7 @@ class QdrantCloudIngestor:
                         hnsw_config=hnsw,
                         quantization_config=compression,
                         payload=payload,
+                        **({"metadata": {"chunky_embedding": identity}} if identity is not None else {}),
                     )
                 else:
                     client.create_collection(
@@ -594,21 +655,26 @@ class QdrantCloudIngestor:
                         hnsw_config=hnsw,
                         quantization_config=compression,
                         payload=payload,
+                        **({"metadata": {"chunky_embedding": identity}} if identity is not None else {}),
                     )
-            _apply_memory_tiers(
-                client,
-                collection,
-                hybrid=hybrid,
-                vector_memory=vector_memory,
-                hnsw_memory=hnsw_memory,
-                quantization=quantization,
-                quantization_memory=quantization_memory,
-                payload_memory=payload_memory,
-                on_disk=on_disk,
-            )
-            ensure_payload_indexes(client, collection)
-            if hybrid:
-                ensure_bm25_text_index(client, collection)
+            if identity is not None:
+                validate_collection_identity(client.get_collection(collection_name=collection), identity)
+            if identity is None:
+                _apply_memory_tiers(
+                    client,
+                    collection,
+                    hybrid=hybrid,
+                    vector_memory=vector_memory,
+                    hnsw_memory=hnsw_memory,
+                    quantization=quantization,
+                    quantization_memory=quantization_memory,
+                    payload_memory=payload_memory,
+                    on_disk=on_disk,
+                )
+            if identity is None or created:
+                ensure_payload_indexes(client, collection)
+                if hybrid:
+                    ensure_bm25_text_index(client, collection)
 
             total = len(points)
             written = 0
@@ -619,6 +685,8 @@ class QdrantCloudIngestor:
                 for point in batch:
                     vector: Any = {"dense": point.vector} if hybrid else point.vector
                     structs.append(PointStruct(id=point.id, vector=vector, payload=point.payload))
+                if identity is not None:
+                    validate_collection_identity(client.get_collection(collection_name=collection), identity)
                 client.upsert(collection_name=collection, points=structs, wait=True)
                 written += len(batch)
                 if on_progress:

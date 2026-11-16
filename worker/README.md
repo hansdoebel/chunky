@@ -16,12 +16,18 @@ worker host uses the `granite_docling` DocTags preset through vLLM
 GPU / model backends are pluggable. Unit tests inject fakes and do not need
 Docling, Ollama, or a GPU.
 
+## Browser workspace
+
+The optional [browser workspace](../docs/web-ui.md) is served at `/` on the same worker port. Build `worker/web` before installing the worker package; the Compose image builds it automatically. Its login shell is public, while job data and configuration use the existing bearer-token policy. Tokens stay in browser memory and Qdrant credentials stay on the worker.
+
 ## API
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| `GET` | `/v1/ui/config` | Safe browser configuration; no endpoint credentials |
+| `GET` | `/v1/jobs` | Job summaries with explicit `limit` (1–100) and `offset` |
 | `POST` | `/v1/jobs` | Multipart upload (`file`) plus a `settings` JSON field |
-| `GET` | `/v1/jobs/{id}` | Job status and result (chunks, optional embeddings) |
+| `GET` | `/v1/jobs/{id}` | Job status and result; `include_embeddings=false` omits vectors without changing the stored result |
 | `GET` | `/v1/jobs/{id}/events` | SSE progress `{type, message, percent}` |
 | `POST` | `/v1/jobs/{id}/cancel` | Request cancellation |
 | `GET` | `/v1/jobs/{id}/verification` | Per-document verification report written next to the job |
@@ -29,7 +35,7 @@ Docling, Ollama, or a GPU.
 | `POST` | `/v1/verify` | Verify an uploaded PDF. `settings` JSON may include `chunks`; otherwise the PDF-hash chunk cache is used |
 | `GET` | `/v1/health` | Docling import, embedding reachability, and the granite VLM engine plus GPU visibility. **No token.** |
 | `GET` | `/v1/models` | Embedding model names and known VLM ids. **Bearer token.** |
-| `POST` | `/v1/search` | Embed a query and search Qdrant. **Bearer token.** No web UI. |
+| `POST` | `/v1/search` | Embed a query and search Qdrant. **Bearer token.** |
 | `POST` | `/v1/cache/lookup` | Return cached chunks, and vectors when the model and dimension match. **Bearer token.** |
 | `PUT` | `/v1/cache` | Store a Docling document JSON and its chunk records. **Bearer token.** |
 | `PUT` | `/v1/cache/vectors` | Store vectors for one embedding model and dimension. **Bearer token.** |
@@ -74,6 +80,8 @@ are included only when `embedding_model` and `embedding_dim` match a stored set.
 
 For `qdrant_cloud`, send `qdrant_url`, `qdrant_api_key`, and optional `qdrant_collection` (default `documents`), `qdrant_distance` (`cosine`, `dot`, `euclid`), and `qdrant_batch_size` (default 250). The API key is held in memory only for that job, stripped from `GET /v1/jobs`, and never written to the log. The worker creates the collection when it is missing, using the embedding width and the requested distance. Before upsert the worker embeds the probe string `chunky` once per model, caches that width, and compares it with an existing collection. A mismatch fails the job with `error_type: dimension_mismatch` before the rest of the chunks are embedded. The same check runs again at upsert time.
 
+Browser jobs use `use_worker_qdrant=true` with `mode=chunk_and_embed` and `ingest_target=qdrant_cloud`. They reject client Qdrant URL/key overrides and use only `CHUNKY_QDRANT_URL` plus `CHUNKY_QDRANT_API_KEY`. New collections record the embedding identity in Qdrant metadata; existing collections must match that identity, vector layout, width, and distance before writing. Unknown collections are refused without changing their configuration. See [browser collection compatibility](../docs/web-ui.md#collection-compatibility). Existing app requests retain their original API behavior.
+
 Payload fields match the app: `text`, `source`, `page` (int), `year` (int), `headings` (string array), and string metadata `chunk_index`, `content_type`, `section`, `doc_title`, `authors` (joined with `"; "`), `doi`, `document_id`, `url`, `language`, `ingested_at`, `content_hash` (SHA-256 of embedding text, `|`, and model). Metadata flags on the job default to on, same as the app.
 
 ## Verification
@@ -84,8 +92,7 @@ After a successful job the worker writes `verification.json` beside the upload. 
 
 `POST /v1/search` embeds one query with the configured embedding backend (Ollama
 by default, or OpenAI-compatible `/v1/embeddings` when `embedding_backend` is
-`openai`) and runs a Qdrant query. The worker has no web UI. Rerank, eval
-metrics, and RAG chat run in the app. The app may rerank these hits with
+`openai`) and runs a Qdrant query. Rerank, eval metrics, and RAG chat run in the app. The app may rerank these hits with
 its own `/v1/rerank` client. This process does not call a reranker.
 
 The Qdrant target is the request's `qdrant_url` and optional `qdrant_api_key`,
