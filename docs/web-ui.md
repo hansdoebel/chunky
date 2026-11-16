@@ -84,3 +84,9 @@ The light and dark captures below came from macOS browser CI run [43977623510](h
 ![Dark worker workspace](images/web-dark-workspace.png)
 
 ![Dark mobile workspace](images/web-dark-mobile.png)
+
+Filter captures from macOS CI run [43977736859](https://github.com/hansdoebel/chunky/actions/runs/43977736859) use mocked responses and nonblank image assertions.
+
+![Light semantic search filters](images/web-filters-light.png)
+
+![Dark semantic search filters](images/web-filters-dark.png)
