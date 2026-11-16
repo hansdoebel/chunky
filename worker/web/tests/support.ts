@@ -2,8 +2,9 @@ import { expect, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
 import { readFile } from 'node:fs/promises';
 
-export async function captureWorkspace(page: Page, name: string, heading: string) {
+export async function captureWorkspace(page: Page, name: string, heading: string | RegExp) {
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
+  await page.evaluate(() => document.fonts.ready);
   const path = `/tmp/chunky-web-${name}.png`;
   await page.screenshot({ path, fullPage: true, animations: 'disabled' });
   const png = PNG.sync.read(await readFile(path));

@@ -1,4 +1,12 @@
 <script lang="ts">
+  import { Button } from '$lib/components/ui/button';
+  import { Input } from '$lib/components/ui/input';
+  import { Label } from '$lib/components/ui/label';
+  import * as Card from '$lib/components/ui/card';
+  import * as NativeSelect from '$lib/components/ui/native-select';
+  import { Badge } from '$lib/components/ui/badge';
+  import AppearancePicker from './AppearancePicker.svelte';
+
   import { onDestroy } from 'svelte';
   import Collections from './Collections.svelte';
   import { APIError, WorkerAPI, buildJobSettings, type Job, type JobOptions, type WorkerConfig, type JobEvent } from './lib/api';
@@ -277,20 +285,21 @@
 
 {#if !connected}
   <main class="login-shell">
+    <div class="login-appearance"><AppearancePicker id="login" /></div>
     <div class="login-brand"><span class="brand-mark">C</span><span>Chunky</span></div>
-    <section class="login-card">
+    <Card.Root class="login-card">
       <div class="eyebrow">WORKER WORKSPACE</div>
       <h1>Your documents.<br />Ready for discovery.</h1>
       <p>Connect to your worker to turn documents into useful, searchable chunks.</p>
       <form onsubmit={connect}>
-        <label for="access-token">Worker access token</label>
-        <input id="access-token" type="password" bind:value={token} autocomplete="off" placeholder="Enter your worker token" disabled={connecting} />
+        <Label for="access-token">Worker access token</Label>
+        <Input id="access-token" type="password" bind:value={token} autocomplete="off" placeholder="Enter your worker token" disabled={connecting} />
         <p class="field-note">Your token stays in memory for this session.</p>
         {#if error}<div class="notice danger" role="alert">{error}</div>{/if}
-        <button class="primary full" disabled={connecting} type="submit">{connecting ? 'Connecting…' : 'Connect to worker'}<span aria-hidden="true">→</span></button>
+        <Button variant="ghost" class="primary full" disabled={connecting} type="submit">{connecting ? 'Connecting…' : 'Connect to worker'}<span aria-hidden="true">→</span></Button>
       </form>
       <div class="private-note"><span aria-hidden="true">◈</span> Processing stays on your configured worker.</div>
-    </section>
+    </Card.Root>
     <p class="login-footer">One workspace for your documents, chunks, and collections.</p>
   </main>
 {:else}
@@ -299,55 +308,55 @@
       <a href="#queue" class="brand" onclick={() => tab = 'queue'}><span class="brand-mark">C</span><span>Chunky<small>Worker workspace</small></span></a>
       <div class="nav-label">WORKSPACE</div>
       <nav aria-label="Workspace">
-        <button class:active={tab === 'queue'} onclick={() => tab = 'queue'}><span class="nav-icon" aria-hidden="true">▤</span>Processing queue<span class="count">{total}</span></button>
-        <button class:active={tab === 'collections'} onclick={() => tab = 'collections'}><span class="nav-icon" aria-hidden="true">▦</span>Collections</button>
-        <button class:active={tab === 'settings'} onclick={() => tab = 'settings'}><span class="nav-icon" aria-hidden="true">⚙</span>Job settings</button>
+        <Button variant="ghost" class={tab === 'queue' ? 'active' : ''} onclick={() => tab = 'queue'}><span class="nav-icon" aria-hidden="true">▤</span>Processing queue<span class="count">{total}</span></Button>
+        <Button variant="ghost" class={tab === 'collections' ? 'active' : ''} onclick={() => tab = 'collections'}><span class="nav-icon" aria-hidden="true">▦</span>Collections</Button>
+        <Button variant="ghost" class={tab === 'settings' ? 'active' : ''} onclick={() => tab = 'settings'}><span class="nav-icon" aria-hidden="true">⚙</span>Job settings</Button>
       </nav>
-      <div class="sidebar-bottom"><div class="worker-state"><span class:unavailable={!!connectionError} class="status-dot"></span>{connectionError ? 'Connection interrupted' : 'Worker connected'}</div><button class="quiet signout" onclick={() => clearSession()}>Sign out <span aria-hidden="true">→</span></button></div>
+      <div class="sidebar-bottom"><AppearancePicker id="workspace" /><div class="worker-state"><span class:unavailable={!!connectionError} class="status-dot"></span>{connectionError ? 'Connection interrupted' : 'Worker connected'}</div><Button variant="ghost" class="quiet signout" onclick={() => clearSession()}>Sign out <span aria-hidden="true">→</span></Button></div>
     </aside>
 
     <main class="main-content">
       <header class="page-header"><div><div class="eyebrow">YOUR WORKSPACE</div><h1>{tab === 'queue' ? 'Processing queue' : tab === 'collections' ? 'Collections' : 'Job settings'}</h1><p>{tab === 'queue' ? 'From documents to knowledge, one chunk at a time.' : tab === 'collections' ? 'Explore your documents and find the passages that matter.' : 'Choose how the worker processes your next documents.'}</p></div><span class="host-badge"><span class="status-dot"></span>Processing on worker</span></header>
-      {#if error}<div class="notice danger" role="alert">{error}<button class="dismiss" aria-label="Dismiss error" onclick={() => error = ''}>×</button></div>{/if}
+      {#if error}<div class="notice danger" role="alert">{error}<Button variant="ghost" class="dismiss" aria-label="Dismiss error" onclick={() => error = ''}>×</Button></div>{/if}
       {#if connectionError}<div class="notice warning" role="alert">{connectionError} Your queue will refresh when the worker responds.</div>{/if}
 
       {#if tab === 'collections' && api && config}
         <Collections {api} {config} onAuthFailure={collectionFailure} />
       {:else if tab === 'settings'}
-        <section class="card settings-card">
-          <div class="section-heading"><div><h2>Processing preferences</h2><p>Applied to new uploads. Existing jobs keep their settings.</p></div><span class="pill neutral">Session only</span></div>
+        <Card.Root class="card settings-card">
+          <div class="section-heading"><div><h2>Processing preferences</h2><p>Applied to new uploads. Existing jobs keep their settings.</p></div><Badge variant="secondary" class="pill neutral">Session only</Badge></div>
           <div class="settings-grid">
-            <div class="field wide"><label for="output-mode">Output</label><select id="output-mode" bind:value={options.mode}><option value="chunks">Chunks only</option><option value="vectors">Chunks and vectors</option><option value="ingest" disabled={!config?.qdrant_available}>{config?.qdrant_label ?? 'Worker Qdrant'}</option></select><p class="field-note">{options.mode === 'chunks' ? 'Convert and preview chunks without embedding.' : options.mode === 'vectors' ? 'Generate embeddings and download the results.' : 'The worker writes to its configured Qdrant target. Credentials stay server-side.'}</p>{#if !config?.qdrant_available}<p class="field-note">Qdrant ingest is unavailable until the worker target is configured.</p>{/if}</div>
-            <div class="field"><label for="conversion-model">Document model</label><select id="conversion-model" bind:value={options.vlm}>{#each config?.vlm_models ?? ['standard'] as model}<option value={model}>{vlmName(model)}</option>{/each}</select></div>
-            <div class="field"><label for="accelerator">Processing device</label><select id="accelerator" bind:value={options.accelerator}><option value="cuda">GPU · worker</option><option value="cpu">CPU · worker</option></select></div>
-            <div class="field"><label for="embedding-provider">Embedding provider</label><select id="embedding-provider" bind:value={options.backend} disabled={options.mode === 'chunks'}><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></select></div>
-            <div class="field"><label for="embedding-model">Embedding model</label><input id="embedding-model" bind:value={options.model} list="embedding-models" disabled={options.mode === 'chunks'} /><datalist id="embedding-models">{#each models as model}<option value={model}></option>{/each}</datalist></div>
+            <div class="field wide"><Label for="output-mode">Output</Label><NativeSelect.Root id="output-mode" bind:value={options.mode}><option value="chunks">Chunks only</option><option value="vectors">Chunks and vectors</option><option value="ingest" disabled={!config?.qdrant_available}>{config?.qdrant_label ?? 'Worker Qdrant'}</option></NativeSelect.Root><p class="field-note">{options.mode === 'chunks' ? 'Convert and preview chunks without embedding.' : options.mode === 'vectors' ? 'Generate embeddings and download the results.' : 'The worker writes to its configured Qdrant target. Credentials stay server-side.'}</p>{#if !config?.qdrant_available}<p class="field-note">Qdrant ingest is unavailable until the worker target is configured.</p>{/if}</div>
+            <div class="field"><Label for="conversion-model">Document model</Label><NativeSelect.Root id="conversion-model" bind:value={options.vlm}>{#each config?.vlm_models ?? ['standard'] as model}<option value={model}>{vlmName(model)}</option>{/each}</NativeSelect.Root></div>
+            <div class="field"><Label for="accelerator">Processing device</Label><NativeSelect.Root id="accelerator" bind:value={options.accelerator}><option value="cuda">GPU · worker</option><option value="cpu">CPU · worker</option></NativeSelect.Root></div>
+            <div class="field"><Label for="embedding-provider">Embedding provider</Label><NativeSelect.Root id="embedding-provider" bind:value={options.backend} disabled={options.mode === 'chunks'}><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></NativeSelect.Root></div>
+            <div class="field"><Label for="embedding-model">Embedding model</Label><Input id="embedding-model" bind:value={options.model} list="embedding-models" disabled={options.mode === 'chunks'} /><datalist id="embedding-models">{#each models as model}<option value={model}></option>{/each}</datalist></div>
             {#if modelNotice}<p class="field-note wide">{modelNotice}</p>{/if}
-            {#if options.mode === 'ingest'}<div class="field wide"><label for="collection">Collection</label><input id="collection" bind:value={options.collection} placeholder="documents" /><label class="checkbox"><input type="checkbox" bind:checked={options.hybrid} />Enable BM25 hybrid search</label><p class="field-note">Use a new collection for a different model. Existing collections must have matching verified model settings.</p></div>{/if}
-            <div class="field"><label for="chunk-tokens">Maximum chunk tokens</label><input id="chunk-tokens" type="number" min="64" max="4096" step="1" bind:value={options.chunkTokens} /></div>
-            <div class="field"><label for="embedding-endpoint">Embedding endpoint <span class="optional">optional</span></label><input id="embedding-endpoint" bind:value={options.endpoint} placeholder="Use worker default" disabled={options.mode === 'chunks'} /><p class="field-note">A worker-side HTTP(S) endpoint. Required when changing providers.</p></div>
+            {#if options.mode === 'ingest'}<div class="field wide"><Label for="collection">Collection</Label><Input id="collection" bind:value={options.collection} placeholder="documents" /><Label class="checkbox"><input type="checkbox" bind:checked={options.hybrid} />Enable BM25 hybrid search</Label><p class="field-note">Use a new collection for a different model. Existing collections must have matching verified model settings.</p></div>{/if}
+            <div class="field"><Label for="chunk-tokens">Maximum chunk tokens</Label><Input id="chunk-tokens" type="number" min="64" max="4096" step="1" bind:value={options.chunkTokens} /></div>
+            <div class="field"><Label for="embedding-endpoint">Embedding endpoint <span class="optional">optional</span></Label><Input id="embedding-endpoint" bind:value={options.endpoint} placeholder="Use worker default" disabled={options.mode === 'chunks'} /><p class="field-note">A worker-side HTTP(S) endpoint. Required when changing providers.</p></div>
           </div>
-          <div class="settings-footer"><p>Model choices do not alter existing collections.</p><button class="primary" onclick={() => tab = 'queue'}>Back to queue <span aria-hidden="true">→</span></button></div>
-        </section>
+          <div class="settings-footer"><p>Model choices do not alter existing collections.</p><Button variant="ghost" class="primary" onclick={() => tab = 'queue'}>Back to queue <span aria-hidden="true">→</span></Button></div>
+        </Card.Root>
       {:else}
         <div class="queue-layout">
           <div class="queue-main">
             <section class="upload-card" class:dragging aria-label="Upload documents" ondragover={(event) => { event.preventDefault(); dragging = true; }} ondragleave={() => dragging = false} ondrop={(event) => { event.preventDefault(); dragging = false; chooseFiles(event.dataTransfer?.files ?? null); }}>
               <div class="upload-symbol" aria-hidden="true"><svg viewBox="0 0 32 32"><path d="M9 3h10l6 6v20H7V3h2m10 0v7h6M16 24V14m-4 4 4-4 4 4" /></svg></div>
               <h2>Bring your documents</h2><p>Drop PDF, Office, or text files here to get started.</p>
-              <label class="button secondary file-button">Choose files<input type="file" multiple aria-label="Choose documents" onchange={(event) => { chooseFiles(event.currentTarget.files); event.currentTarget.value = ''; }} disabled={uploading} /></label>
-              {#if files.length}<div class="selected-files">{#each files as file}<span>{file.name}<small>{fileSize(file.size)}</small></span>{/each}</div><button class="primary" onclick={upload} disabled={uploading}>{uploading ? 'Uploading…' : `Add ${files.length === 1 ? 'document' : `${files.length} documents`} to queue`}<span aria-hidden="true">→</span></button>{/if}
+              <Label class="button secondary file-button">Choose files<input type="file" multiple aria-label="Choose documents" onchange={(event) => { chooseFiles(event.currentTarget.files); event.currentTarget.value = ''; }} disabled={uploading} /></Label>
+              {#if files.length}<div class="selected-files">{#each files as file}<span>{file.name}<small>{fileSize(file.size)}</small></span>{/each}</div><Button variant="ghost" class="primary" onclick={upload} disabled={uploading}>{uploading ? 'Uploading…' : `Add ${files.length === 1 ? 'document' : `${files.length} documents`} to queue`}<span aria-hidden="true">→</span></Button>{/if}
             </section>
 
-            <section class="card queue-card">
-              <div class="section-heading"><div><h2>Documents <span class="heading-count">{total}</span></h2><p>Follow progress and inspect the finished chunks.</p></div><button class="quiet" onclick={() => void refresh()} disabled={refreshing} aria-label="Refresh queue">↻ <span>{refreshing ? 'Refreshing' : 'Refresh'}</span></button></div>
-              {#if !jobs.length}<div class="empty-state"><div class="empty-icon" aria-hidden="true">▤</div><h3>A little space for your next idea</h3><p>Add a document above. Its progress and results will appear here.</p></div>{:else}<div class="job-list">{#each jobs as job (job.id)}<div class="job-row" class:selected={selected?.id === job.id}><button class="job-select" onclick={() => void selectJob(job.id)}><span class="document-icon" aria-hidden="true">{job.status === 'succeeded' ? '✓' : '▤'}</span><span class="job-copy"><strong>{job.filename}</strong><span>{job.progress?.message ?? (job.status === 'queued' ? 'Waiting for the worker' : labels[job.status])}</span>{#if active(job)}<progress class="progress-track" aria-label={`${job.filename} progress`} value={percent(job)} max="100"></progress>{/if}</span><span class="pill {job.status}">{labels[job.status]}</span></button>{#if active(job)}<button class="cancel-job" aria-label={`Cancel ${job.filename}`} onclick={() => void cancelJob(job.id)}>×</button>{/if}</div>{/each}</div>{/if}
-              <div class="queue-footer"><span>{total ? `Showing ${offset + 1}–${pageEnd} of ${total} jobs` : 'Your queue is ready.'}</span><div><button class="quiet" aria-label="Previous jobs" disabled={!offset || refreshing} onclick={() => changePage(Math.max(0, offset - 50))}>←</button><button class="quiet" aria-label="Next jobs" disabled={offset + 50 >= total || refreshing} onclick={() => changePage(offset + 50)}>→</button></div></div>
-            </section>
+            <Card.Root class="card queue-card">
+              <div class="section-heading"><div><h2>Documents <span class="heading-count">{total}</span></h2><p>Follow progress and inspect the finished chunks.</p></div><Button variant="ghost" class="quiet" onclick={() => void refresh()} disabled={refreshing} aria-label="Refresh queue">↻ <span>{refreshing ? 'Refreshing' : 'Refresh'}</span></Button></div>
+              {#if !jobs.length}<div class="empty-state"><div class="empty-icon" aria-hidden="true">▤</div><h3>A little space for your next idea</h3><p>Add a document above. Its progress and results will appear here.</p></div>{:else}<div class="job-list">{#each jobs as job (job.id)}<div class={selected?.id === job.id ? 'job-row selected' : 'job-row'}><Button variant="ghost" class="job-select" onclick={() => void selectJob(job.id)}><span class="document-icon" aria-hidden="true">{job.status === 'succeeded' ? '✓' : '▤'}</span><span class="job-copy"><strong>{job.filename}</strong><span>{job.progress?.message ?? (job.status === 'queued' ? 'Waiting for the worker' : labels[job.status])}</span>{#if active(job)}<progress class="progress-track" aria-label={`${job.filename} progress`} value={percent(job)} max="100"></progress>{/if}</span><Badge variant="secondary" class="pill {job.status}">{labels[job.status]}</Badge></Button>{#if active(job)}<Button variant="ghost" class="cancel-job" aria-label={`Cancel ${job.filename}`} onclick={() => void cancelJob(job.id)}>×</Button>{/if}</div>{/each}</div>{/if}
+              <div class="queue-footer"><span>{total ? `Showing ${offset + 1}–${pageEnd} of ${total} jobs` : 'Your queue is ready.'}</span><div><Button variant="ghost" class="quiet" aria-label="Previous jobs" disabled={!offset || refreshing} onclick={() => changePage(Math.max(0, offset - 50))}>←</Button><Button variant="ghost" class="quiet" aria-label="Next jobs" disabled={offset + 50 >= total || refreshing} onclick={() => changePage(offset + 50)}>→</Button></div></div>
+            </Card.Root>
 
-            {#if selected}<section class="card preview-card"><div class="section-heading"><div><div class="eyebrow">DOCUMENT PREVIEW</div><h2>{selected.filename}</h2><p>{selected.result ? `${chunks.length} chunks${selected.result.page_count ? ` · ${selected.result.page_count} pages` : ''}` : labels[selected.status]}</p></div>{#if selected.status === 'succeeded'}<button class="secondary" onclick={download}>Download JSON <span aria-hidden="true">↓</span></button>{/if}</div>{#if selected.error}<div class="notice danger" role="alert">{selected.error}</div>{/if}{#if detailState === 'loading'}<p class="preview-empty" role="status">Loading document preview…</p>{:else if detailState === 'error'}<p class="preview-empty" role="status">Document preview could not be loaded. Refresh the queue to retry.</p>{:else if !chunks.length}<p class="preview-empty">{active(selected) ? 'Chunks will appear here when processing finishes.' : 'This job has no chunks to preview.'}</p>{:else}<div class="chunks">{#each visibleChunks as chunk, index}<article class="chunk"><div class="chunk-meta"><span>CHUNK {previewPage * chunkLimit + index + 1}</span>{#if chunk.page}<span>Page {chunk.page}{chunk.page_end && chunk.page_end !== chunk.page ? `–${chunk.page_end}` : ''}</span>{/if}{#if chunk.token_count}<span>{chunk.token_count} tokens</span>{/if}</div>{#if chunk.headings?.length}<h3>{chunk.headings.join(' › ')}</h3>{/if}<p>{chunk.text ?? chunk.embedding_text ?? ''}</p></article>{/each}</div><div class="queue-footer"><span>Showing {previewPage * chunkLimit + 1}–{Math.min((previewPage + 1) * chunkLimit, chunks.length)} of {chunks.length} chunks</span><div><button class="quiet" disabled={previewPage === 0} aria-label="Previous chunks" onclick={() => previewPage -= 1}>←</button><button class="quiet" disabled={(previewPage + 1) * chunkLimit >= chunks.length} aria-label="Next chunks" onclick={() => previewPage += 1}>→</button></div></div>{/if}</section>{/if}
+            {#if selected}<Card.Root class="card preview-card"><div class="section-heading"><div><div class="eyebrow">DOCUMENT PREVIEW</div><h2>{selected.filename}</h2><p>{selected.result ? `${chunks.length} chunks${selected.result.page_count ? ` · ${selected.result.page_count} pages` : ''}` : labels[selected.status]}</p></div>{#if selected.status === 'succeeded'}<Button variant="ghost" class="secondary" onclick={download}>Download JSON <span aria-hidden="true">↓</span></Button>{/if}</div>{#if selected.error}<div class="notice danger" role="alert">{selected.error}</div>{/if}{#if detailState === 'loading'}<p class="preview-empty" role="status">Loading document preview…</p>{:else if detailState === 'error'}<p class="preview-empty" role="status">Document preview could not be loaded. Refresh the queue to retry.</p>{:else if !chunks.length}<p class="preview-empty">{active(selected) ? 'Chunks will appear here when processing finishes.' : 'This job has no chunks to preview.'}</p>{:else}<div class="chunks">{#each visibleChunks as chunk, index}<article class="chunk"><div class="chunk-meta"><span>CHUNK {previewPage * chunkLimit + index + 1}</span>{#if chunk.page}<span>Page {chunk.page}{chunk.page_end && chunk.page_end !== chunk.page ? `–${chunk.page_end}` : ''}</span>{/if}{#if chunk.token_count}<span>{chunk.token_count} tokens</span>{/if}</div>{#if chunk.headings?.length}<h3>{chunk.headings.join(' › ')}</h3>{/if}<p>{chunk.text ?? chunk.embedding_text ?? ''}</p></article>{/each}</div><div class="queue-footer"><span>Showing {previewPage * chunkLimit + 1}–{Math.min((previewPage + 1) * chunkLimit, chunks.length)} of {chunks.length} chunks</span><div><Button variant="ghost" class="quiet" disabled={previewPage === 0} aria-label="Previous chunks" onclick={() => previewPage -= 1}>←</Button><Button variant="ghost" class="quiet" disabled={(previewPage + 1) * chunkLimit >= chunks.length} aria-label="Next chunks" onclick={() => previewPage += 1}>→</Button></div></div>{/if}</Card.Root>{/if}
           </div>
-          <aside class="setup-column"><section class="card setup-card"><div class="eyebrow">NEXT UPLOAD</div><h2>Job setup</h2><dl><dt>Output</dt><dd>{options.mode === 'chunks' ? 'Chunks only' : options.mode === 'vectors' ? 'Chunks and vectors' : config?.qdrant_label}</dd><dt>Document model</dt><dd>{vlmName(options.vlm)}</dd><dt>Processing</dt><dd>{options.accelerator === 'cuda' ? 'GPU on worker' : 'CPU on worker'}</dd>{#if options.mode !== 'chunks'}<dt>Embedding model</dt><dd>{options.model || 'Choose a model'}</dd>{/if}{#if options.mode === 'ingest'}<dt>Collection</dt><dd>{options.collection}</dd>{/if}</dl><button class="secondary full" onclick={() => tab = 'settings'}>Edit job settings <span aria-hidden="true">→</span></button></section><div class="workspace-note"><span aria-hidden="true">◈</span><p>Your browser talks only to this worker. Qdrant credentials stay on the server.</p></div></aside>
+          <aside class="setup-column"><Card.Root class="card setup-card"><div class="eyebrow">NEXT UPLOAD</div><h2>Job setup</h2><dl><dt>Output</dt><dd>{options.mode === 'chunks' ? 'Chunks only' : options.mode === 'vectors' ? 'Chunks and vectors' : config?.qdrant_label}</dd><dt>Document model</dt><dd>{vlmName(options.vlm)}</dd><dt>Processing</dt><dd>{options.accelerator === 'cuda' ? 'GPU on worker' : 'CPU on worker'}</dd>{#if options.mode !== 'chunks'}<dt>Embedding model</dt><dd>{options.model || 'Choose a model'}</dd>{/if}{#if options.mode === 'ingest'}<dt>Collection</dt><dd>{options.collection}</dd>{/if}</dl><Button variant="ghost" class="secondary full" onclick={() => tab = 'settings'}>Edit job settings <span aria-hidden="true">→</span></Button></Card.Root><div class="workspace-note"><span aria-hidden="true">◈</span><p>Your browser talks only to this worker. Qdrant credentials stay on the server.</p></div></aside>
         </div>
       {/if}
     </main>
