@@ -9,7 +9,7 @@ struct EmbeddingCacheSettingsPane: View {
         Toggle("Streaming Pipeline", isOn: $streaming)
             .disabled(host == .devbox)
         Toggle("Reuse embeddings in Qdrant", isOn: $reuseEmbeddings)
-            .disabled(streaming || host == .devbox)
+            .disabled(host == .devbox)
         Text(explanation)
             .font(.caption)
             .foregroundStyle(.secondary)
@@ -23,7 +23,7 @@ struct EmbeddingCacheSettingsPane: View {
             return "These controls apply to Local Mac ingest. Devbox jobs use the worker's chunk cache. Your local preferences are kept."
         }
         if streaming {
-            return "Streaming embeds and uploads batches without checking existing Qdrant chunks. Turn streaming off to reuse embeddings already in the collection. Your reuse preference is kept."
+            return "Fresh streaming batches skip the Qdrant reuse lookup. When the chunk cache supplies all vectors, Qdrant reuse still applies even with streaming on. Turn streaming off to check Qdrant for other imports too."
         }
         return "With streaming off, reuse skips embedding unchanged chunks already in the target Qdrant collection for the same source, library, and model."
     }
