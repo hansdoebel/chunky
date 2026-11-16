@@ -57,6 +57,30 @@ for (const theme of ['light', 'dark'] as const) {
   });
 }
 
+test('failed retrieval details distinguish wrong chunks, wrong pages and no answer', async ({ page }) => {
+  await mockInsights(page);
+  const queries = [
+    { query: 'Wrong chunk fixture', expected_chunk_id: 'expected', expected_page: 1, top_chunk_id: 'other', top_page: 1, passed: false },
+    { query: 'Wrong page fixture', expected_chunk_id: 'expected', expected_page: 1, top_chunk_id: 'expected', top_page: 2, passed: false },
+    { query: 'No answer fixture', expected_chunk_id: 'expected', expected_page: 1, top_chunk_id: '', top_page: null, passed: false },
+  ];
+  await page.route('**/v1/jobs/insight-fixture/verification', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...fixtureReport, status: 'red', attributions: [], retrieval: { status: 'red', queries } }) }));
+  await connect(page);
+  await page.getByRole('button', { name: 'View verification report' }).click();
+  const findings = page.getByRole('region', { name: 'Verification details', exact: true }).locator('article');
+  await expect(findings).toHaveCount(3);
+  for (const finding of await findings.all()) {
+    await expect(finding).toContainText('Needs attention');
+    await expect(finding).toContainText('Expected chunk: expected · page: 1');
+  }
+  await expect(findings.nth(0)).toContainText('Wrong chunk fixture');
+  await expect(findings.nth(0)).toContainText('Returned chunk: other · page: 1');
+  await expect(findings.nth(1)).toContainText('Wrong page fixture');
+  await expect(findings.nth(1)).toContainText('Returned chunk: expected · page: 2');
+  await expect(findings.nth(2)).toContainText('No answer fixture');
+  await expect(findings.nth(2)).toContainText('Returned chunk: No result · page: No result');
+});
+
 test('verification pages, findings and stages have explicit bounded pagination', async ({ page }) => {
   await mockInsights(page);
   await page.route('**/v1/jobs/insight-fixture?*', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...fixtureJob, result: { ...fixtureJob.result, metrics: { ...fixtureJob.result.metrics, stages: Array.from({ length: 23 }, (_, index) => ({ name: `fixture_stage_${index}`, status: 'ok', duration_ms: index })) } } }) }));

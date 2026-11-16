@@ -30,6 +30,19 @@ describe('verification insight reports', () => {
     expect(parsed.findings[2].detail).toBe('Cosine similarity: 0.0000');
     expect(parsed.checks.find((item) => item.name === 'Page attribution')?.status).toBe('red');
   });
+  it('distinguishes incorrect retrieved chunks and pages from no result or unrecorded fields', () => {
+    const queries = [
+      { query: 'Wrong chunk fixture', expected_chunk_id: 'expected', expected_page: 1, top_chunk_id: 'other', top_page: 1, passed: false },
+      { query: 'Wrong page fixture', expected_chunk_id: 'expected', expected_page: 1, top_chunk_id: 'expected', top_page: 2, passed: false },
+      ...['', null].map((top_chunk_id) => ({ query: 'No answer fixture', expected_chunk_id: 'expected', expected_page: 1, top_chunk_id, top_page: null, passed: false })),
+      { query: 'Partial legacy fixture', expected_chunk_id: 'expected', expected_page: 1 },
+    ];
+    const findings = verificationInsights({ status: 'red', retrieval: { status: 'red', queries } }).findings;
+    expect(findings[0]).toMatchObject({ status: 'red', detail: 'Wrong chunk fixture\nExpected chunk: expected · page: 1\nReturned chunk: other · page: 1' });
+    expect(findings[1].detail).toContain('Returned chunk: expected · page: 2');
+    for (const finding of findings.slice(2, 4)) expect(finding).toMatchObject({ status: 'red', detail: 'No answer fixture\nExpected chunk: expected · page: 1\nReturned chunk: No result · page: No result' });
+    expect(findings[4]).toMatchObject({ status: 'unknown', detail: 'Partial legacy fixture\nExpected chunk: expected · page: 1\nReturned chunk: Not recorded · page: Not recorded' });
+  });
   it('rejects malformed reports instead of showing a false green status', () => {
     for (const value of [null, [], {}, { status: [] }, { status: 'ok' }, { status: 'error' }]) expect(() => verificationInsights(value)).toThrow('invalid verification report');
   });
