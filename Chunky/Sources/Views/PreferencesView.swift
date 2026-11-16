@@ -263,8 +263,11 @@ struct PreferencesView: View {
                 StepperRow(
                     label: "Concurrency", value: $appState.settings.embeddingConcurrency,
                     range: 1...4)
-                Toggle("Streaming Pipeline", isOn: $appState.settings.streamingPipeline)
-                Toggle("Embedding Cache", isOn: $appState.settings.enableEmbeddingCache)
+                EmbeddingCacheSettingsPane(
+                    streaming: $appState.settings.streamingPipeline,
+                    reuseEmbeddings: $appState.settings.enableEmbeddingCache,
+                    host: appState.settings.processingHost
+                )
             } header: {
                 Text("Performance")
             }

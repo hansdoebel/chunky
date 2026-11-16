@@ -95,6 +95,15 @@ The Retrieval tab searches the active collection and the active paper library. W
 
 Collections can create a Qdrant snapshot, download it, and restore it onto the server the browser is using. Restoring asks before it overwrites that collection.
 
+## Embedding and chunk caches
+
+Preferences, Embeddings, Performance distinguishes two mechanisms:
+
+- **Reuse embeddings in Qdrant** applies to Local Mac ingest with **Streaming Pipeline off**. It checks existing chunks in the target collection for the same source, library, and text/model hash, and embeds only changed chunks. The control is disabled while streaming is on (the default), because streaming embeds and uploads batches without that Qdrant lookup. Switching pipelines keeps the saved reuse preference. These local controls do not configure Devbox jobs.
+- The separate **chunk cache** reuses Docling conversions when the file content, Docling version, pipeline, and chunker settings match. Stored vectors are reused only for a matching embedding model and dimension. This works independently of streaming and the Qdrant reuse toggle; streaming can therefore report a chunk/vector cache hit. Preferences, About, Chunk cache sets its storage limit and clears it. Reconvert bypasses this cache. Devbox jobs use the worker's chunk cache.
+
+No collection is recreated or reconfigured by changing these controls.
+
 ## Architecture
 
 ```
