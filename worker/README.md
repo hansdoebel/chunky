@@ -126,6 +126,11 @@ An item with `should` is one alternative inside a required group. Each item has
 `expand_section` replaces a hit with the stored sibling chunks that share its
 heading path when the sibling ratio is met. The ratio defaults to 0.5.
 
+Element-type aliases use the shared `element_types.py` from
+`CHUNKY_SCRIPTS_DIR` when configured. Installed workers should point that
+directory at the deployed `Chunky/Resources/Scripts`; repository checkouts
+keep the existing default.
+
 A collection whose dense vector width does not match the query vector is
 refused with HTTP 409 and `error_type: dimension_mismatch` before the query.
 A missing collection is HTTP 404. The response `results` are `{id, score, payload}`.
