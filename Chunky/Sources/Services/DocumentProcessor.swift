@@ -17,8 +17,47 @@ class DocumentProcessor: ObservableObject {
     private var activeDevboxJobID: String?
     private var devboxBaseURL = ""
     private var devboxToken = ""
+    private let fallbackPreflight: (String) async throws -> Void
+    private let fallbackRunner: ((ProcessingJob, AppSettings, ProcessingMode) async -> Void)?
+    private let workerRunner: ((ProcessingJob, AppSettings, ProcessingMode) async -> Void)?
+    private var fallbackProcessors: [UUID: DocumentProcessor] = [:]
+    private var isolatedLocalSettings: AppSettings?
+    private var isolatedQdrant: QdrantService?
+    private var isolatedCacheDirectory: URL?
+
+    init(
+        fallbackPreflight: @escaping (String) async throws -> Void = { baseURL in
+            try await DevboxWorkerService().checkFallbackAvailability(baseURL: baseURL)
+        },
+        fallbackRunner: ((ProcessingJob, AppSettings, ProcessingMode) async -> Void)? = nil,
+        workerRunner: ((ProcessingJob, AppSettings, ProcessingMode) async -> Void)? = nil
+    ) {
+        self.fallbackPreflight = fallbackPreflight
+        self.fallbackRunner = fallbackRunner
+        self.workerRunner = workerRunner
+    }
+
+    private var currentQdrant: QdrantService? {
+        isolatedLocalSettings == nil ? appState?.qdrantService : isolatedQdrant
+    }
+
+    private func ensureQdrantConnection() async throws {
+        if let settings = isolatedLocalSettings {
+            if isolatedQdrant == nil {
+                isolatedQdrant = QdrantService()
+                try await isolatedQdrant?.configure(url: settings.qdrantURL, apiKey: nil)
+            }
+            if isolatedQdrant?.isConnected != true {
+                try await isolatedQdrant?.connect(timeout: settings.qdrantTimeout)
+            }
+        } else {
+            guard let appState else { throw QdrantError.notConnected }
+            try await appState.ensureQdrantConnection()
+        }
+    }
 
     func cancel() {
+        for processor in fallbackProcessors.values { processor.cancel() }
         currentTask?.cancel()
         currentTask = nil
         let jobID = activeDevboxJobID
@@ -79,11 +118,37 @@ class DocumentProcessor: ObservableObject {
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
         let libraryID = LibraryFilter.assignedID(settings.activeLibraryID)
-        defer { appState?.storeFinishedRun(job, settings: settings) }
+        defer {
+            if isolatedLocalSettings == nil { appState?.storeFinishedRun(job, settings: settings) }
+        }
         job.ingestCollection = targetCollection(job: job, settings: settings)
         rememberIngestTarget(job: job, settings: settings)
+        if isolatedLocalSettings == nil { job.localFallbackNotice = nil }
         if settings.processingHost == .devbox {
-            await processOnDevbox(job: job, settings: settings, mode: mode, libraryID: libraryID)
+            if settings.allowLocalFallback {
+                do {
+                    try Task.checkCancellation()
+                    job.status = .chunking
+                    job.error = nil
+                    job.statusMessage = "Checking worker before upload..."
+                    try await fallbackPreflight(settings.devboxWorkerURL)
+                    try Task.checkCancellation()
+                } catch {
+                    if !Task.isCancelled && LocalFallbackPolicy.isUnreachable(error) {
+                        await processWithLocalFallback(job: job, settings: settings, mode: mode)
+                    } else {
+                        job.status = .failed
+                        job.error = Task.isCancelled ? "Cancelled" : error.localizedDescription
+                        job.statusMessage = job.error ?? "Worker check failed"
+                    }
+                    return
+                }
+            }
+            if let workerRunner {
+                await workerRunner(job, settings, mode)
+            } else {
+                await processOnDevbox(job: job, settings: settings, mode: mode, libraryID: libraryID)
+            }
             return
         }
         job.status = .chunking
@@ -552,6 +617,34 @@ class DocumentProcessor: ObservableObject {
         }
     }
 
+    private func processWithLocalFallback(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
+        do {
+            let plan = try LocalFallbackPlan.make(from: settings, mode: mode, collection: targetCollection(job: job, settings: settings))
+            defer { plan.discard() }
+            try Task.checkCancellation()
+            job.workerJobID = nil
+            job.preparedEmbeddings = nil
+            job.localFallbackNotice = plan.notice
+            if let fallbackRunner {
+                await fallbackRunner(job, plan.settings, mode)
+            } else {
+                let local = DocumentProcessor()
+                local.appState = appState
+                local.isolatedLocalSettings = plan.settings
+                local.isolatedCacheDirectory = plan.cacheDirectory
+                fallbackProcessors[job.id] = local
+                await local.process(job: job, settings: plan.settings, mode: mode)
+                await local.isolatedQdrant?.disconnect()
+                fallbackProcessors[job.id] = nil
+                job.localFallbackNotice = plan.notice
+            }
+        } catch {
+            job.status = .failed
+            job.error = error is CancellationError ? "Cancelled" : error.localizedDescription
+            job.statusMessage = job.error ?? "Local fallback failed"
+        }
+    }
+
     private func remoteDoclingVersion(settings: AppSettings) async -> String? {
         let trimmed = settings.devboxWorkerURL.trimmingCharacters(in: .whitespacesAndNewlines).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
         guard let url = URL(string: trimmed + "/v1/health") else { return nil }
@@ -682,7 +775,7 @@ class DocumentProcessor: ObservableObject {
         }
         return ChunkCacheBridge(
             settings: settings,
-            directory: ChunkCacheLocation.macDirectory(),
+            directory: isolatedCacheDirectory ?? ChunkCacheLocation.macDirectory(),
             remote: remote
         )
     }
@@ -896,7 +989,7 @@ class DocumentProcessor: ObservableObject {
         var cachedPoints: [ChunkPoint] = []
         var cachedHashes: Set<String>? = nil
 
-        if settings.enableEmbeddingCache, let appState = appState, let qdrant = appState.qdrantService {
+        if settings.enableEmbeddingCache, let qdrant = currentQdrant {
             let collectionName = targetCollection(job: job, settings: settings)
             let exists = try? await qdrant.collectionExists(collectionName)
             if exists == true {
@@ -1044,7 +1137,7 @@ class DocumentProcessor: ObservableObject {
             }
         }
 
-        if let hashes = cachedHashes, let appState = appState, let qdrant = appState.qdrantService {
+        if let hashes = cachedHashes, let qdrant = currentQdrant {
             let existingPoints = try await qdrant.loadPointsBySource(
                 collectionName: targetCollection(job: job, settings: settings),
                 source: job.fileName
@@ -1079,9 +1172,8 @@ class DocumentProcessor: ObservableObject {
         ingestedAt: String,
         libraryID: String
     ) async throws {
-        guard let appState = appState else { throw QdrantError.notConnected }
-        try await appState.ensureQdrantConnection()
-        guard let qdrant = appState.qdrantService else { throw QdrantError.notConnected }
+        try await ensureQdrantConnection()
+        guard let qdrant = currentQdrant else { throw QdrantError.notConnected }
 
         let batchSize = settings.embeddingBatchSize
         let totalBatches = (chunks.count + batchSize - 1) / batchSize
@@ -1429,9 +1521,8 @@ class DocumentProcessor: ObservableObject {
         if let supplied {
             qdrant = supplied
         } else {
-            guard let appState else { throw QdrantError.notConnected }
-            try await appState.ensureQdrantConnection()
-            guard let connected = appState.qdrantService else { throw QdrantError.notConnected }
+            try await ensureQdrantConnection()
+            guard let connected = currentQdrant else { throw QdrantError.notConnected }
             qdrant = connected
         }
         if try await qdrant.collectionExists(targetCollection(job: job, settings: settings)) {
@@ -1505,9 +1596,9 @@ class DocumentProcessor: ObservableObject {
     @MainActor
     private func probedVectorSize(settings: AppSettings, ollama: OllamaService, collection: String) async throws -> Int {
         let probed = try await ollama.probeDimension(model: settings.embeddingModel)
-        guard let appState else { return probed }
-        try await appState.ensureQdrantConnection()
-        guard let qdrant = appState.qdrantService else { return probed }
+        guard appState != nil || isolatedLocalSettings != nil else { return probed }
+        try await ensureQdrantConnection()
+        guard let qdrant = currentQdrant else { return probed }
         if try await qdrant.collectionExists(collection) {
             let info = try await qdrant.getCollectionInfo(collection)
             try EmbeddingDimensionError.validate(
@@ -1555,13 +1646,13 @@ class DocumentProcessor: ObservableObject {
         libraryID: String? = nil,
         onProgress: @escaping (UploadProgress) -> Void
     ) async throws {
-        guard let appState = appState else {
+        guard let executionSettings = isolatedLocalSettings ?? appState?.settings else {
             throw QdrantError.notConnected
         }
 
-        try await appState.ensureQdrantConnection()
+        try await ensureQdrantConnection()
 
-        guard let service = appState.qdrantService else {
+        guard let service = currentQdrant else {
             throw QdrantError.notConnected
         }
 
@@ -1580,7 +1671,7 @@ class DocumentProcessor: ObservableObject {
             onDiskPayload: createOptions.onDiskPayload,
             quantizationConfig: quantizationValue(createOptions)
         )
-        await applySavedPacking(collection: collectionName, settings: appState.settings)
+        await applySavedPacking(collection: collectionName, settings: executionSettings)
 
         if let source = dedupSource {
             try await service.deleteBySource(
@@ -1596,7 +1687,7 @@ class DocumentProcessor: ObservableObject {
             batchSize: batchSize,
             onProgress: onProgress
         )
-        appState.settings.noteQdrantSuccess()
+        executionSettings.noteQdrantSuccess()
     }
 
     private func applySavedPacking(collection: String, settings: AppSettings) async {
