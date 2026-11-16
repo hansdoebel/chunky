@@ -2,6 +2,10 @@
 
 Open the worker URL in a browser to upload documents, follow queue progress, cancel work, preview chunks, and choose job settings. The workspace uses the same port and API as the macOS app. Evaluation, RAG chat, and reranking remain in the app.
 
+![Worker browser chunk preview](images/web-workspace.png)
+
+Captured by the macOS browser unit tests with explicitly labeled fixture chunks; this image is not a live conversion result.
+
 ## Build and start
 
 From the repository root, use Node.js 24.22.1 and the committed npm lockfile:
