@@ -1,0 +1,91 @@
+name: Web UI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: web-ui-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    name: Detect web UI paths
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: read
+    outputs:
+      web: ${{ steps.filter.outputs.web }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: dorny/paths-filter@ceb8a2b8f2d89434be7ff52d3de7ec3738c5cc9d
+        id: filter
+        with:
+          base: ${{ github.event_name == 'push' && github.ref || '' }}
+          filters: |
+            web:
+              - 'worker/web/**'
+              - 'worker/chunky_worker/**'
+              - 'worker/pyproject.toml'
+              - 'worker/requirements*.txt'
+              - 'worker/deploy/**'
+              - 'worker/tests/test_web*.py'
+              - 'Makefile'
+              - '.github/workflows/web-ui.yml'
+
+  web:
+    name: Web UI build and browser unit tests
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.web != 'false') }}
+    runs-on: xcode-27
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: worker/web
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24.22.1'
+          cache: npm
+          cache-dependency-path: worker/web/package-lock.json
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install locked frontend dependencies
+        run: npm ci
+      - name: Check Svelte and TypeScript
+        run: npm run check
+      - name: Frontend unit tests
+        run: npm run test:unit
+      - name: Build worker web assets
+        run: npm run build
+      - name: Verify wheel includes the built workspace
+        working-directory: .
+        run: |
+          python -m pip wheel --no-deps ./worker --wheel-dir /tmp/chunky-web-wheel
+          python - <<'PY'
+          from pathlib import Path
+          from zipfile import ZipFile
+          wheel = next(Path('/tmp/chunky-web-wheel').glob('chunky_worker-*.whl'))
+          with ZipFile(wheel) as package:
+              names = package.namelist()
+              assert 'chunky_worker/web_dist/index.html' in names
+              assert any(name.startswith('chunky_worker/web_dist/assets/') and name.endswith('.js') for name in names)
+          PY
+      - name: Install browser runtime
+        run: npx playwright install chromium
+      - name: Browser component tests and macOS screenshots
+        run: npm run test:browser
+      - name: Upload web UI screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: web-ui-screenshots
+          path: /tmp/chunky-web-*.png
+          if-no-files-found: error

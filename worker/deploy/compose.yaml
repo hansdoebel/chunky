@@ -20,6 +20,7 @@ services:
       CHUNKY_VLLM_URL: http://127.0.0.1:8000
       CHUNKY_EMBEDDING_MODEL: qwen3-embedding:0.6b
       CHUNKY_QDRANT_URL: ${CHUNKY_QDRANT_URL:-}
+      CHUNKY_QDRANT_API_KEY: ${CHUNKY_QDRANT_API_KEY:-}
     secrets:
       - worker_token
     devices:
