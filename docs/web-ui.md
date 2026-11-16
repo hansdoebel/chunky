@@ -85,3 +85,9 @@ The light and dark captures below came from macOS browser CI run [43977623510](h
 ![Dark worker workspace](images/web-dark-workspace.png)
 
 ![Dark mobile workspace](images/web-dark-mobile.png)
+
+Job insight captures from macOS CI run [43978441720](https://github.com/hansdoebel/chunky/actions/runs/43978441720) use mocked timing and verification data, with nonblank image assertions. These are interface fixtures, not hardware measurements or document-quality results.
+
+![Light job insights](images/web-insights-light.png)
+
+![Dark mobile job insights](images/web-insights-dark-mobile.png)
