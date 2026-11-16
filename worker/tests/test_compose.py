@@ -12,10 +12,26 @@ import pytest
 DEPLOY = Path(__file__).resolve().parents[1] / "deploy"
 
 
-@pytest.fixture(scope="module")
-def compose_config():
+def require_compose():
     if not shutil.which("docker"):
         pytest.skip("Docker Compose CLI is needed for configuration validation only")
+    probe = subprocess.run(
+        ["docker", "compose", "version"],
+        capture_output=True,
+        text=True,
+        timeout=10,
+    )
+    if probe.returncode != 0:
+        pytest.skip("Docker Compose plugin is unavailable")
+
+
+@pytest.fixture(scope="module")
+def compose_cli():
+    require_compose()
+
+
+@pytest.fixture(scope="module")
+def compose_config(compose_cli):
     env = {
         **os.environ,
         "CHUNKY_BIND_IP": "127.0.0.1",
@@ -76,9 +92,7 @@ def test_worker_requires_file_token_and_gpu_access(compose_config):
 
 
 @pytest.mark.parametrize("missing", ["CHUNKY_BIND_IP", "CHUNKY_TOKEN_FILE", "CHUNKY_VIDEO_GID", "CHUNKY_RENDER_GID"])
-def test_compose_refuses_missing_required_settings(missing):
-    if not shutil.which("docker"):
-        pytest.skip("Docker Compose CLI is needed for configuration validation only")
+def test_compose_refuses_missing_required_settings(compose_cli, missing):
     env = {**os.environ, "CHUNKY_BIND_IP": "127.0.0.1", "CHUNKY_VIDEO_GID": "44", "CHUNKY_RENDER_GID": "109", "CHUNKY_TOKEN_FILE": "/tmp/chunky-compose-unit-token"}
     env[missing] = ""
     result = subprocess.run(
@@ -102,3 +116,18 @@ def test_upstream_images_have_version_tags(compose_config):
     for image in [base, *images]:
         assert ":" in image
         assert image.rsplit(":", 1)[1] not in {"latest", "rocm", "main", "nightly"}
+
+
+
+def test_missing_compose_plugin_skips_configuration_validation(monkeypatch):
+    calls = []
+    monkeypatch.setattr(shutil, "which", lambda _: "/usr/bin/docker")
+
+    def run(args, **kwargs):
+        calls.append(args)
+        return subprocess.CompletedProcess(args, 1, stderr="docker: 'compose' is not a docker command")
+
+    monkeypatch.setattr(subprocess, "run", run)
+    with pytest.raises(pytest.skip.Exception, match="Compose plugin is unavailable"):
+        require_compose()
+    assert calls == [["docker", "compose", "version"]]
