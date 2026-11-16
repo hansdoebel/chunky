@@ -124,6 +124,26 @@ class DocumentProcessor: ObservableObject {
         job.ingestCollection = targetCollection(job: job, settings: settings)
         rememberIngestTarget(job: job, settings: settings)
         if isolatedLocalSettings == nil { job.localFallbackNotice = nil }
+        if mode == .full {
+            do {
+                try FastEmbedCollectionIdentity.validate(
+                    collection: targetCollection(job: job, settings: settings),
+                    backend: settings.embeddingBackend,
+                    model: settings.embeddingModel,
+                    defaults: settings.defaults
+                )
+            } catch {
+                job.status = .failed
+                job.error = error.localizedDescription
+                job.statusMessage = job.error ?? "Incompatible embedding model"
+                return
+            }
+        }
+        if mode == .full, settings.processingHost == .devbox, settings.embeddingBackend == "fastembed" {
+            job.status = .failed
+            job.error = "Local CPU embeddings require Processing host Local Mac. Devbox embedding is never selected automatically."
+            return
+        }
         if settings.processingHost == .devbox {
             if settings.allowLocalFallback {
                 do {
@@ -524,15 +544,12 @@ class DocumentProcessor: ObservableObject {
                 return
             }
 
+            try FastEmbedCollectionIdentity.validate(collection: targetCollection(job: job, settings: settings), backend: settings.embeddingBackend, model: settings.embeddingModel, defaults: settings.defaults)
+
             job.status = .embedding
             job.statusMessage = "Generating embeddings..."
 
-            let ollama = try getOllamaService(baseURL: settings.ollamaURL)
-
-            let isAvailable = await ollama.isAvailable()
-            if !isAvailable {
-                throw QdrantError.operationFailed("Ollama is not running at \(settings.ollamaURL)")
-            }
+            let ollama = LocalEmbeddingService(backend: settings.embeddingBackend, ollamaURL: settings.ollamaURL, apiURL: settings.embeddingAPIURL)
 
             let createOptions = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
             if createOptions.target == .qdrantCloud {
@@ -666,9 +683,12 @@ class DocumentProcessor: ObservableObject {
         started: CFAbsoluteTime,
         libraryID: String
     ) async throws -> Bool {
+        if mode == .full {
+            try FastEmbedCollectionIdentity.validate(collection: targetCollection(job: job, settings: settings), backend: settings.embeddingBackend, model: settings.embeddingModel, defaults: settings.defaults)
+        }
         var vectors = (cached.vectors ?? []).map { row in row.map(Float.init) }
         if mode == .full, vectors.count != cached.chunks.count {
-            let ollama = try getOllamaService(baseURL: settings.ollamaURL)
+            let ollama = LocalEmbeddingService(backend: settings.embeddingBackend, ollamaURL: settings.ollamaURL, apiURL: settings.embeddingAPIURL)
             let texts = cached.chunks.map { $0.embeddingText.isEmpty ? $0.text : $0.embeddingText }
             vectors = try await ollama.embedBatch(texts: texts, model: settings.embeddingModel)
             let digest = RunHistory.contentHash(ofFile: job.sourceURL)
@@ -979,7 +999,7 @@ class DocumentProcessor: ObservableObject {
         job: ProcessingJob,
         chunks: [ChunkingService.DocumentChunk],
         settings: AppSettings,
-        ollama: OllamaService,
+        ollama: LocalEmbeddingService,
         createOptions: CollectionCreateOptions,
         ingestedAt: String,
         libraryID: String,
@@ -1167,7 +1187,7 @@ class DocumentProcessor: ObservableObject {
         job: ProcessingJob,
         chunks: [ChunkingService.DocumentChunk],
         settings: AppSettings,
-        ollama: OllamaService,
+        ollama: LocalEmbeddingService,
         createOptions: CollectionCreateOptions,
         ingestedAt: String,
         libraryID: String
@@ -1509,6 +1529,7 @@ class DocumentProcessor: ObservableObject {
 
     @MainActor
     private func ingestReturnedVectors(job: ProcessingJob, settings: AppSettings, parsed: ParsedWorkerJob, qdrant supplied: QdrantService? = nil, libraryID: String? = nil) async throws {
+        try FastEmbedCollectionIdentity.validate(collection: targetCollection(job: job, settings: settings), backend: settings.embeddingBackend, model: settings.embeddingModel, defaults: settings.defaults)
         guard parsed.embeddings.count == parsed.chunks.count, !parsed.embeddings.isEmpty else {
             throw DevboxClientError.http(
                 url: settings.devboxWorkerURL,
@@ -1594,7 +1615,8 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
-    private func probedVectorSize(settings: AppSettings, ollama: OllamaService, collection: String) async throws -> Int {
+    private func probedVectorSize(settings: AppSettings, ollama: LocalEmbeddingService, collection: String) async throws -> Int {
+        try FastEmbedCollectionIdentity.validate(collection: collection, backend: settings.embeddingBackend, model: settings.embeddingModel, defaults: settings.defaults)
         let probed = try await ollama.probeDimension(model: settings.embeddingModel)
         guard appState != nil || isolatedLocalSettings != nil else { return probed }
         try await ensureQdrantConnection()
