@@ -78,6 +78,8 @@ jobs:
               names = package.namelist()
               assert 'chunky_worker/web_dist/index.html' in names
               assert any(name.startswith('chunky_worker/web_dist/assets/') and name.endswith('.js') for name in names)
+              assert any(name.startswith('chunky_worker/web_dist/assets/') and name.endswith('.css') for name in names)
+              assert 'chunky_worker/web_dist/assets/THIRD_PARTY_NOTICES.txt' in names
           PY
       - name: Install browser runtime
         run: bunx playwright install chromium
