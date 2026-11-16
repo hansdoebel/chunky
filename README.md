@@ -30,6 +30,8 @@ A native macOS application for processing documents into semantic chunks and sto
 - [Ollama](https://ollama.com/)
 - Python 3.12 (Docling scripts and the worker)
 
+The macOS 27.0 deployment target is intentional: the app, its test bundles, and the vendored `qdrant-swift` package share that baseline, tested with Xcode 27.2 in CI. Availability annotations for older macOS releases in individual types do not lower the app’s supported OS. Supporting an older release requires changing and validating both the app and the package targets.
+
 ```
 brew install protobuf swift-protobuf grpc-swift
 ```
@@ -114,6 +116,17 @@ LocalPackages/    qdrant-swift (gRPC and REST client)
 - [grpc-swift-protobuf](https://github.com/grpc/grpc-swift-protobuf.git) -- GRPCProtobuf
 - [swift-protobuf](https://github.com/apple/swift-protobuf.git)
 - [swift-collections](https://github.com/apple/swift-collections.git)
+
+The gRPC migration already landed in [PER-55 / PR #5](https://github.com/hansdoebel/chunky/pull/5). The vendored `qdrant-swift/Package.swift` and its committed `Package.resolved` record:
+
+| Package | Minimum in manifest | Committed resolution |
+| --- | --- | --- |
+| `grpc-swift-2` | 2.4.4 | 2.4.4 |
+| `grpc-swift-nio-transport` | 2.0.0 | 2.12.0 |
+| `grpc-swift-protobuf` | 2.0.0 | 2.5.0 |
+| `swift-protobuf` | 1.41.0 | 1.41.0 |
+
+These replace the old `grpc-swift` repository and 1.x transport/protobuf bounds. The major migration described as deferred in PER-57 is therefore already complete; no additional migration or downgrade is needed. SwiftPM’s `from:` requirements allow compatible updates within each major version. When updating the vendored package, validate its unit tests with `swift test --package-path LocalPackages/qdrant-swift --skip IntegrationTests` from the repository root, then build and test the macOS app. Live Qdrant integration tests remain a separate operator check outside CI.
 
 ## Resources
 
