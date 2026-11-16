@@ -529,7 +529,8 @@ def create_app(
         response = await call_next(request)
         response.headers["Cache-Control"] = "no-store"
         response.headers["X-Content-Type-Options"] = "nosniff"
-        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        if request.url.path == "/" or request.url.path.startswith("/assets/"):
+            response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
         return response
 
     @app.get("/", include_in_schema=False)
@@ -577,12 +578,17 @@ def _optional_secret(value: object) -> str | None:
 def _reject_secret(report: dict, secret: str | None) -> None:
     if not secret:
         return
-    raw = json.dumps(report)
-    encoded = json.dumps(secret)[1:-1]
-    if encoded not in raw:
-        return
-    report.clear()
-    report.update(json.loads(raw.replace(encoded, "[redacted]")))
+    def sanitized(value):
+        if isinstance(value, str):
+            return value.replace(secret, "[redacted]")
+        if isinstance(value, dict):
+            return {key: sanitized(item) for key, item in value.items()}
+        if isinstance(value, list):
+            return [sanitized(item) for item in value]
+        return value
+
+    for key, value in report.items():
+        report[key] = sanitized(value)
 
 
 def _log_startup(settings: Settings) -> None:

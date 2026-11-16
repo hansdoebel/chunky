@@ -29,7 +29,10 @@ def test_shell_static_auth_and_cache(tmp_settings, tmp_path):
         response = client.get("/v1/ui/config", headers=auth_headers())
         assert response.status_code == 200
         assert response.headers["cache-control"] == "no-store"
-        assert "default-src 'self'" in response.headers["content-security-policy"]
+        assert "content-security-policy" not in response.headers
+        assert "default-src 'self'" in client.get("/").headers["content-security-policy"]
+        assert "content-security-policy" not in client.get("/docs").headers
+        assert "content-security-policy" not in client.get("/redoc").headers
     with TestClient(ui_app(tmp_settings, web_dist=tmp_path / "missing")) as client:
         assert client.get("/").status_code == 503
         assert client.get("/v1/jobs", headers=auth_headers()).status_code == 200
@@ -174,3 +177,16 @@ def test_server_error_redaction_and_upsert_race_guard(monkeypatch):
     with pytest.raises(IngestError, match="failed key=\\[redacted\\]") as error:
         ingestor.validate_identity(url="https://qdrant.example", api_key="server-secret", collection="existing", identity=expected)
     assert "server-secret" not in str(error.value)
+
+
+@pytest.mark.parametrize("secret", [":", "id", '"quoted"', "back\\slash"])
+def test_secret_redaction_preserves_json_structure(secret):
+    from chunky_worker.app import _reject_secret
+
+    report = {"id": "job-123", "error": f"failed {secret}", "nested": [{"value": secret, "count": 3, "ok": True, "empty": None}]}
+    _reject_secret(report, secret)
+    assert set(report) == {"id", "error", "nested"}
+    assert report["id"] == "job-123"
+    assert report["error"] == "failed [redacted]"
+    assert report["nested"] == [{"value": "[redacted]", "count": 3, "ok": True, "empty": None}]
+    assert json.loads(json.dumps(report)) == report
