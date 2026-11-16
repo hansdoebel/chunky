@@ -103,3 +103,78 @@ struct BenchmarkTests {
         #expect(colored > 15)
     }
 }
+
+
+struct EmbeddingBenchmarkReportTests {
+    static func fixture() -> EmbeddingBenchmarkReport {
+        let query = RetrievalEvalQuery(question: "Which paper?", relevantIDs: ["paper-1"])
+        let hash = String(repeating: "a", count: 64)
+        let runs = ["potion", "qwen3"].flatMap { model in
+            [false, true].map { hybrid in
+                EmbeddingBenchmarkReport.Run(
+                    id: UUID(), corpusSHA256: hash, model: model, modelRevision: "fixed-revision",
+                    dimensions: model == "potion" ? 256 : 1024, machine: model == "potion" ? "Mac Studio CPU" : "R9700",
+                    runtime: model == "potion" ? "FastEmbed CPU" : "Ollama Vulkan",
+                    collection: "chunky-benchmark-\(model)", hybrid: hybrid,
+                    coldStartupMs: 50, warmStartupMs: 2, embeddingSeconds: 1, indexingSeconds: 2,
+                    peakMemoryBytes: 1_048_576,
+                    results: [.init(queryID: query.id, retrievedIDs: ["other", "paper-1"], latencyMs: 3)]
+                )
+            }
+        }
+        return EmbeddingBenchmarkReport(schemaVersion: 1, corpusSHA256: hash, chunkCount: 10, chunking: "cached Docling fixture", set: RetrievalEvalSet(name: "Labeled papers", queries: [query]), runs: runs)
+    }
+
+    @Test func comparisonRoundTripsAndReusesEvalMetrics() throws {
+        let report = Self.fixture()
+        let decoded = try EmbeddingBenchmarkReport.decode(JSONEncoder().encode(report), productionCollection: "production")
+        #expect(decoded == report)
+        let score = decoded.runs[0].score(set: decoded.set)
+        #expect(score.recallAtK == 1)
+        #expect(score.mrr == 0.5)
+        #expect(score.hitRate == 1)
+        #expect(score.latencyMs == 3)
+        #expect(score.ndcgAtK > 0.6 && score.ndcgAtK < 0.7)
+    }
+
+    @Test(arguments: 0..<16) func refusesIncomparableOrInvalidReports(kind: Int) {
+        var report = Self.fixture()
+        switch kind {
+        case 0: report.runs[0].corpusSHA256 = String(repeating: "b", count: 64)
+        case 1: report.runs[0].collection = "production"
+        case 2: report.runs[0].dimensions = 0
+        case 3: report.runs[0].modelRevision = ""
+        case 4: report.runs[0].results = []
+        case 5: report.runs[0].results[0].queryID = UUID()
+        case 6: report.runs[0].embeddingSeconds = 0
+        case 7: report.runs[0].results[0].latencyMs = .infinity
+        case 8: report.runs.removeAll { $0.hybrid }
+        case 9: report.set.queries.append(report.set.queries[0])
+        case 10: report.runs[0].peakMemoryBytes = 0
+        case 11: report.runs[0].results[0].retrievedIDs = ["paper-1", "paper-1"]
+        case 12: report.runs[0].indexingSeconds = 0.5
+        case 13: report.runs[0].collection = report.runs[2].collection
+        case 14: report.schemaVersion = 2
+        default: report.runs = []
+        }
+        #expect(throws: (any Error).self) { try report.validate(productionCollection: "production") }
+    }
+
+    @Test @MainActor func comparisonScreenshotIsNotBlank() throws {
+        let renderer = ImageRenderer(content: EmbeddingBenchmarkResults(report: Self.fixture()).padding().frame(width: 1100).environment(\.colorScheme, .light))
+        renderer.scale = 1
+        let image = try #require(renderer.nsImage)
+        let tiff = try #require(image.tiffRepresentation)
+        let bitmap = try #require(NSBitmapImageRep(data: tiff))
+        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        try png.write(to: URL(fileURLWithPath: "/tmp/chunky-embedding-benchmark.png"))
+        var ink = 0
+        for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
+            for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
+                guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
+                if color.alphaComponent > 0.1 && min(color.redComponent, color.greenComponent, color.blueComponent) < 0.8 { ink += 1 }
+            }
+        }
+        #expect(ink > 100)
+    }
+}
