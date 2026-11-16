@@ -217,3 +217,37 @@ test('a transient completed-detail failure retries on queue refresh instead of s
   await expect(page.getByText('Fixture overview', { exact: true })).toBeVisible();
   expect(details).toBe(2);
 });
+
+
+test('accepted upload opens its preview while an older queue refresh is still pending', async ({ page }) => {
+  await mockWorker(page);
+  await login(page);
+  await expect(page.getByText('fixture-research.pdf', { exact: true })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Refresh queue' })).toBeEnabled();
+  let release: (() => void) | undefined;
+  const held = new Promise<void>((resolve) => release = resolve);
+  let queuePending = false;
+  let details = 0;
+  await page.route('**/v1/jobs?*', async (route) => {
+    queuePending = true;
+    await held;
+    queuePending = false;
+    await route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobs: [{ ...fixture, result: undefined }], total: 1, limit: 50, offset: 0 }) });
+  });
+  await page.route('**/v1/jobs/fixture-active?*', (route) => {
+    details++;
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ ...fixture, id: 'fixture-active', filename: 'fixture-upload.txt' }) });
+  });
+  try {
+    await page.getByRole('button', { name: 'Refresh queue' }).click();
+    await expect.poll(() => queuePending).toBe(true);
+    await page.getByLabel('Choose documents').setInputFiles({ name: 'fixture-upload.txt', mimeType: 'text/plain', buffer: Buffer.from('Fixture content') });
+    await page.getByRole('button', { name: 'Add document to queue' }).click();
+    await expect(page.getByRole('heading', { name: 'fixture-upload.txt', exact: true })).toBeVisible();
+    await expect(page.getByText('Fixture overview', { exact: true })).toBeVisible();
+    expect(details).toBeGreaterThanOrEqual(1);
+    expect(queuePending).toBe(true);
+  } finally {
+    release?.();
+  }
+});
