@@ -171,3 +171,7 @@ Each chunk stored in Qdrant can carry:
 - [Qdrant FastEmbed](https://qdrant.tech/documentation/embeddings/fastembed/) and [ColBERT late interaction](https://qdrant.tech/documentation/fastembed/fastembed-colbert/) (FastEmbed 0.9.1 model tables)
 - [SPECTER2](https://allenai.org/blog/specter2-adapting-scientific-document-embeddings-to-multiple-fields-and-task-formats-c95686c06567) and [Topic Is Not Agenda](https://arxiv.org/abs/2605.07158) (May 2026)
 - [Docling page provenance](https://github.com/docling-project/docling/issues/1070)
+
+## Experimental asymmetric retrieval
+
+See the [Constella/Stella investigation](constella-investigation.md) for the exact published pairing, collection safety requirements, and outstanding runtime/quality validation. Constella is not enabled in Chunky.
