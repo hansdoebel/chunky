@@ -173,6 +173,13 @@ sudo ufw deny 8080/tcp
 `http://127.0.0.1:8000` (`CHUNKY_VLLM_URL`). Do not publish them on the LAN.
 A non-loopback URL logs a warning at startup.
 
+## Docker Compose
+
+[ROCm Compose setup](deploy/README.md) starts the worker and loopback-only
+Ollama with pinned images, persistent volumes, and optional vLLM and Qdrant
+profiles. Only the worker port is published on the selected private interface.
+The existing plain-venv deployment remains available below.
+
 ## systemd
 
 `deploy/chunky-worker.service` is a plain-venv unit (no Docker). Install the

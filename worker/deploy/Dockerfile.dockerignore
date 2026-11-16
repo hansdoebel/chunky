@@ -1,0 +1,13 @@
+**
+!worker/
+!worker/**
+!Chunky/
+!Chunky/Resources/
+!Chunky/Resources/Scripts/
+!Chunky/Resources/Scripts/**
+**/.venv
+**/__pycache__
+**/*.pyc
+**/*.env
+**/*.token
+**/.env

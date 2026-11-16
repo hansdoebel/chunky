@@ -1,0 +1,93 @@
+name: chunky
+services:
+  worker:
+    build:
+      context: ../..
+      dockerfile: worker/deploy/Dockerfile
+    image: chunky-worker:rocm10.1.0
+    restart: unless-stopped
+    ports:
+      - target: 8080
+        published: "8080"
+        host_ip: ${CHUNKY_BIND_IP:?Set CHUNKY_BIND_IP to the devbox interface address}
+        protocol: tcp
+    environment:
+      CHUNKY_WORKER_HOST: 0.0.0.0
+      CHUNKY_WORKER_PORT: "8080"
+      CHUNKY_WORKER_TOKEN_FILE: /run/secrets/worker_token
+      CHUNKY_VLM_ENGINE: ${CHUNKY_VLM_ENGINE:-transformers}
+      CHUNKY_OLLAMA_URL: http://127.0.0.1:11434
+      CHUNKY_VLLM_URL: http://127.0.0.1:8000
+      CHUNKY_EMBEDDING_MODEL: qwen3-embedding:0.6b
+      CHUNKY_QDRANT_URL: ${CHUNKY_QDRANT_URL:-}
+    secrets:
+      - worker_token
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    group_add:
+      - ${CHUNKY_VIDEO_GID:?Set CHUNKY_VIDEO_GID from the host video group}
+      - ${CHUNKY_RENDER_GID:?Set CHUNKY_RENDER_GID from the host render group}
+    volumes:
+      - worker_state:/var/lib/chunky
+      - model_cache:/home/chunky/.cache
+    healthcheck:
+      test: [CMD, python3, -c, "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8080/v1/health', timeout=10)"]
+      interval: 30s
+      timeout: 15s
+      start_period: 60s
+      retries: 3
+  ollama:
+    image: ollama/ollama:0.40.16-rocm
+    restart: unless-stopped
+    network_mode: service:worker
+    environment:
+      OLLAMA_HOST: 127.0.0.1:11434
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    volumes:
+      - ollama_models:/root/.ollama
+  vllm:
+    image: vllm/vllm-openai-rocm:v0.33.0-rocm100
+    profiles: [vllm]
+    restart: unless-stopped
+    network_mode: service:worker
+    devices:
+      - /dev/kfd:/dev/kfd
+      - /dev/dri:/dev/dri
+    shm_size: 8gb
+    volumes:
+      - vllm_models:/root/.cache/huggingface
+    command:
+      - --model
+      - ibm-granite/granite-docling-258M
+      - --host
+      - 127.0.0.1
+      - --port
+      - "8000"
+      - --gpu-memory-utilization
+      - "0.6"
+      - --max-num-seqs
+      - "512"
+      - --max-num-batched-tokens
+      - "8192"
+      - --enable-chunked-prefill
+  qdrant:
+    image: qdrant/qdrant:v1.20.1
+    profiles: [qdrant]
+    restart: unless-stopped
+    network_mode: service:worker
+    environment:
+      QDRANT__SERVICE__HOST: 127.0.0.1
+    volumes:
+      - qdrant_storage:/qdrant/storage
+secrets:
+  worker_token:
+    file: ${CHUNKY_TOKEN_FILE:?Set CHUNKY_TOKEN_FILE to an existing readable token file}
+volumes:
+  worker_state:
+  model_cache:
+  ollama_models:
+  vllm_models:
+  qdrant_storage:

@@ -1,0 +1,6 @@
+-r requirements.txt
+pypdf==6.4.2
+docling==2.150.1
+docling-core==2.107.0
+docling-ibm-models==4.0.4
+transformers==5.23.0
