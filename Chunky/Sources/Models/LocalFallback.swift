@@ -69,7 +69,9 @@ struct LocalFallbackPlan {
         guard let defaults = UserDefaults(suiteName: domain) else {
             throw LocalFallbackError.unavailable("temporary settings could not be created.")
         }
-        defaults.register(defaults: original.defaults.dictionaryRepresentation().filter { $0.key.hasPrefix("chunky.") })
+        for (key, value) in original.defaults.dictionaryRepresentation() where key.hasPrefix("chunky.") {
+            defaults.set(value, forKey: key)
+        }
         let snapshot = AppSettings(defaults: defaults, secrets: MemorySecretStore())
         snapshot.processingHost = .localMac
         snapshot.allowLocalFallback = false

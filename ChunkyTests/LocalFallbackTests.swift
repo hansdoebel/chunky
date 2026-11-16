@@ -13,6 +13,27 @@ struct LocalFallbackTests {
         #expect(reloaded.allowLocalFallback)
     }
 
+    @Test func fallbackSnapshotDoesNotRegisterDefaultsForOtherSettings() throws {
+        let original = configuredSettings()
+        original.embeddingModel = "snapshot-only-model"
+        original.maxTokensPerChunk = 733
+        let unrelated = IsolatedSettings.make()
+        let priorModel = unrelated.embeddingModel
+        let priorTokens = unrelated.maxTokensPerChunk
+        let registration = UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain) as NSDictionary
+        let plan = try LocalFallbackPlan.make(from: original, mode: .chunkOnly, collection: original.defaultCollection)
+        #expect(plan.settings.embeddingModel == "snapshot-only-model")
+        #expect(plan.settings.maxTokensPerChunk == 733)
+        #expect(CollectionPlanStore.load(name: original.defaultCollection, defaults: plan.settings.defaults) != nil)
+        plan.discard()
+        #expect(registration.isEqual(UserDefaults.standard.volatileDomain(forName: UserDefaults.registrationDomain) as NSDictionary))
+        let reloaded = AppSettings(defaults: unrelated.defaults, secrets: MemorySecretStore())
+        #expect(!reloaded.allowLocalFallback)
+        #expect(reloaded.embeddingModel == priorModel)
+        #expect(reloaded.maxTokensPerChunk == priorTokens)
+        #expect(!IsolatedSettings.make().allowLocalFallback)
+    }
+
     @Test func fallbackOnlyAcceptsTransportUnreachabilityAndLiteralLoopback() {
         for code in [URLError.cannotConnectToHost, .cannotFindHost, .dnsLookupFailed, .notConnectedToInternet, .networkConnectionLost, .timedOut] {
             #expect(LocalFallbackPolicy.isUnreachable(URLError(code)))
