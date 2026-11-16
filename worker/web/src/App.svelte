@@ -13,6 +13,7 @@
   let offset = $state(0);
   let selected = $state<Job | null>(null);
   let previewPage = $state(0);
+  let detailState = $state<'idle' | 'loading' | 'loaded' | 'error'>('idle');
   let files = $state<File[]>([]);
   let uploading = $state(false);
   let refreshing = $state(false);
@@ -49,6 +50,7 @@
     total = 0;
     offset = 0;
     selected = null;
+    detailState = 'idle';
     files = [];
     models = [];
     options = { mode: 'chunks', backend: 'ollama', model: '', endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512 };
@@ -111,16 +113,16 @@
     try {
       let page = await client.jobs(offset);
       if (session !== generation) return;
-      if (page.total <= offset && offset > 0) { offset = 0; page = await client.jobs(0); }
+      if (page.total <= offset && offset > 0) { clearSelection(); offset = 0; page = await client.jobs(0); }
       if (session !== generation) return;
       jobs = page.jobs.map((job) => {
         const previous = jobs.find((item) => item.id === job.id);
         return previous && !active(previous) && active(job) ? previous : job;
       });
       total = page.total;
-      if (selected && active(selected)) {
+      if (selected && detailState !== 'loading') {
         const summary = jobs.find((job) => job.id === selected?.id);
-        if (summary && !active(summary)) void selectJob(summary.id);
+        if (summary && ((!active(summary) && active(selected)) || detailState === 'error')) void loadDetail(summary.id);
       }
       connectionError = '';
       reconcileStreams(session, client);
@@ -129,7 +131,7 @@
   }
 
   function reconcileStreams(session: number, client: WorkerAPI) {
-    const running = new Set(jobs.filter(active).map((job) => job.id));
+    const running = new Set(selected && active(selected) ? [selected.id] : []);
     for (const [id, controller] of streams) {
       if (!running.has(id)) { controller.abort(); streams.delete(id); }
     }
@@ -152,21 +154,53 @@
     jobs = jobs.map((job) => job.id === id ? { ...job, status: status ?? job.status, progress: { ...job.progress, ...event } } : job);
     if (selected?.id === id) selected = { ...selected, status: status ?? selected.status, progress: { ...selected.progress, ...event } };
     if (status && !['queued', 'running'].includes(status)) {
-      if (selected?.id === id) void selectJob(id);
+      if (selected?.id === id) void loadDetail(id);
       void refresh();
     }
   }
 
+  function clearSelection() {
+    selectionGeneration += 1;
+    selected = null;
+    detailState = 'idle';
+    previewPage = 0;
+    for (const controller of streams.values()) controller.abort();
+    streams.clear();
+  }
+
+  function changePage(next: number) {
+    clearSelection();
+    offset = next;
+    void refresh();
+  }
+
   async function selectJob(id: string) {
     if (!api) return;
+    clearSelection();
+    selected = jobs.find((job) => job.id === id) ?? null;
+    reconcileStreams(generation, api);
+    await loadDetail(id);
+  }
+
+  async function loadDetail(id: string) {
+    if (!api || selected?.id !== id) return;
     const session = generation;
     const selection = ++selectionGeneration;
-    selected = jobs.find((job) => job.id === id) ?? null;
-    previewPage = 0;
+    const client = api;
+    detailState = 'loading';
     try {
-      const job = await api.job(id);
-      if (session === generation && selection === selectionGeneration) selected = job;
-    } catch (problem) { failure(problem, session); }
+      const job = await client.job(id);
+      if (session === generation && selection === selectionGeneration) {
+        selected = job;
+        detailState = 'loaded';
+        reconcileStreams(session, client);
+      }
+    } catch (problem) {
+      if (session === generation && selection === selectionGeneration) {
+        detailState = 'error';
+        failure(problem, session);
+      }
+    }
   }
 
   function chooseFiles(chosen: FileList | File[] | null) {
@@ -300,10 +334,10 @@
             <section class="card queue-card">
               <div class="section-heading"><div><h2>Documents <span class="heading-count">{total}</span></h2><p>Follow progress and inspect the finished chunks.</p></div><button class="quiet" onclick={() => void refresh()} disabled={refreshing} aria-label="Refresh queue">↻ <span>{refreshing ? 'Refreshing' : 'Refresh'}</span></button></div>
               {#if !jobs.length}<div class="empty-state"><div class="empty-icon" aria-hidden="true">▤</div><h3>A little space for your next idea</h3><p>Add a document above. Its progress and results will appear here.</p></div>{:else}<div class="job-list">{#each jobs as job (job.id)}<div class="job-row" class:selected={selected?.id === job.id}><button class="job-select" onclick={() => void selectJob(job.id)}><span class="document-icon" aria-hidden="true">{job.status === 'succeeded' ? '✓' : '▤'}</span><span class="job-copy"><strong>{job.filename}</strong><span>{job.progress?.message ?? (job.status === 'queued' ? 'Waiting for the worker' : labels[job.status])}</span>{#if active(job)}<progress class="progress-track" aria-label={`${job.filename} progress`} value={percent(job)} max="100"></progress>{/if}</span><span class="pill {job.status}">{labels[job.status]}</span></button>{#if active(job)}<button class="cancel-job" aria-label={`Cancel ${job.filename}`} onclick={() => void cancelJob(job.id)}>×</button>{/if}</div>{/each}</div>{/if}
-              <div class="queue-footer"><span>{total ? `Showing ${offset + 1}–${pageEnd} of ${total} jobs` : 'Your queue is ready.'}</span><div><button class="quiet" aria-label="Previous jobs" disabled={!offset || refreshing} onclick={() => { offset = Math.max(0, offset - 50); void refresh(); }}>←</button><button class="quiet" aria-label="Next jobs" disabled={offset + 50 >= total || refreshing} onclick={() => { offset += 50; void refresh(); }}>→</button></div></div>
+              <div class="queue-footer"><span>{total ? `Showing ${offset + 1}–${pageEnd} of ${total} jobs` : 'Your queue is ready.'}</span><div><button class="quiet" aria-label="Previous jobs" disabled={!offset || refreshing} onclick={() => changePage(Math.max(0, offset - 50))}>←</button><button class="quiet" aria-label="Next jobs" disabled={offset + 50 >= total || refreshing} onclick={() => changePage(offset + 50)}>→</button></div></div>
             </section>
 
-            {#if selected}<section class="card preview-card"><div class="section-heading"><div><div class="eyebrow">DOCUMENT PREVIEW</div><h2>{selected.filename}</h2><p>{selected.result ? `${chunks.length} chunks${selected.result.page_count ? ` · ${selected.result.page_count} pages` : ''}` : labels[selected.status]}</p></div>{#if selected.status === 'succeeded'}<button class="secondary" onclick={download}>Download JSON <span aria-hidden="true">↓</span></button>{/if}</div>{#if selected.error}<div class="notice danger" role="alert">{selected.error}</div>{/if}{#if !chunks.length}<p class="preview-empty">{active(selected) ? 'Chunks will appear here when processing finishes.' : 'This job has no chunks to preview.'}</p>{:else}<div class="chunks">{#each visibleChunks as chunk, index}<article class="chunk"><div class="chunk-meta"><span>CHUNK {previewPage * chunkLimit + index + 1}</span>{#if chunk.page}<span>Page {chunk.page}{chunk.page_end && chunk.page_end !== chunk.page ? `–${chunk.page_end}` : ''}</span>{/if}{#if chunk.token_count}<span>{chunk.token_count} tokens</span>{/if}</div>{#if chunk.headings?.length}<h3>{chunk.headings.join(' › ')}</h3>{/if}<p>{chunk.text ?? chunk.embedding_text ?? ''}</p></article>{/each}</div><div class="queue-footer"><span>Showing {previewPage * chunkLimit + 1}–{Math.min((previewPage + 1) * chunkLimit, chunks.length)} of {chunks.length} chunks</span><div><button class="quiet" disabled={previewPage === 0} aria-label="Previous chunks" onclick={() => previewPage -= 1}>←</button><button class="quiet" disabled={(previewPage + 1) * chunkLimit >= chunks.length} aria-label="Next chunks" onclick={() => previewPage += 1}>→</button></div></div>{/if}</section>{/if}
+            {#if selected}<section class="card preview-card"><div class="section-heading"><div><div class="eyebrow">DOCUMENT PREVIEW</div><h2>{selected.filename}</h2><p>{selected.result ? `${chunks.length} chunks${selected.result.page_count ? ` · ${selected.result.page_count} pages` : ''}` : labels[selected.status]}</p></div>{#if selected.status === 'succeeded'}<button class="secondary" onclick={download}>Download JSON <span aria-hidden="true">↓</span></button>{/if}</div>{#if selected.error}<div class="notice danger" role="alert">{selected.error}</div>{/if}{#if detailState === 'loading'}<p class="preview-empty" role="status">Loading document preview…</p>{:else if detailState === 'error'}<p class="preview-empty" role="status">Document preview could not be loaded. Refresh the queue to retry.</p>{:else if !chunks.length}<p class="preview-empty">{active(selected) ? 'Chunks will appear here when processing finishes.' : 'This job has no chunks to preview.'}</p>{:else}<div class="chunks">{#each visibleChunks as chunk, index}<article class="chunk"><div class="chunk-meta"><span>CHUNK {previewPage * chunkLimit + index + 1}</span>{#if chunk.page}<span>Page {chunk.page}{chunk.page_end && chunk.page_end !== chunk.page ? `–${chunk.page_end}` : ''}</span>{/if}{#if chunk.token_count}<span>{chunk.token_count} tokens</span>{/if}</div>{#if chunk.headings?.length}<h3>{chunk.headings.join(' › ')}</h3>{/if}<p>{chunk.text ?? chunk.embedding_text ?? ''}</p></article>{/each}</div><div class="queue-footer"><span>Showing {previewPage * chunkLimit + 1}–{Math.min((previewPage + 1) * chunkLimit, chunks.length)} of {chunks.length} chunks</span><div><button class="quiet" disabled={previewPage === 0} aria-label="Previous chunks" onclick={() => previewPage -= 1}>←</button><button class="quiet" disabled={(previewPage + 1) * chunkLimit >= chunks.length} aria-label="Next chunks" onclick={() => previewPage += 1}>→</button></div></div>{/if}</section>{/if}
           </div>
           <aside class="setup-column"><section class="card setup-card"><div class="eyebrow">NEXT UPLOAD</div><h2>Job setup</h2><dl><dt>Output</dt><dd>{options.mode === 'chunks' ? 'Chunks only' : options.mode === 'vectors' ? 'Chunks and vectors' : config?.qdrant_label}</dd><dt>Document model</dt><dd>{vlmName(options.vlm)}</dd><dt>Processing</dt><dd>{options.accelerator === 'cuda' ? 'GPU on worker' : 'CPU on worker'}</dd>{#if options.mode !== 'chunks'}<dt>Embedding model</dt><dd>{options.model || 'Choose a model'}</dd>{/if}{#if options.mode === 'ingest'}<dt>Collection</dt><dd>{options.collection}</dd>{/if}</dl><button class="secondary full" onclick={() => tab = 'settings'}>Edit job settings <span aria-hidden="true">→</span></button></section><div class="workspace-note"><span aria-hidden="true">◈</span><p>Your browser talks only to this worker. Qdrant credentials stay on the server.</p></div></aside>
         </div>

@@ -1,5 +1,5 @@
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
-export type JobEvent = { type?: string; status?: JobStatus; message?: string; percent?: number };
+export type JobEvent = { type?: string; status?: JobStatus; stage_status?: 'ok' | 'error' | 'skipped'; message?: string; percent?: number };
 export type Chunk = { text?: string; embedding_text?: string; page?: number; page_end?: number; headings?: string[]; token_count?: number; content_type?: string };
 export type Job = {
   id: string;
@@ -94,6 +94,11 @@ export async function* decodeEvents(body: ReadableStream<Uint8Array>): AsyncGene
     dataSize = 0;
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error('The worker sent an invalid progress event.');
     const event = value as Record<string, unknown>;
+    if (event.type === 'stage' && event.status !== undefined) {
+      if (!['ok', 'error', 'skipped'].includes(event.status as string)) throw new Error('The worker sent an invalid stage event.');
+      event.stage_status = event.status;
+      delete event.status;
+    }
     if ((event.status !== undefined && !['queued', 'running', 'succeeded', 'failed', 'canceled'].includes(event.status as string)) || (event.message !== undefined && typeof event.message !== 'string') || (event.percent !== undefined && (typeof event.percent !== 'number' || !Number.isFinite(event.percent)))) throw new Error('The worker sent an invalid progress event.');
     return event as JobEvent;
   }

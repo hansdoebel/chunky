@@ -65,3 +65,23 @@ describe('authenticated API', () => {
     expect(signal?.aborted).toBe(true);
   });
 });
+
+describe('metrics stage progress', () => {
+  it('separates actual MetricsRecorder stage statuses from terminal job status', async () => {
+    const frames = [
+      { type: 'stage', stage: 'convert_layout', phase: 'start', runtime: 'docling' },
+      { type: 'stage', stage: 'convert_layout', phase: 'end', runtime: 'docling', status: 'ok', duration_ms: 42 },
+      { type: 'stage', stage: 'ocr', phase: 'end', runtime: 'docling', status: 'skipped', duration_ms: 0 },
+      { type: 'stage', stage: 'embedding', phase: 'end', runtime: 'ollama', status: 'error', duration_ms: 3 },
+      { type: 'progress', message: 'Writing fixture output', percent: 98 },
+      { type: 'complete', message: 'Job complete', status: 'succeeded', percent: 100 },
+    ];
+    const parsed = await events(frames.map((event) => `data: ${JSON.stringify(event)}\n\n`).join(''));
+    expect(parsed).toHaveLength(6);
+    expect(parsed[1]).toMatchObject({ stage_status: 'ok' });
+    expect(parsed[2]).toMatchObject({ stage_status: 'skipped' });
+    expect(parsed[3]).toMatchObject({ stage_status: 'error' });
+    expect(parsed.slice(0, 5).every((event) => event.status === undefined)).toBe(true);
+    expect(parsed[5].status).toBe('succeeded');
+  });
+});

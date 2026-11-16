@@ -140,3 +140,80 @@ test('same file can be selected again after upload', async ({ page }) => {
   await page.getByLabel('Choose documents').setInputFiles(file);
   await expect(page.getByRole('button', { name: 'Add document to queue' })).toBeVisible();
 });
+
+test('stage ok and error metrics do not break progress before normal completion', async ({ page }) => {
+  await mockWorker(page);
+  await page.route('**/v1/jobs?*', (route) => route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobs: [{ ...fixture, status: 'running', result: undefined }], total: 1, limit: 50, offset: 0 }) }));
+  await page.route('**/v1/jobs/fixture-complete/events', (route) => route.fulfill({ contentType: 'text/event-stream', body: [
+    { type: 'stage', stage: 'convert_layout', phase: 'start', runtime: 'docling' },
+    { type: 'stage', stage: 'convert_layout', phase: 'end', runtime: 'docling', status: 'ok', duration_ms: 42 },
+    { type: 'stage', stage: 'ocr', phase: 'end', runtime: 'docling', status: 'error', duration_ms: 3 },
+    { type: 'progress', message: 'Fixture output ready', percent: 98 },
+    { type: 'complete', message: 'Job complete', status: 'succeeded', percent: 100 },
+  ].map((event) => `data: ${JSON.stringify(event)}\n\n`).join('') }));
+  await login(page);
+  await page.getByRole('button', { name: /^fixture-research.pdf/ }).click();
+  await expect(page.getByText('Fixture overview', { exact: true })).toBeVisible();
+  await expect(page.getByText('Completed', { exact: true })).toBeVisible();
+  await expect(page.getByRole('alert')).toHaveCount(0);
+});
+
+test('many active jobs use only the selected stream while cancellation and refresh remain available', async ({ page }) => {
+  await mockWorker(page);
+  const jobs = Array.from({ length: 10 }, (_, index) => ({ id: `active-${index}`, filename: `fixture-${index}.pdf`, status: 'running', progress: { message: 'Fixture processing', percent: 10 } }));
+  let streams = 0; let cancels = 0; let lists = 0;
+  await page.route('**/v1/jobs?*', (route) => { lists++; return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobs, total: 10, limit: 50, offset: 0 }) }); });
+  await page.route(/\/v1\/jobs\/active-\d+(?:[/?].*)?$/, async (route) => {
+    const path = new URL(route.request().url()).pathname;
+    if (path.endsWith('/events')) { streams++; await new Promise<void>((resolve) => page.once('close', () => resolve())); return; }
+    if (path.endsWith('/cancel')) { cancels++; return route.fulfill({ contentType: 'application/json', body: '{}' }); }
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify(jobs.find((job) => path.endsWith(job.id))) });
+  });
+  await login(page);
+  await expect(page.getByRole('button', { name: /^fixture-9.pdf/ })).toBeVisible();
+  expect(streams).toBe(0);
+  await page.getByRole('button', { name: /^fixture-0.pdf/ }).click();
+  await expect.poll(() => streams).toBe(1);
+  await page.getByRole('button', { name: 'Cancel fixture-9.pdf' }).click();
+  await expect.poll(() => cancels).toBe(1);
+  await page.getByRole('button', { name: 'Refresh queue' }).click();
+  await expect.poll(() => lists).toBeGreaterThanOrEqual(3);
+  expect(streams).toBe(1);
+  await page.getByRole('button', { name: /^fixture-1.pdf/ }).click();
+  await expect.poll(() => streams).toBe(2);
+});
+
+test('changing queue pages clears the selected preview and ignores delayed detail', async ({ page }) => {
+  await mockWorker(page);
+  let release: (() => void) | undefined;
+  const hold = new Promise<void>((resolve) => release = resolve);
+  await page.route('**/v1/jobs?*', (route) => {
+    const offset = Number(new URL(route.request().url()).searchParams.get('offset'));
+    return route.fulfill({ contentType: 'application/json', body: JSON.stringify({ jobs: offset ? [{ ...fixture, id: 'page-two', filename: 'fixture-page-two.pdf', result: undefined }] : [{ ...fixture, status: 'running', result: undefined }], total: 51, limit: 50, offset }) });
+  });
+  await page.route('**/v1/jobs/fixture-complete?*', async (route) => { await hold; await route.fulfill({ contentType: 'application/json', body: JSON.stringify(fixture) }); });
+  await login(page);
+  await page.getByRole('button', { name: /^fixture-research.pdf/ }).click();
+  await expect(page.getByText('Loading document preview…')).toBeVisible();
+  await page.getByRole('button', { name: 'Next jobs' }).click();
+  await expect(page.getByRole('button', { name: /^fixture-page-two.pdf/ })).toBeVisible();
+  release?.();
+  await expect(page.getByText('DOCUMENT PREVIEW', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Fixture overview', { exact: true })).toHaveCount(0);
+});
+
+test('a transient completed-detail failure retries on queue refresh instead of showing empty chunks', async ({ page }) => {
+  await mockWorker(page);
+  let details = 0;
+  await page.route('**/v1/jobs/fixture-complete?*', (route) => {
+    details++;
+    return route.fulfill({ status: details === 1 ? 503 : 200, contentType: 'application/json', body: JSON.stringify(details === 1 ? { detail: 'Fixture detail temporarily unavailable' } : fixture) });
+  });
+  await login(page);
+  await page.getByRole('button', { name: /^fixture-research.pdf/ }).click();
+  await expect(page.getByText('Document preview could not be loaded. Refresh the queue to retry.')).toBeVisible();
+  await expect(page.getByText('This job has no chunks to preview.')).toHaveCount(0);
+  await page.getByRole('button', { name: 'Refresh queue' }).click();
+  await expect(page.getByText('Fixture overview', { exact: true })).toBeVisible();
+  expect(details).toBe(2);
+});
