@@ -1,9 +1,12 @@
+FROM oven/bun:1.4.4-debian@sha256:93d5032fe06d163427822dc1598f420363759bb18155c9cc90eb1be05a64a19e AS bun-runtime
+
 FROM node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c AS web-builder
+COPY --from=bun-runtime /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /opt/chunky/worker/web
-COPY worker/web/package.json worker/web/package-lock.json ./
-RUN npm ci
+COPY worker/web/package.json worker/web/bun.lock ./
+RUN bun install --frozen-lockfile
 COPY worker/web/ ./
-RUN npm run build
+RUN bun run build
 
 FROM rocm/pytorch:rocm10.1.0_ubuntu24.04_py3.12_pytorch_release_2.14.0
 

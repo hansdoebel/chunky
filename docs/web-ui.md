@@ -8,7 +8,7 @@ Captured by the macOS browser unit tests with explicitly labeled fixture chunks;
 
 ## Build and start
 
-From the repository root, use Node.js 24.22.1 and the committed npm lockfile:
+From the repository root, use Bun 1.4.4, Node.js 24.22.1 for compatible frontend tooling, and the committed `worker/web/bun.lock`:
 
 ```bash
 make build-web
@@ -19,9 +19,15 @@ worker/.venv/bin/chunky-worker --host 127.0.0.1 --port 8080
 
 Install the worker's [Docling dependencies and model services](worker-host.md) before processing real documents. The frontend build writes `worker/chunky_worker/web_dist/`. Build before making a wheel or installing a non-editable worker package so it includes those assets. An API-only installation keeps its API available and returns a helpful HTTP 503 at `/` until assets are built.
 
-The [Compose image](../worker/deploy/README.md) builds the frontend in a pinned Node stage and copies only its generated assets into the worker image. Node is not needed in the running worker. No additional port is published.
+The [Compose image](../worker/deploy/README.md) builds the frontend with pinned Bun and Node stages and copies only its generated assets into the worker image. Bun and Node are not needed in the running worker. No additional port is published.
 
 For a remote worker, keep the existing token file, private bind address, firewall, and VPN or HTTPS setup. Use HTTPS or a trusted private tunnel for the browser session. Enter the worker bearer token on the login screen. The token stays in page memory; reload or sign out to clear it. It is never placed in URLs, cookies, browser storage, or generated assets. The login shell and static assets are public; job lists, results, settings, and events require the existing API authorization. Configure a token even on loopback to use the workspace. A loopback worker may start without one, but protected API routes still return HTTP 401.
+
+## Appearance
+
+Use Appearance on the login screen or in the workspace to choose System, Light or Dark. System follows operating-system changes. Only that nonsecret appearance preference is remembered in browser storage; bearer tokens, job settings, document data and credentials remain in memory. Blocked browser storage falls back safely to the current session and system appearance.
+
+The UI uses shared shadcn-svelte components and theme tokens. Changing appearance does not contact model servers or change worker, provider or collection settings.
 
 ## Jobs and settings
 
@@ -52,7 +58,7 @@ make test-worker
 make test-web
 ```
 
-Frontend checks cover Svelte/TypeScript, unit tests, a production build, and Playwright browser component tests with mocked worker responses. The macOS CI job captures the actual production frontend, rejects blank screenshots, and uploads the queue, chunks, settings, and mobile views. Fixtures are test data, not evidence of live PDF extraction. Worker tests use fake conversion, embedding, and Qdrant clients. CI does not start live model services, GPUs, or Qdrant.
+Frontend checks cover Svelte/TypeScript, unit tests, a production build, and Playwright browser component tests with mocked worker responses. The macOS CI job captures the actual production frontend, rejects blank screenshots, and uploads the queue, chunks, settings, and mobile views. Fixtures are test data, not evidence of live PDF extraction. Worker tests use fake conversion, embedding, and Qdrant clients. CI also builds the frontend-only Docker stage with Bun; it does not start live model services, GPUs, Qdrant, or the ROCm runtime.
 
 Live conversion, real model inference, and Qdrant integration are separate operator checks outside CI. The ROCm image and physical worker still require the deployment validation tracked in PER-53.
 
@@ -69,3 +75,9 @@ Collections with unknown embedding identity remain available for read-only brows
 Search uses the existing authenticated `/v1/search` engine with `use_worker_qdrant=true`. This pins Qdrant access to the configured server and validates model identity, endpoint fingerprint, dimensions, distance, and vector layout before querying. Dense search also works in a matching hybrid collection; hybrid search requires an existing hybrid layout. Browser reads and searches do not create indexes, adopt metadata, or change collection settings. Legacy app/API search retains its existing behavior.
 
 Results show semantic scores, chunk text, source, and page metadata when present. Each search page requests 10 hits with an explicit offset and continuation; paging is a fresh query against the current collection, so concurrent writes can change rankings. This workspace does not promise a frozen search snapshot or modify stored points.
+
+The light and dark captures below came from macOS browser CI run [43977623510](https://github.com/hansdoebel/chunky/actions/runs/43977623510), with nonblank PNG assertions. All displayed documents and scores are mocked test fixtures.
+
+![Dark worker workspace](images/web-dark-workspace.png)
+
+![Dark mobile workspace](images/web-dark-mobile.png)

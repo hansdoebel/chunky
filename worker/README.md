@@ -18,7 +18,7 @@ Docling, Ollama, or a GPU.
 
 ## Browser workspace
 
-The optional [browser workspace](../docs/web-ui.md) is served at `/` on the same worker port. Build `worker/web` before installing the worker package; the Compose image builds it automatically. Its login shell is public, while job data and configuration use the existing bearer-token policy. Tokens stay in browser memory and Qdrant credentials stay on the worker.
+The optional [browser workspace](../docs/web-ui.md) is served at `/` on the same worker port. Build `worker/web` with Bun 1.4.4 and its committed lockfile before installing the worker package; the Compose image builds it automatically. Its login shell is public, while job data and configuration use the existing bearer-token policy. Tokens stay in browser memory and Qdrant credentials stay on the worker.
 
 ## API
 
