@@ -80,6 +80,9 @@ Search uses the existing authenticated `/v1/search` engine with `use_worker_qdra
 
 Results show semantic scores, chunk text, source, and page metadata when present. Each search page requests 10 hits with an explicit offset and continuation; paging is a fresh query against the current collection, so concurrent writes can change rankings. This workspace does not promise a frozen search snapshot or modify stored points.
 
+Expand Filter passages to narrow semantic results by year range, author, exact stored DOI, document title, heading, or element type (text, table, formula, figure, code). Text fields ignore surrounding whitespace; empty fields leave that attribute unrestricted. Years must be whole numbers from 1 to 9999, and the start year cannot exceed the end year. Invalid years show field errors and prevent the query from being sent.
+
+Filters apply on the worker to every search page. Editing a filter clears previous hits and restarts paging; Clear filters restores an unrestricted search. Selecting another collection or signing out clears the filter draft. Filters are kept in page memory and do not change stored document metadata, embedding identity, or collection settings.
 The light and dark captures below came from macOS browser CI run [43977623510](https://github.com/hansdoebel/chunky/actions/runs/43977623510), with nonblank PNG assertions. All displayed documents and scores are mocked test fixtures.
 
 ![Dark worker workspace](images/web-dark-workspace.png)
@@ -91,3 +94,8 @@ Job insight captures from macOS CI run [43978441720](https://github.com/hansdoeb
 ![Light job insights](images/web-insights-light.png)
 
 ![Dark mobile job insights](images/web-insights-dark-mobile.png)
+Filter captures from macOS CI run [43977736859](https://github.com/hansdoebel/chunky/actions/runs/43977736859) use mocked responses and nonblank image assertions.
+
+![Light semantic search filters](images/web-filters-light.png)
+
+![Dark semantic search filters](images/web-filters-dark.png)
