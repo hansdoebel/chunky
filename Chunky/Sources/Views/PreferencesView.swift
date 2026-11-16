@@ -41,6 +41,7 @@ struct PreferencesView: View {
     @State private var piModels: [PiModel] = []
     @State private var piStatusMessage = ""
     @State private var chatAPIKeyInput = ""
+    @ObservedObject private var cpuReadiness = CPUEmbeddingReadiness.shared
 
     enum ConnectionStatus {
         case unknown, checking, connected, failed
@@ -90,7 +91,6 @@ struct PreferencesView: View {
             workerTokenInput = appState.settings.workerToken
             qdrantCloudURLInput = appState.settings.qdrantCloudURL
             chatAPIKeyInput = appState.settings.chatAPIKey
-            Task { await loadModels() }
         }
         .onDisappear {
             appState.settings.save()
@@ -153,107 +153,125 @@ struct PreferencesView: View {
 
     private var embeddingTab: some View {
         Form {
-            Section {
-                if appState.settings.processingHost == .devbox {
-                    Picker("Backend", selection: $appState.settings.embeddingBackend) {
-                        ForEach(EmbeddingBackendKind.allCases) { kind in
-                            Text(kind.displayName).tag(kind.rawValue)
-                        }
-                    }
-                    if appState.settings.embeddingBackend == EmbeddingBackendKind.openai.rawValue {
-                        TextField(
-                            "Embeddings URL",
-                            text: $appState.settings.embeddingAPIURL,
-                            prompt: Text("http://127.0.0.1:8002")
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        TextField(
-                            "Model ID",
-                            text: $appState.settings.embeddingModel,
-                            prompt: Text("Qwen/Qwen3-Embedding-0.6B")
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        Text("OpenAI-compatible /v1/embeddings. This is not the Ollama URL. Local Mac jobs still embed with Ollama.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
+            Section("Embedding provider") {
+                Picker("Provider", selection: Binding(
+                    get: { appState.settings.embeddingBackend },
+                    set: { appState.settings.selectEmbeddingBackend($0) }
+                )) {
+                    ForEach(EmbeddingBackendKind.allCases) { kind in
+                        Text(kind.displayName).tag(kind.rawValue)
                     }
                 }
-                HStack {
-                    TextField(
-                        "Server URL", text: $appState.settings.ollamaURL,
-                        prompt: Text("http://localhost:11434")
-                    )
-                    .textFieldStyle(.roundedBorder)
-
-                    Button(action: { Task { await checkOllama() } }) {
-                        switch ollamaStatus {
-                        case .unknown:
-                            Image(systemName: "circle")
-                                .foregroundColor(.secondary)
-                        case .checking:
-                            ProgressView()
-                                .scaleEffect(0.7)
-                        case .connected:
-                            Image(systemName: "checkmark.circle.fill")
-                                .foregroundColor(.green)
-                        case .failed:
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(.red)
-                        }
+                LabeledContent("Processing host", value: appState.settings.processingHost.rawValue)
+                LabeledContent("Embedding host", value: appState.settings.embeddingHostDescription)
+                if appState.settings.embeddingBackend == EmbeddingBackendKind.openai.rawValue {
+                    TextField("Embeddings URL", text: $appState.settings.embeddingAPIURL)
+                    TextField("Model ID", text: $appState.settings.embeddingModel)
+                    LabeledContent("Vector dimensions") {
+                        TextField("Dimensions", value: $appState.settings.embeddingDimensions, format: .number.grouping(.never))
+                            .frame(width: 80)
                     }
-                    .buttonStyle(.plain)
+                    Text("OpenAI-compatible /v1/embeddings. Local Mac and Devbox jobs use the configured endpoint.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
                 }
-            } header: {
-                Text("Ollama Server")
             }
+            if appState.settings.embeddingBackend == EmbeddingBackendKind.fastembed.rawValue {
+                CPUEmbeddingSettingsPane(
+                    processingHost: appState.settings.processingHost,
+                    readiness: cpuReadiness.message, busy: cpuReadiness.busy,
+                    problem: appState.settings.embeddingConfigurationProblem,
+                    onCheck: { Task { await checkCPUEmbedding(download: false) } },
+                    onDownload: { Task { await checkCPUEmbedding(download: true) } }
+                )
+            }
+            if appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue {
+                Section {
+                    HStack {
+                        TextField(
+                            "Server URL", text: $appState.settings.ollamaURL,
+                            prompt: Text("http://localhost:11434")
+                        )
+                        .textFieldStyle(.roundedBorder)
 
-            Section {
-                if isLoadingModels {
-                    HStack {
-                        ProgressView()
-                            .scaleEffect(0.8)
-                        Text("Loading models...")
-                            .foregroundColor(.secondary)
-                    }
-                } else if availableModels.isEmpty {
-                    HStack {
-                        Image(systemName: "exclamationmark.triangle")
-                            .foregroundColor(.orange)
-                        Text("No models found. Start Ollama and pull an embedding model.")
-                            .font(.caption)
-                            .foregroundColor(.secondary)
-                    }
-                } else {
-                    Picker("Model", selection: $appState.settings.embeddingModel) {
-                        ForEach(embeddingModels) { model in
-                            HStack {
-                                Text(model.displayName)
-                                if !model.sizeFormatted.isEmpty {
-                                    Text("(\(model.sizeFormatted))")
-                                        .foregroundColor(.secondary)
-                                }
+                        Button(action: { Task { await checkOllama() } }) {
+                            switch ollamaStatus {
+                            case .unknown:
+                                Image(systemName: "circle")
+                                    .foregroundColor(.secondary)
+                            case .checking:
+                                ProgressView()
+                                    .scaleEffect(0.7)
+                            case .connected:
+                                Image(systemName: "checkmark.circle.fill")
+                                    .foregroundColor(.green)
+                            case .failed:
+                                Image(systemName: "xmark.circle.fill")
+                                    .foregroundColor(.red)
                             }
-                            .tag(model.name)
+                        }
+                        .buttonStyle(.plain)
+                    }
+                } header: {
+                    Text("Ollama Server")
+                }
+
+                Section {
+                    if isLoadingModels {
+                        HStack {
+                            ProgressView()
+                                .scaleEffect(0.8)
+                            Text("Loading models...")
+                                .foregroundColor(.secondary)
+                        }
+                    } else if availableModels.isEmpty {
+                        HStack {
+                            Image(systemName: "exclamationmark.triangle")
+                                .foregroundColor(.orange)
+                            Text("No models found. Start Ollama and pull an embedding model.")
+                                .font(.caption)
+                                .foregroundColor(.secondary)
+                        }
+                    } else {
+                        Picker("Model", selection: $appState.settings.embeddingModel) {
+                            ForEach(embeddingModels) { model in
+                                HStack {
+                                    Text(model.displayName)
+                                    if !model.sizeFormatted.isEmpty {
+                                        Text("(\(model.sizeFormatted))")
+                                            .foregroundColor(.secondary)
+                                    }
+                                }
+                                .tag(model.name)
+                            }
+                        }
+                        .onChange(of: appState.settings.embeddingModel) { _, newModel in
+                            Task { await applyProbedDimensions(for: newModel) }
                         }
                     }
-                    .onChange(of: appState.settings.embeddingModel) { _, newModel in
-                        Task { await applyProbedDimensions(for: newModel) }
+
+                    LabeledContent("Vector Dimensions") {
+                        TextField(
+                            "",
+                            value: $appState.settings.embeddingDimensions,
+                            format: .number.grouping(.never)
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        .multilineTextAlignment(.trailing)
+                        .monospacedDigit()
+                        .frame(width: 80)
                     }
+                } header: {
+                    Text("Embedding Model")
                 }
 
-                LabeledContent("Vector Dimensions") {
-                    TextField(
-                        "",
-                        value: $appState.settings.embeddingDimensions,
-                        format: .number.grouping(.never)
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .multilineTextAlignment(.trailing)
-                    .monospacedDigit()
-                    .frame(width: 80)
+            }
+            if appState.settings.embeddingBackend != EmbeddingBackendKind.fastembed.rawValue,
+               let problem = appState.settings.embeddingConfigurationProblem {
+                Section("Collection compatibility") {
+                    Label(problem, systemImage: "exclamationmark.triangle.fill")
+                        .foregroundStyle(.orange)
                 }
-            } header: {
-                Text("Embedding Model")
             }
 
             Section {
@@ -274,6 +292,17 @@ struct PreferencesView: View {
         }
         .formStyle(.grouped)
         .padding()
+        .task(id: appState.settings.embeddingBackend) {
+            if appState.settings.embeddingBackend == "fastembed" {
+                await checkCPUEmbedding(download: false)
+            } else {
+                await loadModels()
+            }
+        }
+    }
+
+    private func checkCPUEmbedding(download: Bool) async {
+        await cpuReadiness.check(download: download)
     }
 
     private func refreshInstalledModels() async {
@@ -833,26 +862,20 @@ struct PreferencesView: View {
         }
     }
 
-    private func dimensionsForModel(_ modelName: String) -> Int {
-        EmbeddingWidth.expected(for: modelName)
-    }
-
     private func loadModels() async {
+        guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
         isLoadingModels = true
         ollamaStatus = .checking
         do {
             let service = try OllamaService(baseURL: appState.settings.ollamaURL)
-            availableModels = try await service.listModels()
+            let models = try await service.listModels()
+            guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else {
+                isLoadingModels = false
+                return
+            }
+            availableModels = models
             ollamaStatus = .connected
 
-            if appState.settings.embeddingBackend != EmbeddingBackendKind.openai.rawValue
-                && !availableModels.isEmpty
-                && !embeddingModels.contains(where: { $0.name == appState.settings.embeddingModel })
-            {
-                if let firstEmbedding = embeddingModels.first {
-                    appState.settings.embeddingModel = firstEmbedding.name
-                }
-            }
             await applyProbedDimensions(for: appState.settings.embeddingModel)
 
         } catch {
@@ -863,11 +886,15 @@ struct PreferencesView: View {
     }
 
     private func applyProbedDimensions(for model: String) async {
+        guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
         do {
             let service = try OllamaService(baseURL: appState.settings.ollamaURL)
-            appState.settings.embeddingDimensions = try await service.probeDimension(model: model)
+            let dimensions = try await service.probeDimension(model: model)
+            guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue,
+                  appState.settings.embeddingModel == model else { return }
+            appState.settings.embeddingDimensions = dimensions
         } catch {
-            appState.settings.embeddingDimensions = dimensionsForModel(model)
+            return
         }
     }
 

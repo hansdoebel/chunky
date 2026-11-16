@@ -83,9 +83,7 @@ class DocumentProcessor: ObservableObject {
     }
 
     private func targetCollection(job: ProcessingJob, settings: AppSettings) -> String {
-        if let name = job.watchedCollection, !name.isEmpty { return name }
-        if let name = job.ingestCollection, !name.isEmpty { return name }
-        return settings.defaultCollection
+        job.targetCollection(defaultCollection: settings.defaultCollection)
     }
 
     private func rememberUploaded(_ points: [ChunkPoint], job: ProcessingJob) {

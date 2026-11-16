@@ -44,6 +44,12 @@ class ProcessingJob: ObservableObject, Identifiable {
     var watchedModified: Date?
     var uploadedPointIDs: [String] = []
 
+    func targetCollection(defaultCollection: String) -> String {
+        if let watchedCollection, !watchedCollection.isEmpty { return watchedCollection }
+        if let ingestCollection, !ingestCollection.isEmpty { return ingestCollection }
+        return defaultCollection
+    }
+
     var timingSummary: String? {
         guard let total = totalTime else { return nil }
         var parts: [String] = []
