@@ -148,7 +148,7 @@ struct SidebarView: View {
             Section {
                 HStack(spacing: 8) {
                     StatusDot(isActive: !appState.settings.ollamaURL.isEmpty, size: 8)
-                    Text("Ollama")
+                    Text(EmbeddingBackendKind(rawValue: appState.settings.embeddingBackend)?.displayName ?? "Embedding")
                         .font(.system(size: 14))
                     Spacer()
                     Text(
@@ -695,7 +695,12 @@ struct BottomBarView: View {
                 .disabled(appState.isCancellationRequested)
             } else {
 
-                statusBreadcrumbs
+                VStack(alignment: .leading, spacing: 6) {
+                    statusBreadcrumbs
+                    if appState.processingMode == .full {
+                        EmbeddingJobSummary(settings: appState.settings)
+                    }
+                }
 
                 Spacer()
 
@@ -792,6 +797,9 @@ struct BottomBarView: View {
 
     private var canStart: Bool {
         guard !appState.pendingJobs.isEmpty else { return false }
+        if appState.processingMode == .full && appState.settings.embeddingConfigurationProblem != nil {
+            return false
+        }
 
         if appState.settings.processingHost == .devbox {
             guard !appState.settings.devboxWorkerURL.isEmpty, !appState.settings.workerToken.isEmpty else {
