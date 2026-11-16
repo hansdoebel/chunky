@@ -253,3 +253,25 @@ def test_matching_custom_model_provider_and_endpoint_queries_without_key_egress(
         assert "secret-server-key" not in response.text
         assert backend.embed_calls == [(["fixture"], "custom-document-model")]
         assert not fake.indexes
+
+
+@pytest.mark.parametrize("field", ["schema", "backend", "model", "endpoint_sha256", "dimensions", "distance", "hybrid"])
+@pytest.mark.parametrize("value", [[], {}])
+def test_malformed_identity_fields_remain_browsable_but_not_searchable(tmp_settings, field, value):
+    configure(tmp_settings)
+    info = trusted_info(tmp_settings)
+    info["config"]["metadata"]["chunky_embedding"][field] = value
+    fake = BrowserQdrant(info)
+    client, _ = browser_client(tmp_settings, fake)
+    with client:
+        browse = client.get("/v1/collections/papers/points")
+        assert browse.status_code == 200
+        body = browse.json()
+        assert body["points"]
+        assert body["semantic_search_available"] is False
+        assert body["semantic_search_reason"]
+        assert body["embedding"] is None
+        query = client.post("/v1/search", json={"query": "fixture", "collection": "papers", "use_worker_qdrant": True})
+        assert query.status_code == 409
+        assert query.json()["error_type"] == "embedding_identity_mismatch"
+        assert not fake.queries and not fake.indexes

@@ -355,14 +355,16 @@ def collection_identity(info) -> dict:
         isinstance(identity, dict)
         and type(identity.get("schema")) is int
         and identity["schema"] == 1
-        and identity.get("backend") in _BACKENDS
+        and isinstance(identity.get("backend"), str)
+        and identity["backend"] in _BACKENDS
         and isinstance(identity.get("model"), str)
         and bool(identity["model"].strip())
         and isinstance(identity.get("endpoint_sha256"), str)
         and re.fullmatch(r"[0-9a-f]{64}", identity["endpoint_sha256"])
         and type(identity.get("dimensions")) is int
         and identity["dimensions"] > 0
-        and identity.get("distance") in {"cosine", "dot", "euclid"}
+        and isinstance(identity.get("distance"), str)
+        and identity["distance"] in {"cosine", "dot", "euclid"}
         and type(identity.get("hybrid")) is bool
     )
     if not valid:
