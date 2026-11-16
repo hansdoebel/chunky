@@ -1,10 +1,14 @@
 import { expect, type Page } from '@playwright/test';
 import { PNG } from 'pngjs';
-import { readFile } from 'node:fs/promises';
+import { mkdir, readFile } from 'node:fs/promises';
+import { join } from 'node:path';
 
-export async function captureWorkspace(page: Page, name: string, heading: string) {
+export async function captureWorkspace(page: Page, name: string, heading: string | RegExp) {
   await expect(page.getByRole('heading', { name: heading, exact: true })).toBeVisible();
-  const path = `/tmp/chunky-web-${name}.png`;
+  await page.evaluate(() => document.fonts.ready);
+  const directory = process.env.CHUNKY_WEB_SCREENSHOT_DIR ?? '/tmp';
+  await mkdir(directory, { recursive: true });
+  const path = join(directory, `chunky-web-${name}.png`);
   await page.screenshot({ path, fullPage: true, animations: 'disabled' });
   const png = PNG.sync.read(await readFile(path));
   let dark = 0; let light = 0; let opaque = 0;

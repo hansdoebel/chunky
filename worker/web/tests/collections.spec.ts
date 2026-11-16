@@ -65,7 +65,7 @@ test('keyless read target lists collections and cursor pages with real responsiv
   await page.setViewportSize({ width: 390, height: 844 });
   await captureWorkspace(page, 'collections-mobile', 'Collections');
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
-  expect(mocked.urls.every((url) => url.startsWith('http://127.0.0.1:4173/v1/') && !url.includes('fixture-token'))).toBe(true);
+  expect(mocked.urls.every((url) => url.startsWith(`${new URL(page.url()).origin}/v1/`) && !url.includes('fixture-token'))).toBe(true);
 });
 
 test('semantic search uses collection identity, displays scores and pages explicitly', async ({ page }) => {
