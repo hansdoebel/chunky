@@ -2,7 +2,8 @@
 
 This starts the HTTP worker and Ollama on a Linux devbox with an R9700. The
 host must already have a compatible AMD driver and ROCm device access (PER-40
-and PER-41). It does not install host drivers or a web UI.
+and PER-41). It does not install host drivers. The worker serves its bundled
+web UI on the same port as the API; see [web-ui.md](../../docs/web-ui.md).
 
 All upstream image tags are pinned. The worker uses the ROCm PyTorch 2.14 base
 from PER-53 and preserves its installed torch with a pip constraint. It does
@@ -64,18 +65,29 @@ If that official vLLM ROCm image cannot serve Granite on the installed driver,
 leave the profile off and use the default Transformers engine. Do not switch
 to the deprecated `rocm/vllm` image or a floating tag.
 
-For optional Qdrant, start its profile and opt into that internal target for
-search. Jobs can send `qdrant_url=http://127.0.0.1:6333` with no Cloud key:
+For optional Qdrant, start its profile and configure its internal URL for
+search. This profile has no Qdrant API key configured; authenticated
+`POST /v1/search` requests can search existing collections without a Qdrant
+key. The worker bearer token is still required:
 
 ```bash
 CHUNKY_QDRANT_URL=http://127.0.0.1:6333 docker compose --profile qdrant up -d
 ```
 
+Worker jobs using `ingest_target=qdrant_cloud` require a nonempty
+`qdrant_api_key`, including when the URL points to a local Qdrant server.
+The keyless profile above is therefore a search target, not a supported
+worker-ingest configuration. Use a Qdrant deployment with a real configured
+API key for worker ingestion; do not supply a dummy key. Browser ingestion
+keeps that key on the worker; see the
+[web UI credential guidance](../../docs/web-ui.md).
+
 The app's Local Docker ingest target still means Qdrant on the Mac, using
 returned vectors. The optional devbox Qdrant does not replace it or migrate
 collections. Keep model identities and dimensions aligned; changing the
-embedding model never reconfigures an existing collection. Cloud ingest
-continues to receive its API key per job through the authenticated API.
+embedding model never reconfigures an existing collection. Mac-originated
+Cloud ingest continues to receive its API key per job through the
+authenticated API.
 
 To validate configuration without downloading images or needing GPU hardware,
 run `docker compose --profile vllm --profile qdrant config --quiet`. Hardware
