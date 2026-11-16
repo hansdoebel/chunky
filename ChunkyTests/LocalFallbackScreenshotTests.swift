@@ -6,23 +6,29 @@ import Testing
 
 @MainActor
 struct LocalFallbackScreenshotTests {
-    @Test func rendersPreferenceAndPersistentQueueNotice() throws {
-        let job = ProcessingJob(url: URL(fileURLWithPath: "/tmp/fallback-paper.pdf"))
-        job.status = .embedding
-        job.statusMessage = "Generating embeddings..."
-        job.localFallbackNotice = "Worker unreachable. Running on Local Mac with granite-docling-mlx, local Ollama and local Qdrant."
-        let view = VStack(alignment: .leading, spacing: 24) {
-            Text("Document processing").font(.title2)
-            LocalFallbackSettingsPane(enabled: .constant(true))
-            Divider()
-            Text("Queue").font(.title2)
-            FileRowView(job: job, onRemove: {})
-        }
-        .padding(24)
-        .frame(width: 760, height: 350, alignment: .topLeading)
-        .background(Color(nsColor: .windowBackgroundColor))
+    @Test func rendersTheProductionPreferenceWithoutUnrelatedContent() throws {
+        let view = LocalFallbackSettingsPane(enabled: .constant(true))
+            .padding(24)
+            .frame(width: 760, height: 150, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
         let data = try LocalFallbackRenderer.png(view)
         #expect(!LocalFallbackRenderer.isMostlyBlank(data))
+        try data.write(to: URL(fileURLWithPath: "/tmp/chunky-local-fallback-settings.png"))
+    }
+
+    @Test func theProductionQueueRowAddsVisibleFallbackNoticeText() throws {
+        let job = ProcessingJob(url: URL(fileURLWithPath: "/tmp/fallback-paper.pdf"))
+        job.status = .completed
+        let withoutNotice = FileRowView(job: job, onRemove: {})
+            .frame(width: 760, height: 150, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let baseline = try LocalFallbackRenderer.png(withoutNotice)
+        job.localFallbackNotice = "Worker unreachable. Running on Local Mac with granite-docling-mlx, local Ollama and local Qdrant."
+        let view = FileRowView(job: job, onRemove: {})
+            .frame(width: 760, height: 150, alignment: .topLeading)
+            .background(Color(nsColor: .windowBackgroundColor))
+        let data = try LocalFallbackRenderer.png(view)
+        #expect(LocalFallbackRenderer.orangePixels(data) > LocalFallbackRenderer.orangePixels(baseline) + 50)
         try data.write(to: URL(fileURLWithPath: "/tmp/chunky-local-fallback.png"))
     }
 }
@@ -33,7 +39,7 @@ private enum LocalFallbackRenderer {
 
     static func png<V: View>(_ view: V) throws -> Data {
         let host = NSHostingView(rootView: view.environment(\.colorScheme, .light))
-        host.frame = NSRect(x: 0, y: 0, width: 760, height: 350)
+        host.frame = NSRect(x: 0, y: 0, width: 760, height: 150)
         host.appearance = NSAppearance(named: .aqua)
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = NSAppearance(named: .aqua)
@@ -70,5 +76,20 @@ private enum LocalFallbackRenderer {
             }
         }
         return darkPixels < 12 || highest - lowest < 0.3
+    }
+
+    static func orangePixels(_ data: Data) -> Int {
+        guard let rep = NSBitmapImageRep(data: data) else { return 0 }
+        var count = 0
+        for y in 0..<rep.pixelsHigh {
+            for x in 0..<rep.pixelsWide {
+                guard let color = rep.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else { continue }
+                if color.redComponent > color.greenComponent + 0.15,
+                   color.greenComponent > color.blueComponent + 0.15 {
+                    count += 1
+                }
+            }
+        }
+        return count
     }
 }

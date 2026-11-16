@@ -118,7 +118,9 @@ class DocumentProcessor: ObservableObject {
     @MainActor
     func process(job: ProcessingJob, settings: AppSettings, mode: ProcessingMode) async {
         let libraryID = LibraryFilter.assignedID(settings.activeLibraryID)
-        defer { appState?.storeFinishedRun(job, settings: settings) }
+        defer {
+            if isolatedLocalSettings == nil { appState?.storeFinishedRun(job, settings: settings) }
+        }
         job.ingestCollection = targetCollection(job: job, settings: settings)
         rememberIngestTarget(job: job, settings: settings)
         if isolatedLocalSettings == nil { job.localFallbackNotice = nil }
