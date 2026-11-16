@@ -43,7 +43,6 @@ struct EmbeddingCacheSettingsTests {
             ("worker", false, ProcessingHost.devbox),
         ] {
             let view = VStack(alignment: .leading, spacing: 16) {
-                Text("Embedding performance").font(.title2)
                 EmbeddingCacheSettingsPane(
                     streaming: .constant(streaming),
                     reuseEmbeddings: .constant(true),
