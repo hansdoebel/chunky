@@ -1,4 +1,4 @@
-.PHONY: build run test test-python test-worker test-all clean open-xcode \
+.PHONY: build run test test-python test-worker build-web test-web test-all clean open-xcode \
        services qdrant ollama \
        setup-venv first-launch
 
@@ -19,6 +19,16 @@ test-integration:
 
 test-worker:
 	cd worker && python3 -m pytest -q
+
+build-web:
+	npm --prefix worker/web ci
+	npm --prefix worker/web run check
+	npm --prefix worker/web run build
+
+test-web: build-web
+	npm --prefix worker/web run test:unit
+	cd worker/web && npx playwright install chromium
+	npm --prefix worker/web run test:browser
 
 test-all: test test-python test-worker test-integration
 
