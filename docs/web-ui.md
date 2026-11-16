@@ -58,6 +58,10 @@ Live conversion, real model inference, and Qdrant integration are separate opera
 
 ## Collections and semantic search
 
+![Worker semantic search](images/web-search.png)
+
+This macOS browser capture uses mocked collection passages and scores, not live conversion or retrieval-quality measurements.
+
 Open Collections to browse the worker's configured Qdrant target. This is the server target from `CHUNKY_QDRANT_URL`; a Qdrant API key is optional for reads when that server permits keyless access. The browser never receives the target URL or key. Browse pages request 50 points without vectors and follow the server's continuation cursor. There is no client-side 1,000-point filter or implicit truncation.
 
 Collections with unknown embedding identity remain available for read-only browsing. Semantic search requires trusted embedding metadata and matching actual collection configuration. Choose an indexed model/provider and, when the collection used a custom worker-side embedding endpoint, enter that same endpoint. Changing a query model, endpoint, collection, or search mode clears the previous hits. A same-width model substitution is refused.
