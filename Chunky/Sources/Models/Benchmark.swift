@@ -142,3 +142,78 @@ extension AppSettings {
         return copy
     }
 }
+
+struct EmbeddingBenchmarkReport: Codable, Equatable {
+    struct QueryResult: Codable, Equatable {
+        var queryID: UUID
+        var retrievedIDs: [String]
+        var latencyMs: Double
+    }
+
+    struct Run: Codable, Equatable, Identifiable {
+        var id: UUID
+        var corpusSHA256: String
+        var model: String
+        var modelRevision: String
+        var dimensions: Int
+        var machine: String
+        var runtime: String
+        var collection: String
+        var hybrid: Bool
+        var coldStartupMs: Double
+        var warmStartupMs: Double
+        var embeddingSeconds: Double
+        var indexingSeconds: Double
+        var peakMemoryBytes: UInt64
+        var results: [QueryResult]
+
+        func score(set: RetrievalEvalSet) -> RetrievalEvalScore {
+            let labels = Dictionary(uniqueKeysWithValues: set.queries.map { ($0.id, $0.relevantIDs) })
+            return RetrievalEvalMetrics.summarize(results.map {
+                RetrievalEvalMetrics.Row(relevant: labels[$0.queryID] ?? [], retrieved: $0.retrievedIDs, latencyMs: $0.latencyMs)
+            }, k: 10)
+        }
+    }
+
+    var schemaVersion: Int
+    var corpusSHA256: String
+    var chunkCount: Int
+    var chunking: String
+    var set: RetrievalEvalSet
+    var runs: [Run]
+
+    static func decode(_ data: Data, productionCollection: String) throws -> Self {
+        let report = try JSONDecoder().decode(Self.self, from: data)
+        try report.validate(productionCollection: productionCollection)
+        return report
+    }
+
+    func validate(productionCollection: String) throws {
+        func require(_ condition: Bool, _ message: String) throws {
+            if !condition { throw NSError(domain: "EmbeddingBenchmark", code: 1, userInfo: [NSLocalizedDescriptionKey: message]) }
+        }
+        try require(schemaVersion == 1, "Unsupported benchmark report version.")
+        try require(corpusSHA256.count == 64 && corpusSHA256.allSatisfy { $0.isHexDigit }, "Record the SHA-256 of the frozen cached chunks.")
+        try require(chunkCount > 0 && !chunking.isEmpty, "Record the cached chunk count and chunking configuration.")
+        let queryIDs = Set(set.queries.map(\.id))
+        try require(!queryIDs.isEmpty && queryIDs.count == set.queries.count, "The fixed query set must contain unique IDs.")
+        try require(set.queries.allSatisfy { !$0.question.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty && !$0.relevantIDs.isEmpty }, "Every query needs a question and relevance labels.")
+        try require(!runs.isEmpty && Set(runs.map(\.id)).count == runs.count, "Include uniquely identified measured runs.")
+        for run in runs {
+            try require(run.corpusSHA256 == corpusSHA256, "Each model must use the identical frozen cached chunks.")
+            try require([run.model, run.modelRevision, run.machine, run.runtime].allSatisfy { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }, "Record model revision, machine and inference runtime.")
+            try require(run.dimensions > 0 && run.peakMemoryBytes > 0, "Record measured vector dimensions and embedding-host peak memory.")
+            try require(BenchmarkPlanner.accepts(collection: run.collection, production: productionCollection), "Benchmark collections must be separate from production.")
+            try require([run.coldStartupMs, run.warmStartupMs, run.embeddingSeconds, run.indexingSeconds].allSatisfy { $0.isFinite && $0 >= 0 } && run.embeddingSeconds > 0 && run.indexingSeconds >= run.embeddingSeconds, "Timings must be finite, nonnegative measurements with positive embedding duration.")
+            try require(Set(run.results.map(\.queryID)) == queryIDs && run.results.count == queryIDs.count, "Every run must evaluate exactly the same labeled queries once.")
+            try require(run.results.allSatisfy { $0.latencyMs.isFinite && $0.latencyMs >= 0 && Set($0.retrievedIDs).count == $0.retrievedIDs.count }, "Query timings must be finite and ranked IDs must be unique.")
+        }
+        let groups = Dictionary(grouping: runs, by: { [$0.model, $0.modelRevision, String($0.dimensions), $0.machine, $0.runtime].joined(separator: "|") })
+        try require(Set(runs.map(\.model)).count >= 2 && groups.values.allSatisfy { Set($0.map(\.hybrid)) == [false, true] }, "Compare at least two models, each with dense and BM25 hybrid runs.")
+        for group in groups.values {
+            try require(Set(group.map(\.collection)).count == 1, "Dense and hybrid retrieval must use the same indexed collection for each model.")
+        }
+        let modelCollections = groups.values.compactMap { $0.first?.collection }
+        try require(Set(modelCollections).count == modelCollections.count, "Different model configurations require separate benchmark collections.")
+    }
+}
