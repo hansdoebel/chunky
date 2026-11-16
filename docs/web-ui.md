@@ -79,3 +79,8 @@ Results show semantic scores, chunk text, source, and page metadata when present
 Expand Filter passages to narrow semantic results by year range, author, exact stored DOI, document title, heading, or element type (text, table, formula, figure, code). Text fields ignore surrounding whitespace; empty fields leave that attribute unrestricted. Years must be whole numbers from 1 to 9999, and the start year cannot exceed the end year. Invalid years show field errors and prevent the query from being sent.
 
 Filters apply on the worker to every search page. Editing a filter clears previous hits and restarts paging; Clear filters restores an unrestricted search. Selecting another collection or signing out clears the filter draft. Filters are kept in page memory and do not change stored document metadata, embedding identity, or collection settings.
+The light and dark captures below came from macOS browser CI run [43977623510](https://github.com/hansdoebel/chunky/actions/runs/43977623510), with nonblank PNG assertions. All displayed documents and scores are mocked test fixtures.
+
+![Dark worker workspace](images/web-dark-workspace.png)
+
+![Dark mobile workspace](images/web-dark-mobile.png)
