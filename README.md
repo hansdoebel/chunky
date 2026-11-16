@@ -126,7 +126,7 @@ The gRPC migration already landed in [PER-55 / PR #5](https://github.com/hansdoe
 | `grpc-swift-protobuf` | 2.0.0 | 2.5.0 |
 | `swift-protobuf` | 1.41.0 | 1.41.0 |
 
-These replace the old `grpc-swift` repository and 1.x transport/protobuf bounds. The major migration described as deferred in PER-57 is therefore already complete; no additional migration or downgrade is needed. SwiftPM’s `from:` requirements allow compatible updates within each major version. When updating the vendored package, validate its unit tests with `swift test --skip IntegrationTests`, then build and test the macOS app. Live Qdrant integration tests remain a separate operator check outside CI.
+These replace the old `grpc-swift` repository and 1.x transport/protobuf bounds. The major migration described as deferred in PER-57 is therefore already complete; no additional migration or downgrade is needed. SwiftPM’s `from:` requirements allow compatible updates within each major version. When updating the vendored package, validate its unit tests with `swift test --package-path LocalPackages/qdrant-swift --skip IntegrationTests` from the repository root, then build and test the macOS app. Live Qdrant integration tests remain a separate operator check outside CI.
 
 ## Resources
 
