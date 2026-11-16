@@ -24,6 +24,8 @@ The optional [browser workspace](../docs/web-ui.md) is served at `/` on the same
 
 | Method | Path | Purpose |
 |--------|------|---------|
+| `GET` | `/v1/collections` | Configured worker Qdrant collection names; no credentials |
+| `GET` | `/v1/collections/{name}/points` | Read-only points without vectors; explicit limit and cursor |
 | `GET` | `/v1/ui/config` | Safe browser configuration; no endpoint credentials |
 | `GET` | `/v1/jobs` | Job summaries with explicit `limit` (1–100) and `offset` |
 | `POST` | `/v1/jobs` | Multipart upload (`file`) plus a `settings` JSON field |
@@ -94,6 +96,8 @@ After a successful job the worker writes `verification.json` beside the upload. 
 by default, or OpenAI-compatible `/v1/embeddings` when `embedding_backend` is
 `openai`) and runs a Qdrant query. Rerank, eval metrics, and RAG chat run in the app. The app may rerank these hits with
 its own `/v1/rerank` client. This process does not call a reranker.
+
+Browser searches set `use_worker_qdrant=true`, which rejects Qdrant URL/key overrides and uses only the configured server. Those searches require verified collection embedding identity and matching actual vector configuration; they do not create or update indexes. Unknown collections can still be browsed through the read-only points route. See [browser search](../docs/web-ui.md#collections-and-semantic-search). Existing requests without that flag keep their original behavior.
 
 The Qdrant target is the request's `qdrant_url` and optional `qdrant_api_key`,
 or `CHUNKY_QDRANT_URL` / `CHUNKY_QDRANT_API_KEY` when the body omits the URL.

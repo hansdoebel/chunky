@@ -11,7 +11,7 @@ A native macOS application for processing documents into semantic chunks and sto
 - Text chunking with configurable token limits and overlap
 - Embeddings from Ollama or an OpenAI-compatible `/v1/embeddings` endpoint
 - Vector storage in local Docker Qdrant or Qdrant Cloud
-- Optional worker browser workspace for uploads, queue progress, cancellation, chunk preview, and job settings
+- Optional worker browser workspace for uploads, queue progress, cancellation, chunk preview, job settings, and semantic collection search
 - Named worker profiles (wired LAN, Wi-Fi, Tailscale) with a reachability and latency check
 - Retrieval over dense search or hybrid dense plus BM25 with RRF, plus an optional reranker
 - Filters by year, author, DOI, title, heading, and element type

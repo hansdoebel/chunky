@@ -1,6 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
-import { PNG } from 'pngjs';
-import { readFile } from 'node:fs/promises';
+import { captureWorkspace } from './support';
 const config = { embedding_backend: 'ollama', embedding_model: 'nomic-embed-text', qdrant_available: true, qdrant_label: 'Worker Qdrant', vlm_models: ['standard', 'granite-docling-transformers', 'smoldocling-transformers'] };
 const fixture = { id: 'fixture-complete', filename: 'fixture-research.pdf', status: 'succeeded', progress: { message: 'Fixture processing complete', percent: 100 }, result: { page_count: 3, chunks: [{ page: 1, headings: ['Fixture overview'], text: 'Fixture text for browser validation. <script>window.chunkXSS=true</script>', token_count: 28 }, { page: 2, headings: ['Findings'], text: 'These are mocked test chunks, not actual PDF conversion results.', token_count: 15 }] } };
 async function mockWorker(page: Page, options: { qdrant?: boolean; reject?: boolean; late?: boolean } = {}) {
@@ -39,15 +38,7 @@ async function mockWorker(page: Page, options: { qdrant?: boolean; reject?: bool
 }
 async function login(page: Page) { await page.goto('/'); await page.getByLabel('Worker access token').fill('fixture-token'); await page.getByRole('button', { name: 'Connect to worker' }).click(); await expect(page.getByRole('heading', { name: 'Processing queue' })).toBeVisible(); }
 async function screenshot(page: Page, name: string) {
-  await expect(page.getByRole('heading', { name: name === 'settings' ? 'Job settings' : 'Processing queue', exact: true })).toBeVisible();
-  const path = `/tmp/chunky-web-${name}.png`;
-  await page.screenshot({ path, fullPage: true, animations: 'disabled' });
-  const png = PNG.sync.read(await readFile(path));
-  let dark = 0; let light = 0; let opaque = 0;
-  for (let i = 0; i < png.data.length; i += 4) { if (png.data[i + 3] > 200) opaque++; const luma = (png.data[i] + png.data[i + 1] + png.data[i + 2]) / 3; if (luma < 150) dark++; if (luma > 220) light++; }
-  expect(opaque).toBeGreaterThan(png.width * png.height * .9);
-  expect(dark).toBeGreaterThan(1000);
-  expect(light).toBeGreaterThan(1000);
+  await captureWorkspace(page, name, name === 'settings' ? 'Job settings' : 'Processing queue');
 }
 test('authenticated production workspace, escaped chunk preview and responsive screenshots', async ({ page }) => {
   const mocked = await mockWorker(page);

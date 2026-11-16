@@ -3,15 +3,17 @@
 from __future__ import annotations
 
 import logging
+import math
 import re
 from dataclasses import dataclass
 from typing import Any, Callable, Protocol
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urlsplit
+from uuid import UUID
 
 from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
-from chunky_worker.qdrant_ingest import BM25_TEXT_FIELD, _collection_vector_size, dense_vector_name, redact
+from chunky_worker.qdrant_ingest import BM25_TEXT_FIELD, IngestError, _collection_vector_size, dense_vector_name, embedding_identity, redact, validate_collection_identity
 from chunky_worker.settings import Settings
 
 log = logging.getLogger(__name__)
@@ -79,6 +81,7 @@ class SearchRequest(BaseModel):
     query: str
     collection: str
     mode: str = "dense"
+    use_worker_qdrant: bool = False
     qdrant_url: str | None = None
     qdrant_api_key: str | None = Field(default=None, repr=False)
     embedding_model: str | None = None
@@ -135,6 +138,7 @@ class SearchRequest(BaseModel):
 class CollectionLayout:
     vector_size: int | None
     using: str | None
+    info: Any = None
 
 @dataclass
 class ScoredHit:
@@ -143,6 +147,12 @@ class ScoredHit:
     payload: dict[str, Any]
 
 class QdrantSearcher(Protocol):
+    def list_collections(self, *, url: str, api_key: str) -> dict:
+        ...
+
+    def scroll_points(self, *, url: str, api_key: str, collection: str, limit: int, offset: int | str | None) -> dict:
+        ...
+
     def describe(self, *, url: str, api_key: str, collection: str) -> CollectionLayout | None:
         ...
 
@@ -158,6 +168,8 @@ class QdrantSearcher(Protocol):
         filters: list[PayloadFilter],
         score_threshold: float | None,
         using: str | None,
+        ensure_indexes: bool = True,
+        identity: dict | None = None,
     ) -> list[ScoredHit]:
         ...
 
@@ -175,6 +187,8 @@ class QdrantSearcher(Protocol):
         score_threshold: float | None,
         using: str | None,
         weights: list[float] | None,
+        ensure_indexes: bool = True,
+        identity: dict | None = None,
     ) -> list[ScoredHit]:
         ...
 
@@ -318,7 +332,70 @@ def _destination_key(url: str) -> str:
     path = parsed.path.rstrip("/")
     return f"{parsed.scheme.lower()}://{host}{port}{path}"
 
+def worker_read_target(settings: Settings) -> tuple[str, str]:
+    value = (settings.qdrant_url or "").strip()
+    try:
+        parsed = urlsplit(value)
+        valid = parsed.scheme in {"http", "https"} and parsed.hostname and not parsed.username and not parsed.password and not parsed.query and not parsed.fragment
+        parsed.port
+    except ValueError:
+        valid = False
+    if not valid:
+        raise SearchError("Worker Qdrant is not configured with a safe HTTP(S) URL", error_type="qdrant_not_configured")
+    return value, (settings.qdrant_api_key or "").strip()
+
+
+def _field(value, key, default=None):
+    return value.get(key, default) if isinstance(value, dict) else getattr(value, key, default)
+
+
+def collection_identity(info) -> dict:
+    identity = _field(_field(_field(info, "config"), "metadata") or {}, "chunky_embedding")
+    valid = (
+        isinstance(identity, dict)
+        and type(identity.get("schema")) is int
+        and identity["schema"] == 1
+        and isinstance(identity.get("backend"), str)
+        and identity["backend"] in _BACKENDS
+        and isinstance(identity.get("model"), str)
+        and bool(identity["model"].strip())
+        and isinstance(identity.get("endpoint_sha256"), str)
+        and re.fullmatch(r"[0-9a-f]{64}", identity["endpoint_sha256"])
+        and type(identity.get("dimensions")) is int
+        and identity["dimensions"] > 0
+        and isinstance(identity.get("distance"), str)
+        and identity["distance"] in {"cosine", "dot", "euclid"}
+        and type(identity.get("hybrid")) is bool
+    )
+    if not valid:
+        raise SearchError("Collection embedding identity is unknown. Browse its payloads or choose a browser-managed collection for semantic search.", status_code=409, error_type="embedding_identity_mismatch")
+    try:
+        validate_collection_identity(info, identity)
+    except IngestError as exc:
+        raise SearchError(str(exc), status_code=409, error_type="embedding_identity_mismatch") from None
+    return dict(identity)
+
+
+def parse_scroll_offset(value: str | None) -> int | str | None:
+    if value is None:
+        return None
+    if len(value) > 64:
+        raise SearchError("offset is too long", status_code=422, error_type="invalid_offset")
+    if re.fullmatch(r"[0-9]+", value):
+        number = int(value)
+        if number <= 2**64 - 1:
+            return number
+    try:
+        return str(UUID(value))
+    except ValueError:
+        raise SearchError("offset must be a Qdrant point UUID or unsigned integer", status_code=422, error_type="invalid_offset") from None
+
+
 def resolve_target(request: SearchRequest, settings: Settings) -> tuple[str, str]:
+    if request.use_worker_qdrant:
+        if request.qdrant_url is not None or request.qdrant_api_key is not None:
+            raise SearchError("Worker Qdrant does not accept client credentials or URLs")
+        return worker_read_target(settings)
     configured_url = (settings.qdrant_url or "").strip()
     if request.qdrant_url is not None:
         url = request.qdrant_url.strip()
@@ -483,6 +560,17 @@ def run_search(
         )
 
     backend, kind, model = resolve_backend(request, settings, embeddings)
+    expected_identity = None
+    if request.use_worker_qdrant:
+        stored = collection_identity(layout.info)
+        endpoint = request.embedding_url or settings.embedding_url or settings.ollama_url
+        expected_identity = embedding_identity(backend=kind, model=model, endpoint=endpoint, dimensions=stored["dimensions"], distance=stored["distance"], hybrid=stored["hybrid"])
+        try:
+            validate_collection_identity(layout.info, expected_identity)
+        except IngestError as exc:
+            raise SearchError(str(exc), status_code=409, error_type="embedding_identity_mismatch") from None
+        if request.mode == "hybrid" and not stored["hybrid"]:
+            raise SearchError("This collection has no compatible hybrid layout. Use dense search.", status_code=409, error_type="embedding_identity_mismatch")
     try:
         vectors = backend.embed([request.query], model)
     except SearchError:
@@ -507,9 +595,12 @@ def run_search(
             status_code=502,
             error_type="embedding_error",
         ) from None
-    if layout.vector_size is not None and layout.vector_size != len(vector):
+    if not all(math.isfinite(value) for value in vector):
+        raise SearchError("Embedding backend returned a non-finite vector", status_code=502, error_type="embedding_error")
+    expected_dimensions = expected_identity["dimensions"] if expected_identity is not None else layout.vector_size
+    if expected_dimensions is not None and expected_dimensions != len(vector):
         raise SearchError(
-            f"Collection {collection!r} has vector size {layout.vector_size}, "
+            f"Collection {collection!r} has vector size {expected_dimensions}, "
             f"but {model} produces vectors of size {len(vector)}. Refusing to search.",
             status_code=409,
             error_type="dimension_mismatch",
@@ -529,6 +620,7 @@ def run_search(
                 score_threshold=request.score_threshold,
                 using=layout.using,
                 weights=request.rrf_weights,
+                **({"ensure_indexes": False, "identity": expected_identity} if request.use_worker_qdrant else {}),
             )
         return searcher.query_dense(
             url=url,
@@ -540,6 +632,7 @@ def run_search(
             filters=filters,
             score_threshold=request.score_threshold,
             using=layout.using,
+            **({"ensure_indexes": False, "identity": expected_identity} if request.use_worker_qdrant else {}),
         )
 
     paper_count = 0
@@ -706,6 +799,53 @@ class QdrantPointSearcher:
         except Exception as exc:
             raise SearchError(redact(str(exc), api_key), status_code=502, error_type="qdrant_error") from None
 
+    def list_collections(self, *, url: str, api_key: str) -> dict:
+        client = self._open(url, api_key)
+        try:
+            result = client.get_collections()
+            rows = _field(result, "collections", [])
+            return {"collections": [{"name": str(_field(row, "name"))} for row in rows], "target_label": "Worker Qdrant"}
+        except SearchError:
+            raise
+        except Exception as exc:
+            raise SearchError(redact(str(exc), api_key), status_code=502, error_type="qdrant_error") from None
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
+    def scroll_points(self, *, url: str, api_key: str, collection: str, limit: int, offset: int | str | None) -> dict:
+        client = self._open(url, api_key)
+        try:
+            if not client.collection_exists(collection_name=collection):
+                raise SearchError("Collection was not found", status_code=404, error_type="not_found")
+            info = client.get_collection(collection_name=collection)
+            identity = None
+            reason = None
+            try:
+                identity = collection_identity(info)
+            except SearchError as exc:
+                reason = str(exc)
+            points, next_offset = client.scroll(collection_name=collection, limit=limit, offset=offset, with_payload=True, with_vectors=False)
+            return {
+                "collection": collection,
+                "points": [{"id": str(_field(point, "id")), "payload": _payload_dict(_field(point, "payload"))} for point in points],
+                "limit": limit,
+                "next_offset": str(next_offset) if next_offset is not None else None,
+                "points_count": _field(info, "points_count"),
+                "semantic_search_available": identity is not None,
+                "semantic_search_reason": reason,
+                "embedding": {key: identity[key] for key in ("backend", "model", "dimensions", "distance", "hybrid")} if identity is not None else None,
+            }
+        except SearchError:
+            raise
+        except Exception as exc:
+            raise SearchError(redact(str(exc), api_key), status_code=502, error_type="qdrant_error") from None
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
+
     def describe(self, *, url: str, api_key: str, collection: str) -> CollectionLayout | None:
         client = self._open(url, api_key)
         try:
@@ -715,6 +855,7 @@ class QdrantPointSearcher:
             return CollectionLayout(
                 vector_size=_collection_vector_size(info),
                 using=dense_vector_name(info),
+                info=info,
             )
         except SearchError:
             raise
@@ -737,10 +878,18 @@ class QdrantPointSearcher:
         filters: list[PayloadFilter],
         score_threshold: float | None,
         using: str | None,
+        ensure_indexes: bool = True,
+        identity: dict | None = None,
     ) -> list[ScoredHit]:
         client = self._open(url, api_key)
         try:
-            self._ensure_indexes(client, url, collection)
+            if identity is not None:
+                try:
+                    validate_collection_identity(client.get_collection(collection_name=collection), identity)
+                except IngestError as exc:
+                    raise SearchError(str(exc), status_code=409, error_type="embedding_identity_mismatch") from None
+            if ensure_indexes:
+                self._ensure_indexes(client, url, collection)
             response = client.query_points(
                 collection_name=collection,
                 query=vector,
@@ -790,10 +939,18 @@ class QdrantPointSearcher:
         score_threshold: float | None,
         using: str | None,
         weights: list[float] | None,
+        ensure_indexes: bool = True,
+        identity: dict | None = None,
     ) -> list[ScoredHit]:
         client = self._open(url, api_key)
         try:
-            self._ensure_indexes(client, url, collection)
+            if identity is not None:
+                try:
+                    validate_collection_identity(client.get_collection(collection_name=collection), identity)
+                except IngestError as exc:
+                    raise SearchError(str(exc), status_code=409, error_type="embedding_identity_mismatch") from None
+            if ensure_indexes:
+                self._ensure_indexes(client, url, collection)
             arguments = hybrid_query_arguments(
                 vector=vector,
                 text=text,

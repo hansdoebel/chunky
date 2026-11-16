@@ -214,3 +214,5 @@ progress.progress-track{border:0;width:100%;appearance:none}
 progress.progress-track::-webkit-progress-bar{background:#e9eff8;border-radius:10px}
 progress.progress-track::-webkit-progress-value{background:#4380df;border-radius:10px}
 progress.progress-track::-moz-progress-bar{background:#4380df;border-radius:10px}
+
+@media(max-width:620px){.sidebar nav{gap:3px;justify-content:space-between}.sidebar nav button{padding:11px 6px;font-size:10px;gap:5px}.sidebar nav .nav-icon{display:none}}

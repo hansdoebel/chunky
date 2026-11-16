@@ -55,3 +55,17 @@ make test-web
 Frontend checks cover Svelte/TypeScript, unit tests, a production build, and Playwright browser component tests with mocked worker responses. The macOS CI job captures the actual production frontend, rejects blank screenshots, and uploads the queue, chunks, settings, and mobile views. Fixtures are test data, not evidence of live PDF extraction. Worker tests use fake conversion, embedding, and Qdrant clients. CI does not start live model services, GPUs, or Qdrant.
 
 Live conversion, real model inference, and Qdrant integration are separate operator checks outside CI. The ROCm image and physical worker still require the deployment validation tracked in PER-53.
+
+## Collections and semantic search
+
+![Worker semantic search](images/web-search.png)
+
+This macOS browser capture uses mocked collection passages and scores, not live conversion or retrieval-quality measurements.
+
+Open Collections to browse the worker's configured Qdrant target. This is the server target from `CHUNKY_QDRANT_URL`; a Qdrant API key is optional for reads when that server permits keyless access. The browser never receives the target URL or key. Browse pages request 50 points without vectors and follow the server's continuation cursor. There is no client-side 1,000-point filter or implicit truncation.
+
+Collections with unknown embedding identity remain available for read-only browsing. Semantic search requires trusted embedding metadata and matching actual collection configuration. Choose an indexed model/provider and, when the collection used a custom worker-side embedding endpoint, enter that same endpoint. Changing a query model, endpoint, collection, or search mode clears the previous hits. A same-width model substitution is refused.
+
+Search uses the existing authenticated `/v1/search` engine with `use_worker_qdrant=true`. This pins Qdrant access to the configured server and validates model identity, endpoint fingerprint, dimensions, distance, and vector layout before querying. Dense search also works in a matching hybrid collection; hybrid search requires an existing hybrid layout. Browser reads and searches do not create indexes, adopt metadata, or change collection settings. Legacy app/API search retains its existing behavior.
+
+Results show semantic scores, chunk text, source, and page metadata when present. Each search page requests 10 hits with an explicit offset and continuation; paging is a fresh query against the current collection, so concurrent writes can change rankings. This workspace does not promise a frozen search snapshot or modify stored points.
