@@ -93,6 +93,19 @@ test('missing or malformed reports are clear without implying a verification pas
 });
 
 test('late verification results cannot replace the selected job or return after logout', async ({ page }) => {
+  await page.addInitScript(() => {
+    const originalFetch = window.fetch.bind(window);
+    const state = window as Window & { verificationResponses?: number };
+    state.verificationResponses = 0;
+    window.fetch = async (input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (!url.includes('/verification')) return originalFetch(input, init);
+      const response = await originalFetch(input, { ...init, signal: undefined });
+      await response.clone().text();
+      state.verificationResponses = (state.verificationResponses ?? 0) + 1;
+      return response;
+    };
+  });
   await mockInsights(page);
   const releases: (() => void)[] = [];
   let requests = 0;
@@ -106,6 +119,7 @@ test('late verification results cannot replace the selected job or return after 
   await expect.poll(() => requests).toBe(1);
   await page.getByRole('button', { name: /^fixture-without-report.pdf/ }).click();
   releases[0]();
+  await expect.poll(() => page.evaluate(() => (window as Window & { verificationResponses?: number }).verificationResponses)).toBe(1);
   await expect(page.getByRole('heading', { name: 'fixture-without-report.pdf', exact: true })).toBeVisible();
   await expect(page.getByText('Mocked verification fixture; not a real PDF check.', { exact: true })).toHaveCount(0);
   await page.getByRole('button', { name: /^fixture-insights.pdf/ }).click();
@@ -113,6 +127,7 @@ test('late verification results cannot replace the selected job or return after 
   await expect.poll(() => requests).toBe(2);
   await page.getByRole('button', { name: 'Sign out' }).click();
   releases[1]();
+  await expect.poll(() => page.evaluate(() => (window as Window & { verificationResponses?: number }).verificationResponses)).toBe(2);
   await expect(page.getByLabel('Worker access token')).toHaveValue('');
   await expect(page.getByRole('heading', { name: 'Job insights', exact: true })).toHaveCount(0);
   await expect(page.getByText('Mocked verification fixture; not a real PDF check.', { exact: true })).toHaveCount(0);
