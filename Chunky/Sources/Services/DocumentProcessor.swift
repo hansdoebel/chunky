@@ -128,6 +128,8 @@ class DocumentProcessor: ObservableObject {
             if settings.allowLocalFallback {
                 do {
                     try Task.checkCancellation()
+                    job.status = .chunking
+                    job.error = nil
                     job.statusMessage = "Checking worker before upload..."
                     try await fallbackPreflight(settings.devboxWorkerURL)
                     try Task.checkCancellation()

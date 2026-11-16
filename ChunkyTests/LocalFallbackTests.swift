@@ -95,8 +95,57 @@ struct LocalFallbackTests {
         }
         settings.ollamaURL = "http://worker:11434"
         #expect(throws: LocalFallbackError.self) {
+            try LocalFallbackPlan.make(from: settings, mode: .full, collection: settings.defaultCollection)
+        }
+    }
+
+    @Test func chunkOnlyDoesNotRequireUnusedEmbeddingOrVLMServers() throws {
+        let settings = configuredSettings()
+        settings.ollamaURL = "http://worker:11434"
+        settings.embeddingBackend = EmbeddingBackendKind.openai.rawValue
+        settings.embeddingAPIURL = "https://embedding.example"
+        settings.vlmServerURL = "https://unused-vlm.example"
+        settings.doclingModel = DoclingModel.graniteDoclingMLX.rawValue
+        settings.doPictureDescription = false
+        let plan = try LocalFallbackPlan.make(from: settings, mode: .chunkOnly, collection: settings.defaultCollection)
+        defer { plan.discard() }
+        #expect(plan.settings.processingHost == .localMac)
+        #expect(plan.settings.doclingModel == DoclingModel.graniteDoclingMLX.rawValue)
+        #expect(plan.settings.embeddingAPIURL.isEmpty)
+        #expect(plan.settings.vlmServerURL.isEmpty)
+        #expect(settings.ollamaURL == "http://worker:11434")
+        #expect(settings.vlmServerURL == "https://unused-vlm.example")
+        settings.doPictureDescription = true
+        settings.pictureDescriptionPreset = PictureDescriptionPreset.api.rawValue
+        #expect(throws: LocalFallbackError.self) {
             try LocalFallbackPlan.make(from: settings, mode: .chunkOnly, collection: settings.defaultCollection)
         }
+    }
+
+    @Test func workerPreflightMakesTheQueueJobActiveBeforeSuspending() async {
+        let settings = configuredSettings()
+        let job = ProcessingJob(url: URL(fileURLWithPath: "/tmp/test.pdf"))
+        let (entered, signal) = AsyncStream<Void>.makeStream()
+        var release: CheckedContinuation<Void, Never>?
+        let processor = DocumentProcessor(
+            fallbackPreflight: { _ in
+                await withCheckedContinuation { continuation in
+                    release = continuation
+                    signal.yield(())
+                }
+            },
+            workerRunner: { job, _, _ in job.status = .completed }
+        )
+        let processing = Task { await processor.process(job: job, settings: settings, mode: .full) }
+        var iterator = entered.makeAsyncIterator()
+        await iterator.next()
+        #expect(job.status == .chunking)
+        #expect(job.statusMessage == "Checking worker before upload...")
+        #expect(job.status != .pending && job.status != .completed && job.status != .failed)
+        release?.resume()
+        signal.finish()
+        await processing.value
+        #expect(job.status == .completed)
     }
 
     @Test func disabledFallbackNeverPreflightsOrStartsLocalWork() async {

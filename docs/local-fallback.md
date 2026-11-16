@@ -6,7 +6,7 @@ With fallback enabled, Chunky checks worker health before submitting a document.
 
 The Queue keeps a notice naming Local Mac and its runtime for any fallback job. Analytics records Local Mac as the processing host. Your saved Processing host, models, endpoints, worker profiles, tokens and collection plans stay unchanged.
 
-Set up the local Python environment and models using `make setup-venv` first. Known Granite-Docling and SmolDocling Transformers conversion presets use their matching MLX runtime locally; the standard pipeline stays standard. The fallback uses the Mac accelerator default. An explicit VLM API endpoint must already be loopback. Local model downloads still require network access on their first use.
+Set up the local Python environment and models using `make setup-venv` first. Known Granite-Docling and SmolDocling Transformers conversion presets use their matching MLX runtime locally; the standard pipeline stays standard. The fallback uses the Mac accelerator default. If picture description uses the API preset, its VLM endpoint must already be loopback. Unused embedding and VLM endpoints do not block Chunk Only. Local model downloads still require network access on their first use.
 
 For Chunk & Ingest, fallback currently requires:
 

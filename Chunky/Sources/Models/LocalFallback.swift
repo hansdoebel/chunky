@@ -39,16 +39,18 @@ struct LocalFallbackPlan {
     let notice: String
 
     static func make(from original: AppSettings, mode: ProcessingMode, collection: String) throws -> LocalFallbackPlan {
-        guard LocalFallbackPolicy.isLoopback(original.ollamaURL) else {
-            throw LocalFallbackError.unavailable("set the Ollama URL to a loopback address before enabling fallback.")
-        }
-        guard original.vlmServerURL.isEmpty || LocalFallbackPolicy.isLoopback(original.vlmServerURL) else {
+        let needsVLMAPI = original.doPictureDescription
+            && original.resolvedPictureDescriptionPreset == PictureDescriptionPreset.api.rawValue
+        guard !needsVLMAPI || LocalFallbackPolicy.isLoopback(original.vlmServerURL) else {
             throw LocalFallbackError.unavailable("the VLM server must be local.")
         }
         guard let model = DoclingModel(rawValue: original.doclingModel) else {
             throw LocalFallbackError.unavailable("select a supported local conversion model.")
         }
         if mode == .full {
+            guard LocalFallbackPolicy.isLoopback(original.ollamaURL) else {
+                throw LocalFallbackError.unavailable("set the Ollama URL to a loopback address before enabling fallback.")
+            }
             guard original.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else {
                 throw LocalFallbackError.unavailable("automatic fallback currently requires the Ollama embedding provider.")
             }
@@ -78,6 +80,7 @@ struct LocalFallbackPlan {
         snapshot.embeddingAPIURL = ""
         snapshot.chatModel = ""
         snapshot.chatAPIURL = ""
+        if !needsVLMAPI { snapshot.vlmServerURL = "" }
         snapshot.enableEmbeddingCache = false
         snapshot.doclingAccelerator = ProcessingHost.localMac.defaultAccelerator.rawValue
         switch model {
