@@ -80,6 +80,7 @@ class JobSettings(BaseModel):
     embedding_backend: str = ""
     embedding_url: str = ""
     ingest_target: IngestTarget = IngestTarget.NONE
+    use_worker_qdrant: bool = False
     qdrant_url: str | None = None
 
     qdrant_api_key: str | None = Field(default=None, repr=False)

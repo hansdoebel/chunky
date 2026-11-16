@@ -1,3 +1,10 @@
+FROM node:24.22.1-bookworm-slim@sha256:be8204d4bd327363357f532187b752ff62759c31bedf98e9e18fc08c9cbd605c AS web-builder
+WORKDIR /opt/chunky/worker/web
+COPY worker/web/package.json worker/web/package-lock.json ./
+RUN npm ci
+COPY worker/web/ ./
+RUN npm run build
+
 FROM rocm/pytorch:rocm10.1.0_ubuntu24.04_py3.12_pytorch_release_2.14.0
 
 WORKDIR /opt/chunky
@@ -6,6 +13,7 @@ RUN python3 -c "from importlib.metadata import version; print('torch==' + versio
     && python3 -m pip install --no-cache-dir -c /tmp/rocm-constraints.txt -r worker/requirements-rocm.txt \
     && python3 -c "import torch; assert torch.version.hip, 'ROCm PyTorch is required'"
 COPY worker/chunky_worker /opt/chunky/worker/chunky_worker
+COPY --from=web-builder /opt/chunky/worker/chunky_worker/web_dist /opt/chunky/worker/chunky_worker/web_dist
 COPY worker/pyproject.toml worker/README.md /opt/chunky/worker/
 COPY Chunky/Resources/Scripts /opt/chunky/Chunky/Resources/Scripts
 RUN python3 -m pip install --no-cache-dir --no-deps ./worker \

@@ -7,9 +7,11 @@ import json
 import logging
 from pathlib import Path
 from typing import Annotated
+from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
+from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.staticfiles import StaticFiles
 
 from chunky_worker.auth import require_bearer
 from chunky_worker.chunk_cache import ChunkCache, ChunkCacheError
@@ -25,7 +27,7 @@ from chunky_worker.model_catalog import (
     vlm_report,
 )
 from chunky_worker.logging_config import configure_logging
-from chunky_worker.models import Job, JobSettings, JobStatus
+from chunky_worker.models import IngestTarget, Job, JobMode, JobSettings, JobStatus
 from chunky_worker.verification import hash_file, write_report
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
 from chunky_worker.search import QdrantPointSearcher, SearchError, parse_search_request, run_search
@@ -74,6 +76,7 @@ def create_app(
     ollama_tags=None,
     downloader=None,
     chunk_cache: ChunkCache | None = None,
+    web_dist: Path | None = None,
 ) -> FastAPI:
     settings = settings or Settings.from_env()
     require_token_when_exposed(settings)
@@ -226,6 +229,27 @@ def create_app(
             return JSONResponse(status_code=exc.status_code, content=content)
         return JSONResponse(status_code=200, content=payload)
 
+    @api.get("/v1/ui/config")
+    def ui_config() -> dict:
+        return {
+            "embedding_backend": settings.embedding_backend,
+            "embedding_model": settings.embedding_model,
+            "qdrant_available": _worker_qdrant_available(settings),
+            "qdrant_label": "Worker Qdrant",
+            "vlm_models": ["standard", *TRANSFORMERS_VLM_MODELS],
+        }
+
+    @api.get("/v1/jobs")
+    def list_jobs(limit: int = 50, offset: int = 0) -> dict:
+        if not 1 <= limit <= 100 or offset < 0:
+            raise HTTPException(status_code=422, detail="limit must be 1–100 and offset nonnegative")
+        jobs, total = store.page(limit, offset)
+        summaries = []
+        for job in jobs:
+            body = _job_payload(job)
+            summaries.append({key: body[key] for key in ("id", "status", "filename", "progress", "error", "error_type")})
+        return {"jobs": summaries, "total": total, "limit": limit, "offset": offset}
+
     @api.post("/v1/jobs", status_code=202)
     async def create_job(
         file: Annotated[UploadFile, File()],
@@ -243,6 +267,16 @@ def create_app(
         except Exception as exc:
             raise HTTPException(status_code=400, detail=f"Invalid settings: {exc}") from exc
 
+        if job_settings.use_worker_qdrant:
+            if job_settings.mode != JobMode.CHUNK_AND_EMBED or job_settings.ingest_target != IngestTarget.QDRANT_CLOUD:
+                raise HTTPException(status_code=400, detail="Worker Qdrant requires full processing and qdrant_cloud ingestion")
+            if job_settings.qdrant_url or job_settings.qdrant_api_key:
+                raise HTTPException(status_code=400, detail="Worker Qdrant does not accept client credentials or URLs")
+            if not _worker_qdrant_available(settings):
+                raise HTTPException(status_code=400, detail="Worker Qdrant is not configured with a safe URL and API key")
+            job_settings.qdrant_url = settings.qdrant_url
+            job_settings.qdrant_api_key = settings.qdrant_api_key
+
         original_name = file.filename or "upload.bin"
         job = store.create(original_name, job_settings)
         job_dir = settings.work_dir / job.id
@@ -257,11 +291,11 @@ def create_app(
         return {"id": job.id, "status": accepted}
 
     @api.get("/v1/jobs/{job_id}")
-    def get_job(job_id: str) -> dict:
+    def get_job(job_id: str, include_embeddings: bool = True) -> dict:
         job = store.get(job_id)
         if job is None:
             raise HTTPException(status_code=404, detail="Job not found")
-        return _job_payload(job)
+        return _job_payload(job, include_embeddings=include_embeddings)
 
     @api.get("/v1/jobs/{job_id}/verification")
     def get_verification(job_id: str) -> dict:
@@ -488,6 +522,25 @@ def create_app(
         return stored
 
     app.include_router(api)
+    assets = web_dist if web_dist is not None else Path(__file__).parent / "web_dist"
+
+    @app.middleware("http")
+    async def response_headers(request: Request, call_next):
+        response = await call_next(request)
+        response.headers["Cache-Control"] = "no-store"
+        response.headers["X-Content-Type-Options"] = "nosniff"
+        response.headers["Content-Security-Policy"] = "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; object-src 'none'; base-uri 'none'; frame-ancestors 'none'"
+        return response
+
+    @app.get("/", include_in_schema=False)
+    def web_shell():
+        index = assets / "index.html"
+        if not index.is_file():
+            return JSONResponse(status_code=503, content={"detail": "Web UI assets are missing. Build worker/web with npm ci && npm run build."})
+        return FileResponse(index)
+
+    if assets.is_dir():
+        app.mount("/assets", StaticFiles(directory=assets / "assets", check_dir=False), name="web-assets")
     return app
 
 async def _json_object(request: Request) -> dict:
@@ -525,10 +578,11 @@ def _reject_secret(report: dict, secret: str | None) -> None:
     if not secret:
         return
     raw = json.dumps(report)
-    if secret not in raw:
+    encoded = json.dumps(secret)[1:-1]
+    if encoded not in raw:
         return
     report.clear()
-    report.update(json.loads(raw.replace(secret, "[redacted]")))
+    report.update(json.loads(raw.replace(encoded, "[redacted]")))
 
 
 def _log_startup(settings: Settings) -> None:
@@ -554,7 +608,15 @@ def _log_startup(settings: Settings) -> None:
         gpu["arch_list"],
     )
 
-def _job_payload(job: Job) -> dict:
+def _worker_qdrant_available(settings: Settings) -> bool:
+    try:
+        url = urlsplit(settings.qdrant_url)
+        return bool(url.scheme in {"http", "https"} and url.hostname and not url.username and not url.password and not url.query and not url.fragment and settings.qdrant_api_key)
+    except ValueError:
+        return False
+
+
+def _job_payload(job: Job, *, include_embeddings: bool = True) -> dict:
     body = {
         "id": job.id,
         "status": job.status.value,
@@ -565,4 +627,9 @@ def _job_payload(job: Job) -> dict:
         "error": job.error,
         "error_type": job.error_type,
     }
+    if body["result"] is not None and not include_embeddings:
+        body["result"].pop("embeddings", None)
+    _reject_secret(body, job.settings.qdrant_api_key)
+    if job.settings.use_worker_qdrant:
+        body["settings"].pop("qdrant_url", None)
     return body

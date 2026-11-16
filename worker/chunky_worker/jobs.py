@@ -261,6 +261,11 @@ class JobStore:
             job = self._jobs.get(job_id)
             return job.model_copy(deep=True) if job else None
 
+    def page(self, limit: int, offset: int) -> tuple[list[Job], int]:
+        with self._lock:
+            jobs = list(reversed(self._jobs.values()))
+            return [job.model_copy(update={"result": None}).model_copy(deep=True) for job in jobs[offset:offset + limit]], len(jobs)
+
     def cancel_event(self, job_id: str) -> threading.Event | None:
         with self._lock:
             return self._cancels.get(job_id)
@@ -419,6 +424,18 @@ class JobRunner:
         )
         return points
 
+    def _identity(self, job_settings, dimensions: int) -> dict:
+        from chunky_worker.qdrant_ingest import embedding_identity
+
+        return embedding_identity(
+            backend=job_settings.embedding_backend or self.settings.embedding_backend,
+            model=job_settings.embedding_model or self.settings.embedding_model,
+            endpoint=job_settings.embedding_url or self.settings.embedding_url or self.settings.ollama_url,
+            dimensions=dimensions,
+            distance=job_settings.qdrant_distance,
+            hybrid=job_settings.qdrant_hybrid,
+        )
+
     def _apply_ingest(
         self,
         job_id: str,
@@ -478,6 +495,7 @@ class JobRunner:
             quantization_memory=job.settings.qdrant_quantization_memory,
             payload_memory=job.settings.qdrant_payload_memory,
             on_progress=on_batch,
+            **({"identity": self._identity(job.settings, result.embedding_dim or len(points[0].vector))} if job.settings.use_worker_qdrant else {}),
         )
 
         result.embeddings = None
@@ -587,6 +605,13 @@ class JobRunner:
                 url = (job.settings.embedding_url or self.settings.embedding_url or self.settings.ollama_url).strip()
                 probed = self.dimensions.dimension(backend, model, cache_key=f"{kind}|{url}|{model}")
                 if job.settings.ingest_target == IngestTarget.QDRANT_CLOUD:
+                    if job.settings.use_worker_qdrant:
+                        self.ingestor.validate_identity(
+                            url=job.settings.qdrant_url or "",
+                            api_key=job.settings.qdrant_api_key or "",
+                            collection=job.settings.qdrant_collection,
+                            identity=self._identity(job.settings, probed),
+                        )
                     existing = self.ingestor.collection_vector_size(
                         url=job.settings.qdrant_url or "",
                         api_key=job.settings.qdrant_api_key or "",
