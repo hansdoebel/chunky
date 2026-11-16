@@ -14,7 +14,7 @@ from pydantic import BaseModel, Field, ValidationError, field_validator
 
 from chunky_worker.embeddings import EmbeddingBackend, make_embedding_backend
 from chunky_worker.qdrant_ingest import BM25_TEXT_FIELD, IngestError, _collection_vector_size, dense_vector_name, embedding_identity, redact, validate_collection_identity
-from chunky_worker.settings import Settings
+from chunky_worker.settings import Settings, default_scripts_dir
 
 log = logging.getLogger(__name__)
 
@@ -234,9 +234,8 @@ def source_scroll_filter(source: str, library_filters: list[PayloadFilter]):
 
 def _load_element_types():
     import sys
-    from pathlib import Path
 
-    scripts = Path(__file__).resolve().parents[2] / "Chunky" / "Resources" / "Scripts"
+    scripts = default_scripts_dir()
     if str(scripts) not in sys.path:
         sys.path.insert(0, str(scripts))
     import element_types
