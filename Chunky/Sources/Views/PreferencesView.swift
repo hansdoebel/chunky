@@ -1095,12 +1095,7 @@ struct PreferencesView: View {
             }
 
             Section {
-                Link(
-                    "GitHub Repository",
-                    destination: URL(string: "https://github.com/hansdoebel/psd")!)
-                Link(
-                    "Docling Documentation",
-                    destination: URL(string: "https://docling-project.github.io/docling/")!)
+                ProjectLinksPane()
             } header: {
                 Text("Links")
             }
