@@ -12,7 +12,6 @@ struct ProjectLinksTests {
 
     @Test func aboutLinksRenderNonblankScreenshot() throws {
         let view = VStack(alignment: .leading, spacing: 12) {
-            Text("Links").font(.headline)
             ProjectLinksPane()
         }
         .padding(24)
