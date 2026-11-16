@@ -4,9 +4,9 @@ from copy import deepcopy
 import pytest
 from fastapi.testclient import TestClient
 
-from chunky_worker.app import create_app
+from chunky_worker.app import _job_payload, create_app
 from chunky_worker.jobs import JobStore
-from chunky_worker.models import JobSettings
+from chunky_worker.models import JobMode, JobResult, JobSettings
 from chunky_worker.qdrant_ingest import IngestError, PreparedPoint, QdrantCloudIngestor, embedding_identity, validate_collection_identity
 from tests.conftest import FakeEmbeddings, FakePipeline, auth_headers, wait_for_status
 
@@ -190,3 +190,36 @@ def test_secret_redaction_preserves_json_structure(secret):
     assert report["error"] == "failed [redacted]"
     assert report["nested"] == [{"value": "[redacted]", "count": 3, "ok": True, "empty": None}]
     assert json.loads(json.dumps(report)) == report
+
+
+def test_preview_does_not_copy_stored_vectors(tmp_settings):
+    class UncopyableVectors(list):
+        def __deepcopy__(self, memo):
+            raise AssertionError("Preview traversed the stored vectors")
+
+    store = JobStore()
+    job = store.create("note.txt", JobSettings())
+    job.result = JobResult(mode=JobMode.CHUNK_AND_EMBED, chunks=[{"text": "Preview"}])
+    vectors = UncopyableVectors([[1.0, 2.0, 3.0]])
+    job.result.embeddings = vectors
+    with TestClient(ui_app(tmp_settings, store=store), headers=auth_headers()) as client:
+        preview = client.get(f"/v1/jobs/{job.id}?include_embeddings=false")
+        assert preview.status_code == 200
+        assert preview.json()["result"]["chunks"] == [{"text": "Preview"}]
+        assert "embeddings" not in preview.json()["result"]
+    assert job.result.embeddings is vectors
+    projected = store.get(job.id, include_embeddings=False)
+    projected.result.chunks[0]["text"] = "Changed copy"
+    assert job.result.chunks == [{"text": "Preview"}]
+    assert job.result.embeddings is vectors
+
+
+def test_preview_serialization_does_not_visit_vectors():
+    store = JobStore()
+    job = store.create("note.txt", JobSettings())
+    job.result = JobResult(mode=JobMode.CHUNK_AND_EMBED, chunks=[{"text": "Preview"}])
+    job.result.embeddings = [[object()]]
+    preview = _job_payload(job, include_embeddings=False)
+    assert preview["result"]["chunks"] == [{"text": "Preview"}]
+    assert "embeddings" not in preview["result"]
+    assert job.result.embeddings is not None

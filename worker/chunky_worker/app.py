@@ -292,7 +292,7 @@ def create_app(
 
     @api.get("/v1/jobs/{job_id}")
     def get_job(job_id: str, include_embeddings: bool = True) -> dict:
-        job = store.get(job_id)
+        job = store.get(job_id, include_embeddings=include_embeddings)
         if job is None:
             raise HTTPException(status_code=404, detail="Job not found")
         return _job_payload(job, include_embeddings=include_embeddings)
@@ -629,12 +629,10 @@ def _job_payload(job: Job, *, include_embeddings: bool = True) -> dict:
         "filename": job.filename,
         "settings": job.settings.public_dict(),
         "progress": job.progress.as_dict() if job.progress else None,
-        "result": job.result.model_dump(mode="json") if job.result else None,
+        "result": job.result.model_dump(mode="json", exclude=None if include_embeddings else {"embeddings"}) if job.result else None,
         "error": job.error,
         "error_type": job.error_type,
     }
-    if body["result"] is not None and not include_embeddings:
-        body["result"].pop("embeddings", None)
     _reject_secret(body, job.settings.qdrant_api_key)
     if job.settings.use_worker_qdrant:
         body["settings"].pop("qdrant_url", None)

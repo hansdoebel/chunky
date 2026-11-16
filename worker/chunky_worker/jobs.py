@@ -256,10 +256,15 @@ class JobStore:
             self._changed[job_id] = threading.Event()
         return job
 
-    def get(self, job_id: str) -> Job | None:
+    def get(self, job_id: str, *, include_embeddings: bool = True) -> Job | None:
         with self._lock:
             job = self._jobs.get(job_id)
-            return job.model_copy(deep=True) if job else None
+            if job is None:
+                return None
+            if not include_embeddings and job.result is not None:
+                result = job.result.model_copy(update={"embeddings": None})
+                job = job.model_copy(update={"result": result})
+            return job.model_copy(deep=True)
 
     def page(self, limit: int, offset: int) -> tuple[list[Job], int]:
         with self._lock:
