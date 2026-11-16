@@ -1,3 +1,5 @@
+import { buildSearchFilters, type SearchFilterDraft } from './search-filters';
+
 export type JobStatus = 'queued' | 'running' | 'succeeded' | 'failed' | 'canceled';
 export type JobEvent = { type?: string; status?: JobStatus; stage_status?: 'ok' | 'error' | 'skipped'; message?: string; percent?: number };
 export type Chunk = { text?: string; embedding_text?: string; page?: number; page_end?: number; headings?: string[]; token_count?: number; content_type?: string };
@@ -43,7 +45,7 @@ export type CollectionPage = {
   semantic_search_reason: string | null;
   embedding: CollectionEmbedding | null;
 };
-export type SearchOptions = { query: string; backend: 'ollama' | 'openai'; model: string; endpoint: string; mode: 'dense' | 'hybrid' };
+export type SearchOptions = { query: string; backend: 'ollama' | 'openai'; model: string; endpoint: string; mode: 'dense' | 'hybrid'; filters?: SearchFilterDraft };
 export type SearchPage = {
   results: (CollectionPoint & { score: number })[];
   limit: number;
@@ -68,10 +70,12 @@ export function buildSearchRequest(collection: string, options: SearchOptions, c
   if (options.backend !== config.embedding_backend && !options.endpoint.trim()) throw new Error('Enter the worker-side endpoint for this embedding provider.');
   if (options.endpoint.trim()) validateEmbeddingEndpoint(options.endpoint);
   if (!Number.isInteger(offset) || offset < 0) throw new Error('Invalid search page.');
+  const filters = options.filters ? buildSearchFilters(options.filters) : [];
   return {
     query: options.query.trim(), collection, use_worker_qdrant: true,
     mode: options.mode, embedding_backend: options.backend, embedding_model: options.model.trim(),
     ...(options.endpoint.trim() ? { embedding_url: options.endpoint.trim() } : {}),
+    ...(filters.length ? { filters } : {}),
     limit: 10, offset,
   };
 }
