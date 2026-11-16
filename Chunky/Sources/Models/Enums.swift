@@ -211,6 +211,7 @@ enum PictureDescriptionPreset: String, CaseIterable, Identifiable {
 enum EmbeddingBackendKind: String, CaseIterable, Identifiable {
     case ollama
     case openai
+    case fastembed
 
     var id: String { rawValue }
 
@@ -218,6 +219,7 @@ enum EmbeddingBackendKind: String, CaseIterable, Identifiable {
         switch self {
         case .ollama: return "Ollama"
         case .openai: return "OpenAI-compatible"
+        case .fastembed: return "FastEmbed (local CPU)"
         }
     }
 }

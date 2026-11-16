@@ -117,6 +117,7 @@ struct RetrievalPlayground: View {
     var onAsk: () -> Void
     var onSelectCitation: (RAGCitation) -> Void
     var onShowPDF: (RetrievalHit) -> Void = { _ in }
+    var embeddingProblem: String? = nil
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -180,8 +181,22 @@ struct RetrievalPlayground: View {
                     Text(kind.displayName).tag(kind.rawValue)
                 }
             }
+            .onChange(of: backend) { _, selected in
+                if selected == "fastembed" { model = EmbeddingPreferences.cpuModel }
+            }
             TextField("Model", text: $model)
                 .textFieldStyle(.roundedBorder)
+                .disabled(backend == "fastembed")
+            if backend == "fastembed" {
+                Text("Local Mac · NumPy CPU · 512 dimensions")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            if let embeddingProblem {
+                Label(embeddingProblem, systemImage: "exclamationmark.triangle.fill")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+            }
             Stepper(value: $limit, in: 1...RetrievalLimits.maximum) {
                 Text("Top \(limit)")
             }
@@ -254,14 +269,14 @@ struct RetrievalPlayground: View {
                     .frame(maxWidth: .infinity)
             }
             .buttonStyle(.borderedProminent)
-            .disabled(isSearching || isAnswering || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(embeddingProblem != nil || isSearching || isAnswering || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             TextField("Generation model", text: $generationModel, prompt: Text("qwen3"))
                 .textFieldStyle(.roundedBorder)
             Button(action: onAsk) {
                 Text(isAnswering ? "Answering…" : "Ask")
                     .frame(maxWidth: .infinity)
             }
-            .disabled(isAnswering || isSearching || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || generationModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+            .disabled(embeddingProblem != nil || isAnswering || isSearching || query.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || generationModel.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
             Text("Ask uses these retrieval settings and an OpenAI-compatible chat endpoint.")
                 .font(.caption)
                 .foregroundStyle(.secondary)
@@ -542,7 +557,8 @@ struct RetrievalScreen: View {
             onShowPDF: { hit in
                 selectedHitID = hit.id
                 citationPDF = CitationPDF.highlight(hit: hit, known: knownPDFs)
-            }
+            },
+            embeddingProblem: selectedEmbeddingProblem
         )
         .sheet(item: $citationPDF) { highlight in
             CitationPDFScreen(highlight: highlight, pageImage: { page in
@@ -564,6 +580,15 @@ struct RetrievalScreen: View {
                 generationModel = appState.settings.chatModel
             }
         }
+    }
+
+    private var selectedEmbeddingProblem: String? {
+        let plan = CollectionPlanStore.load(name: collection, defaults: appState.settings.defaults)
+        return EmbeddingPreferences.problem(
+            backend: backend, model: model,
+            dimensions: backend == "fastembed" ? EmbeddingPreferences.cpuDimensions : (plan?.vectorSize ?? appState.settings.embeddingDimensions),
+            processingHost: appState.settings.processingHost, plan: plan
+        )
     }
 
     private var knownPDFs: [URL] {
@@ -608,6 +633,10 @@ struct RetrievalScreen: View {
     }
 
     private func runSearch(question: String? = nil) async {
+        if let problem = selectedEmbeddingProblem {
+            error = problem
+            return
+        }
         isSearching = true
         error = nil
         defer { isSearching = false }

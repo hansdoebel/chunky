@@ -87,7 +87,7 @@ jobs:
 
       - name: Docling convert helper unit tests
         working-directory: Chunky/Resources/Scripts
-        run: python -m unittest test_docling_convert -v
+        run: python -m unittest test_docling_convert test_fastembed_daemon -v
 
   macos:
     name: macOS build and unit tests (Xcode 27.2)

@@ -12,7 +12,7 @@ test:
 	xcodebuild test -scheme Chunky -destination 'platform=macOS' -allowProvisioningUpdates
 
 test-python:
-	cd Chunky/Resources/Scripts && python3 -m unittest test_docling_convert -v
+	cd Chunky/Resources/Scripts && python3 -m unittest test_docling_convert test_fastembed_daemon -v
 
 test-integration:
 	cd Chunky/Resources/Scripts && ~/.chunky-venv/bin/python3 -m unittest test_docling_integration -v

@@ -2,6 +2,9 @@ import Foundation
 
 enum EmbeddingDimensionProbe {
     static func probe(backend: String, model: String, ollamaURL: String, apiURL: String) async throws -> Int {
+        if backend == "fastembed" {
+            return try await FastEmbedService.shared.embed(texts: ["chunky"], model: model).first?.count ?? 0
+        }
         if backend == EmbeddingBackendKind.openai.rawValue {
             return try await openAI(url: apiURL, model: model)
         }
