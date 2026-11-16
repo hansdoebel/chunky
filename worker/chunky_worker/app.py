@@ -324,12 +324,22 @@ def create_app(
 
     @api.get("/v1/jobs/{job_id}/verification")
     def get_verification(job_id: str) -> dict:
-        if store.get(job_id) is None:
+        job = store.get(job_id, include_embeddings=False)
+        if job is None:
             raise HTTPException(status_code=404, detail="Job not found")
         path = settings.work_dir / job_id / "verification.json"
         if not path.is_file():
             raise HTTPException(status_code=404, detail="Verification report not found")
-        return json.loads(path.read_text(encoding="utf-8"))
+        try:
+            report = json.loads(path.read_text(encoding="utf-8"))
+        except (OSError, UnicodeError, json.JSONDecodeError):
+            raise HTTPException(status_code=500, detail="Verification report could not be read") from None
+        if not isinstance(report, dict):
+            raise HTTPException(status_code=500, detail="Verification report is invalid")
+        secrets = {job.settings.qdrant_api_key, settings.qdrant_api_key} - {None, ""}
+        for secret in sorted(secrets, key=len, reverse=True):
+            _reject_secret(report, secret)
+        return report
 
     @api.post("/v1/jobs/{job_id}/verify")
     async def reverify_job(job_id: str, request: Request) -> dict:
