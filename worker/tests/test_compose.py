@@ -90,3 +90,15 @@ def test_compose_refuses_missing_required_settings(missing):
     )
     assert result.returncode != 0
     assert missing in result.stderr
+
+
+def test_upstream_images_have_version_tags(compose_config):
+    images = [
+        service["image"]
+        for name, service in compose_config["services"].items()
+        if name != "worker"
+    ]
+    base = (DEPLOY / "Dockerfile").read_text().splitlines()[0].split()[1]
+    for image in [base, *images]:
+        assert ":" in image
+        assert image.rsplit(":", 1)[1] not in {"latest", "rocm", "main", "nightly"}
