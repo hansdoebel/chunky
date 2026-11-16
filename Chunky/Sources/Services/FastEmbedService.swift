@@ -40,7 +40,7 @@ nonisolated final class FastEmbedService: @unchecked Sendable {
         guard result["model"] as? String == model,
               result["dimensions"] as? Int == Self.dimensions,
               let vectors = result["vectors"] as? [[NSNumber]], vectors.count == texts.count,
-              vectors.allSatisfy({ $0.count == Self.dimensions && $0.allSatisfy { $0.doubleValue.isFinite } }) else {
+              vectors.allSatisfy({ $0.count == Self.dimensions && $0.allSatisfy { $0.doubleValue.isFinite && $0.floatValue.isFinite } }) else {
             throw failure("Invalid local CPU model identity or vector dimensions. Refusing to index or search.")
         }
         return vectors.map { $0.map(\.floatValue) }
@@ -77,6 +77,21 @@ nonisolated final class FastEmbedService: @unchecked Sendable {
         process = child
         input = stdin.fileHandleForWriting
         output = stdout.fileHandleForReading
+    }
+
+    private func reset() {
+        lock.lock()
+        let child = process
+        process = nil
+        let writer = input
+        let reader = output
+        input = nil
+        output = nil
+        lock.unlock()
+        if child?.isRunning == true { child?.terminate() }
+        child?.waitUntilExit()
+        try? writer?.close()
+        try? reader?.close()
     }
 
     nonisolated private final class RequestState: @unchecked Sendable {
@@ -118,7 +133,7 @@ nonisolated final class FastEmbedService: @unchecked Sendable {
                         try self.start()
                         try state.begin(self.process)
                         defer { state.finish() }
-                        let timeout = DispatchWorkItem { self.cancel() }
+                        let timeout = DispatchWorkItem { state.cancel() }
                         DispatchQueue.global().asyncAfter(deadline: .now() + 180, execute: timeout)
                         defer { timeout.cancel() }
                         try self.input?.write(contentsOf: data)
@@ -132,7 +147,10 @@ nonisolated final class FastEmbedService: @unchecked Sendable {
                         }
                         if let error = result["error"] as? String { throw self.failure(error) }
                         continuation.resume(returning: result)
-                    } catch { continuation.resume(throwing: error) }
+                    } catch {
+                        self.reset()
+                        continuation.resume(throwing: error)
+                    }
                 }
             }
             try Task.checkCancellation()
