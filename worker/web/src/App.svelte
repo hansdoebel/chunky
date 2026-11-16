@@ -1,13 +1,14 @@
 <script lang="ts">
   import { onDestroy } from 'svelte';
+  import Collections from './Collections.svelte';
   import { APIError, WorkerAPI, buildJobSettings, type Job, type JobOptions, type WorkerConfig, type JobEvent } from './lib/api';
 
   let token = $state('');
-  let api: WorkerAPI | null = null;
+  let api = $state.raw<WorkerAPI | null>(null);
   let config = $state<WorkerConfig | null>(null);
   let connected = $state(false);
   let connecting = $state(false);
-  let tab = $state<'queue' | 'settings'>('queue');
+  let tab = $state<'queue' | 'settings' | 'collections'>('queue');
   let jobs = $state<Job[]>([]);
   let total = $state(0);
   let offset = $state(0);
@@ -262,6 +263,10 @@
     } catch (problem) { failure(problem, session); }
   }
 
+  function collectionFailure(problem: unknown, client: WorkerAPI) {
+    if (api === client) failure(problem, generation);
+  }
+
   function percent(job: Job) { return Math.max(0, Math.min(100, job.progress?.percent ?? 0)); }
   function fileSize(size: number) { return size < 1_048_576 ? `${Math.max(1, Math.round(size / 1024))} KB` : `${(size / 1_048_576).toFixed(1)} MB`; }
   function vlmName(id: string) { return id === 'standard' ? 'Standard · no VLM' : id === 'granite-docling-transformers' ? 'Granite-Docling' : id === 'smoldocling-transformers' ? 'SmolDocling' : id; }
@@ -295,17 +300,20 @@
       <div class="nav-label">WORKSPACE</div>
       <nav aria-label="Workspace">
         <button class:active={tab === 'queue'} onclick={() => tab = 'queue'}><span class="nav-icon" aria-hidden="true">▤</span>Processing queue<span class="count">{total}</span></button>
+        <button class:active={tab === 'collections'} onclick={() => tab = 'collections'}><span class="nav-icon" aria-hidden="true">▦</span>Collections</button>
         <button class:active={tab === 'settings'} onclick={() => tab = 'settings'}><span class="nav-icon" aria-hidden="true">⚙</span>Job settings</button>
       </nav>
       <div class="sidebar-bottom"><div class="worker-state"><span class:unavailable={!!connectionError} class="status-dot"></span>{connectionError ? 'Connection interrupted' : 'Worker connected'}</div><button class="quiet signout" onclick={() => clearSession()}>Sign out <span aria-hidden="true">→</span></button></div>
     </aside>
 
     <main class="main-content">
-      <header class="page-header"><div><div class="eyebrow">YOUR WORKSPACE</div><h1>{tab === 'queue' ? 'Processing queue' : 'Job settings'}</h1><p>{tab === 'queue' ? 'From documents to knowledge, one chunk at a time.' : 'Choose how the worker processes your next documents.'}</p></div><span class="host-badge"><span class="status-dot"></span>Processing on worker</span></header>
+      <header class="page-header"><div><div class="eyebrow">YOUR WORKSPACE</div><h1>{tab === 'queue' ? 'Processing queue' : tab === 'collections' ? 'Collections' : 'Job settings'}</h1><p>{tab === 'queue' ? 'From documents to knowledge, one chunk at a time.' : tab === 'collections' ? 'Explore your documents and find the passages that matter.' : 'Choose how the worker processes your next documents.'}</p></div><span class="host-badge"><span class="status-dot"></span>Processing on worker</span></header>
       {#if error}<div class="notice danger" role="alert">{error}<button class="dismiss" aria-label="Dismiss error" onclick={() => error = ''}>×</button></div>{/if}
       {#if connectionError}<div class="notice warning" role="alert">{connectionError} Your queue will refresh when the worker responds.</div>{/if}
 
-      {#if tab === 'settings'}
+      {#if tab === 'collections' && api && config}
+        <Collections {api} {config} onAuthFailure={collectionFailure} />
+      {:else if tab === 'settings'}
         <section class="card settings-card">
           <div class="section-heading"><div><h2>Processing preferences</h2><p>Applied to new uploads. Existing jobs keep their settings.</p></div><span class="pill neutral">Session only</span></div>
           <div class="settings-grid">

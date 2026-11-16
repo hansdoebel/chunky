@@ -14,6 +14,7 @@ export type WorkerConfig = {
   embedding_backend: 'ollama' | 'openai';
   embedding_model: string;
   qdrant_available: boolean;
+  qdrant_read_available?: boolean;
   qdrant_label: string;
   vlm_models: string[];
 };
@@ -30,6 +31,51 @@ export type JobOptions = {
   chunkTokens: number;
 };
 
+export type CollectionEmbedding = { backend: 'ollama' | 'openai'; model: string; dimensions: number; distance: string; hybrid: boolean };
+export type CollectionPoint = { id: string | number; payload: Record<string, unknown> };
+export type CollectionPage = {
+  collection: string;
+  points: CollectionPoint[];
+  limit: number;
+  next_offset: string | null;
+  points_count: number | null;
+  semantic_search_available: boolean;
+  semantic_search_reason: string | null;
+  embedding: CollectionEmbedding | null;
+};
+export type SearchOptions = { query: string; backend: 'ollama' | 'openai'; model: string; endpoint: string; mode: 'dense' | 'hybrid' };
+export type SearchPage = {
+  results: (CollectionPoint & { score: number })[];
+  limit: number;
+  offset: number;
+  next_offset: number | null;
+  embedding_model: string;
+  embedding_backend: string;
+  embedding_dim: number;
+};
+
+function validateEmbeddingEndpoint(endpoint: string) {
+  let url: URL;
+  try { url = new URL(endpoint.trim()); } catch { throw new Error('Enter a valid HTTP(S) embedding endpoint.'); }
+  if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw new Error('Use an HTTP(S) embedding endpoint without credentials or query parameters.');
+  }
+}
+
+export function buildSearchRequest(collection: string, options: SearchOptions, config: WorkerConfig, offset = 0): Record<string, unknown> {
+  if (!collection.trim() || !options.query.trim()) throw new Error('Choose a collection and enter a search query.');
+  if (!options.model.trim()) throw new Error('Choose the collection’s embedding model.');
+  if (options.backend !== config.embedding_backend && !options.endpoint.trim()) throw new Error('Enter the worker-side endpoint for this embedding provider.');
+  if (options.endpoint.trim()) validateEmbeddingEndpoint(options.endpoint);
+  if (!Number.isInteger(offset) || offset < 0) throw new Error('Invalid search page.');
+  return {
+    query: options.query.trim(), collection, use_worker_qdrant: true,
+    mode: options.mode, embedding_backend: options.backend, embedding_model: options.model.trim(),
+    ...(options.endpoint.trim() ? { embedding_url: options.endpoint.trim() } : {}),
+    limit: 10, offset,
+  };
+}
+
 export class APIError extends Error {
   constructor(message: string, public status: number) { super(message); }
 }
@@ -40,13 +86,7 @@ export function buildJobSettings(options: JobOptions, config: WorkerConfig): Rec
   if (full && options.backend !== config.embedding_backend && !options.endpoint.trim()) {
     throw new Error('Enter the worker-side endpoint for this embedding provider.');
   }
-  if (full && options.endpoint.trim()) {
-    let url: URL;
-    try { url = new URL(options.endpoint.trim()); } catch { throw new Error('Enter a valid HTTP(S) embedding endpoint.'); }
-    if (!['http:', 'https:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
-      throw new Error('Use an HTTP(S) embedding endpoint without credentials or query parameters.');
-    }
-  }
+  if (full && options.endpoint.trim()) validateEmbeddingEndpoint(options.endpoint);
   if (!Number.isInteger(options.chunkTokens) || options.chunkTokens < 64 || options.chunkTokens > 4096) {
     throw new Error('Chunk size must be between 64 and 4096 tokens.');
   }
@@ -148,6 +188,17 @@ export class WorkerAPI {
       throw new APIError(message, response.status);
     }
     return response;
+  }
+  async collections(signal?: AbortSignal): Promise<{ collections: { name: string }[]; target_label: string }> {
+    return (await this.request('collections', { signal })).json();
+  }
+  async points(collection: string, offset?: string, signal?: AbortSignal): Promise<CollectionPage> {
+    const query = new URLSearchParams({ limit: '50' });
+    if (offset !== undefined) query.set('offset', offset);
+    return (await this.request(`collections/${encodeURIComponent(collection)}/points?${query}`, { signal })).json();
+  }
+  async search(body: Record<string, unknown>, signal?: AbortSignal): Promise<SearchPage> {
+    return (await this.request('search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })).json();
   }
   async config(): Promise<WorkerConfig> { return (await this.request('ui/config')).json(); }
   async models(): Promise<{ embeddings?: { name: string }[] }> { return (await this.request('models')).json(); }

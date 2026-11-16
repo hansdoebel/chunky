@@ -85,3 +85,37 @@ describe('metrics stage progress', () => {
     expect(parsed[5].status).toBe('succeeded');
   });
 });
+
+describe('collection browsing and semantic search', () => {
+  it('uses configured targets, bounded pages and safely encoded cursors', async () => {
+    const fetcher = vi.fn<typeof fetch>().mockImplementation(async () => new Response('{}'));
+    const api = new WorkerAPI('private-token', fetcher);
+    await api.collections();
+    await api.points('paper collection/one', 'opaque+cursor/next');
+    expect(fetcher.mock.calls[0][0]).toBe('/v1/collections');
+    const pointURL = new URL(String(fetcher.mock.calls[1][0]), 'https://worker.example');
+    expect(pointURL.pathname).toBe('/v1/collections/paper%20collection%2Fone/points');
+    expect(pointURL.searchParams.get('limit')).toBe('50');
+    expect(pointURL.searchParams.get('offset')).toBe('opaque+cursor/next');
+    expect(new Headers(fetcher.mock.calls[1][1]?.headers).get('Authorization')).toBe('Bearer private-token');
+  });
+  it('builds a model-aware query with no Qdrant credentials and explicit pagination', async () => {
+    const { buildSearchRequest } = await import('./api');
+    const request = buildSearchRequest('papers', { query: ' useful question ', backend: 'ollama', model: 'exact-model', endpoint: '', mode: 'dense' }, config, 10);
+    expect(request).toEqual({ query: 'useful question', collection: 'papers', use_worker_qdrant: true, mode: 'dense', embedding_backend: 'ollama', embedding_model: 'exact-model', limit: 10, offset: 10 });
+    const fetcher = vi.fn<typeof fetch>().mockResolvedValue(new Response('{}'));
+    await new WorkerAPI('private-token', fetcher).search(request);
+    expect(fetcher.mock.calls[0][0]).toBe('/v1/search');
+    expect(new Headers(fetcher.mock.calls[0][1]?.headers).get('Content-Type')).toBe('application/json');
+    expect(JSON.parse(String(fetcher.mock.calls[0][1]?.body))).toEqual(request);
+  });
+  it('requires the correct worker endpoint and rejects unsafe or incomplete queries', async () => {
+    const { buildSearchRequest } = await import('./api');
+    const query = { query: 'question', backend: 'openai' as const, model: 'model', endpoint: '', mode: 'dense' as const };
+    expect(() => buildSearchRequest('papers', query, config)).toThrow('endpoint');
+    expect(() => buildSearchRequest('papers', { ...query, endpoint: 'https://user:secret@example.com' }, config)).toThrow('credentials');
+    expect(() => buildSearchRequest('papers', { ...query, query: '' }, config)).toThrow('query');
+    expect(() => buildSearchRequest('papers', { ...query, backend: 'ollama' }, config, -1)).toThrow('page');
+    expect(buildSearchRequest('papers', { ...query, endpoint: 'http://worker-model.example:8002' }, config)).toHaveProperty('embedding_url', 'http://worker-model.example:8002');
+  });
+});
