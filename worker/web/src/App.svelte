@@ -174,10 +174,10 @@
     void refresh();
   }
 
-  async function selectJob(id: string) {
+  async function selectJob(id: string, acceptedJob?: Job) {
     if (!api) return;
     clearSelection();
-    selected = jobs.find((job) => job.id === id) ?? null;
+    selected = jobs.find((job) => job.id === id) ?? acceptedJob ?? null;
     reconcileStreams(generation, api);
     await loadDetail(id);
   }
@@ -228,7 +228,7 @@
         offset = 0;
         await refresh();
         if (session !== generation) return;
-        await selectJob(accepted.id);
+        await selectJob(accepted.id, { id: accepted.id, filename: file.name, status: 'queued' });
       }
     } catch (problem) {
       failure(problem, session);
