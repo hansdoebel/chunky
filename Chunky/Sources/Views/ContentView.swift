@@ -705,7 +705,7 @@ struct BottomBarView: View {
                 VStack(alignment: .leading, spacing: 6) {
                     statusBreadcrumbs
                     if appState.processingMode == .full {
-                        EmbeddingJobSummary(settings: appState.settings)
+                        EmbeddingJobSummary(settings: appState.settings, jobs: appState.pendingJobs)
                     }
                 }
 
@@ -804,7 +804,7 @@ struct BottomBarView: View {
 
     private var canStart: Bool {
         guard !appState.pendingJobs.isEmpty else { return false }
-        if appState.processingMode == .full && appState.settings.embeddingConfigurationProblem != nil {
+        if appState.processingMode == .full && appState.settings.embeddingConfigurationProblem(jobs: appState.pendingJobs) != nil {
             return false
         }
 

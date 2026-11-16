@@ -41,8 +41,7 @@ struct PreferencesView: View {
     @State private var piModels: [PiModel] = []
     @State private var piStatusMessage = ""
     @State private var chatAPIKeyInput = ""
-    @State private var cpuReadiness = "Not checked — download may be required"
-    @State private var cpuBusy = false
+    @ObservedObject private var cpuReadiness = CPUEmbeddingReadiness.shared
 
     enum ConnectionStatus {
         case unknown, checking, connected, failed
@@ -180,7 +179,7 @@ struct PreferencesView: View {
             if appState.settings.embeddingBackend == EmbeddingBackendKind.fastembed.rawValue {
                 CPUEmbeddingSettingsPane(
                     processingHost: appState.settings.processingHost,
-                    readiness: cpuReadiness, busy: cpuBusy,
+                    readiness: cpuReadiness.message, busy: cpuReadiness.busy,
                     problem: appState.settings.embeddingConfigurationProblem,
                     onCheck: { Task { await checkCPUEmbedding(download: false) } },
                     onDownload: { Task { await checkCPUEmbedding(download: true) } }
@@ -303,17 +302,7 @@ struct PreferencesView: View {
     }
 
     private func checkCPUEmbedding(download: Bool) async {
-        cpuBusy = true
-        cpuReadiness = download ? "Downloading model…" : "Checking cached model…"
-        defer { cpuBusy = false }
-        do {
-            if download {
-                try await FastEmbedService.shared.prepare(model: EmbeddingPreferences.cpuModel)
-            }
-            cpuReadiness = try await FastEmbedService.shared.health(model: EmbeddingPreferences.cpuModel)
-        } catch {
-            cpuReadiness = error.localizedDescription
-        }
+        await cpuReadiness.check(download: download)
     }
 
     private func refreshInstalledModels() async {

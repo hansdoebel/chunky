@@ -38,7 +38,8 @@ struct CPUEmbeddingSettingsPane: View {
 
 struct EmbeddingJobSummary: View {
     @ObservedObject var settings: AppSettings
-    @State private var readiness = "Not checked"
+    @ObservedObject var readiness: CPUEmbeddingReadiness = .shared
+    var jobs: [ProcessingJob] = []
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -46,9 +47,9 @@ struct EmbeddingJobSummary: View {
             Text("\(EmbeddingBackendKind(rawValue: settings.embeddingBackend)?.displayName ?? settings.embeddingBackend) · \(settings.embeddingModel) · \(settings.embeddingDimensions) dimensions")
                 .textSelection(.enabled)
             if settings.embeddingBackend == "fastembed" {
-                Text("NumPy CPU · \(readiness)")
+                Text("NumPy CPU · \(readiness.message)")
             }
-            if let problem = settings.embeddingConfigurationProblem {
+            if let problem = jobs.isEmpty ? settings.embeddingConfigurationProblem : settings.embeddingConfigurationProblem(jobs: jobs) {
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
             }
@@ -57,11 +58,7 @@ struct EmbeddingJobSummary: View {
         .foregroundStyle(.secondary)
         .task(id: settings.embeddingBackend + settings.embeddingModel) {
             guard settings.embeddingBackend == "fastembed" else { return }
-            do {
-                readiness = try await FastEmbedService.shared.health(model: settings.embeddingModel)
-            } catch {
-                readiness = error.localizedDescription
-            }
+            await readiness.checkIfNeeded(model: settings.embeddingModel)
         }
     }
 }

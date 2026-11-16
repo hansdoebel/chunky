@@ -584,10 +584,10 @@ struct RetrievalScreen: View {
 
     private var selectedEmbeddingProblem: String? {
         let plan = CollectionPlanStore.load(name: collection, defaults: appState.settings.defaults)
-        return EmbeddingPreferences.problem(
+        return EmbeddingPreferences.retrievalProblem(
             backend: backend, model: model,
             dimensions: backend == "fastembed" ? EmbeddingPreferences.cpuDimensions : (plan?.vectorSize ?? appState.settings.embeddingDimensions),
-            processingHost: appState.settings.processingHost, plan: plan
+            route: route, plan: plan
         )
     }
 
@@ -596,7 +596,7 @@ struct RetrievalScreen: View {
     }
 
     private var route: RetrievalRoute {
-        appState.settings.processingHost == .devbox ? .worker : .localQdrant
+        RetrievalRequest.make(text: query, collection: collection, limit: 1, settings: appState.settings).route
     }
 
     private func ask() async {

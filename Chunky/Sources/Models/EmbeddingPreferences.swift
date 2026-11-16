@@ -1,3 +1,4 @@
+import Combine
 import Foundation
 
 enum EmbeddingPreferences {
@@ -29,6 +30,46 @@ enum EmbeddingPreferences {
             }
         }
         return nil
+    }
+
+    static func retrievalProblem(backend: String, model: String, dimensions: Int, route: RetrievalRoute, plan: CollectionPlan?) -> String? {
+        if backend == "fastembed" && route == .worker {
+            return "FastEmbed runs on the Local Mac CPU. Use a local Qdrant collection for CPU retrieval."
+        }
+        return problem(backend: backend, model: model, dimensions: dimensions, processingHost: .localMac, plan: plan)
+    }
+}
+
+@MainActor
+final class CPUEmbeddingReadiness: ObservableObject {
+    static let shared = CPUEmbeddingReadiness()
+
+    @Published private(set) var message = "Not checked — download may be required"
+    @Published private(set) var busy = false
+    private var checkedModel: String?
+
+    func checkIfNeeded(model: String) async {
+        guard checkedModel != model else { return }
+        await check(download: false, model: model)
+    }
+
+    func check(
+        download: Bool,
+        model: String = FastEmbedService.model,
+        health: (String) async throws -> String = { try await FastEmbedService.shared.health(model: $0) },
+        prepare: (String) async throws -> Void = { try await FastEmbedService.shared.prepare(model: $0) }
+    ) async {
+        guard !busy else { return }
+        busy = true
+        message = download ? "Downloading model…" : "Checking cached model…"
+        defer { busy = false }
+        do {
+            if download { try await prepare(model) }
+            message = try await health(model)
+        } catch {
+            message = error.localizedDescription
+        }
+        checkedModel = model
     }
 }
 
@@ -62,10 +103,20 @@ extension AppSettings {
     }
 
     var embeddingConfigurationProblem: String? {
+        embeddingConfigurationProblem(collection: defaultCollection)
+    }
+
+    func embeddingConfigurationProblem(collection: String) -> String? {
         EmbeddingPreferences.problem(
             backend: embeddingBackend, model: embeddingModel, dimensions: embeddingDimensions,
             processingHost: processingHost,
-            plan: CollectionPlanStore.load(name: defaultCollection, defaults: defaults)
+            plan: CollectionPlanStore.load(name: collection, defaults: defaults)
         )
+    }
+
+    func embeddingConfigurationProblem(jobs: [ProcessingJob]) -> String? {
+        jobs.lazy.compactMap {
+            self.embeddingConfigurationProblem(collection: $0.targetCollection(defaultCollection: self.defaultCollection))
+        }.first
     }
 }
