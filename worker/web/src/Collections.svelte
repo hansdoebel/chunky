@@ -6,6 +6,8 @@
   import * as NativeSelect from '$lib/components/ui/native-select';
 
   import { onDestroy, onMount } from 'svelte';
+  import SearchFilters from './SearchFilters.svelte';
+  import { emptySearchFilters, type SearchFilterDraft } from './lib/search-filters';
   import { APIError, buildSearchRequest, type CollectionPage, type CollectionPoint, type SearchOptions, type SearchPage, type WorkerAPI, type WorkerConfig } from './lib/api';
 
   let { api, config, onAuthFailure }: { api: WorkerAPI; config: WorkerConfig; onAuthFailure: (problem: unknown, client: WorkerAPI) => void } = $props();
@@ -23,6 +25,7 @@
   let cursors = $state<(string | undefined)[]>([undefined]);
   let pageIndex = $state(0);
   let search = $state<SearchOptions>({ query: '', backend: 'ollama', model: '', endpoint: '', mode: 'dense' });
+  let filterDraft = $state<SearchFilterDraft>(emptySearchFilters());
   let results = $state<SearchPage | null>(null);
   let alive = true;
   let listRevision = 0;
@@ -51,6 +54,7 @@
     browseRevision++;
     browseController?.abort();
     invalidateSearch();
+    filterDraft = emptySearchFilters();
     selected = '';
     points = null;
     browsing = false;
@@ -107,7 +111,7 @@
   async function runSearch(offset = 0) {
     if (!points?.semantic_search_available || !selected || searching) return;
     let request: Record<string, unknown>;
-    try { request = buildSearchRequest(selected, search, config, offset); }
+    try { request = buildSearchRequest(selected, { ...search, filters: filterDraft }, config, offset); }
     catch (problem) { searchError = message(problem); return; }
     const revision = ++searchRevision;
     const collection = selected;
@@ -176,6 +180,7 @@
             <form class="semantic-form" onsubmit={(event) => { event.preventDefault(); void runSearch(); }}>
               <div><Label for="semantic-query">Find a passage</Label><div class="semantic-query"><Input id="semantic-query" bind:value={search.query} oninput={invalidateSearch} placeholder="Ask about something in your documents…" disabled={!points?.semantic_search_available} /><Button variant="ghost" class="primary" type="submit" disabled={searching || !points?.semantic_search_available || !search.query.trim()}>{searching ? 'Searching…' : 'Search'}</Button></div></div>
               {#if !points?.semantic_search_available}<p class="notice warning" role="status">{points?.semantic_search_reason ?? 'Semantic search needs a verified collection embedding identity. Browsing is still available.'}</p>{:else}
+                <SearchFilters value={filterDraft} onChange={(next) => { filterDraft = next; invalidateSearch(); }} />
                 <details class="query-options"><summary>Query model and search options</summary><div class="query-grid"><div class="field"><Label for="query-backend">Query embedding provider</Label><NativeSelect.Root id="query-backend" bind:value={search.backend} onchange={invalidateSearch}><option value="ollama">Ollama</option><option value="openai">OpenAI-compatible</option></NativeSelect.Root></div><div class="field"><Label for="query-model">Query embedding model</Label><Input id="query-model" bind:value={search.model} oninput={invalidateSearch} /></div><div class="field"><Label for="query-endpoint">Query embedding endpoint <span class="optional">optional</span></Label><Input id="query-endpoint" bind:value={search.endpoint} oninput={invalidateSearch} placeholder="Use worker default" /></div><div class="field"><Label for="query-mode">Search mode</Label><NativeSelect.Root id="query-mode" bind:value={search.mode} onchange={invalidateSearch}><option value="dense">Dense vector</option><option value="hybrid" disabled={!points.embedding?.hybrid}>Hybrid · dense + BM25</option></NativeSelect.Root></div><p class="field-note wide">Use the exact model and worker-side endpoint used to ingest this collection. The worker verifies their identity and dimensions before querying. Search settings do not change upload settings or the collection.</p></div></details>
               {/if}
               <p class="field-note">10 results per page · semantic search runs through the worker.</p>
