@@ -7,7 +7,6 @@ import json
 import logging
 from pathlib import Path
 from typing import Annotated
-from urllib.parse import urlsplit
 
 from fastapi import APIRouter, Depends, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
@@ -30,7 +29,7 @@ from chunky_worker.logging_config import configure_logging
 from chunky_worker.models import IngestTarget, Job, JobMode, JobSettings, JobStatus
 from chunky_worker.verification import hash_file, write_report
 from chunky_worker.pipeline import DoclingPipeline, DocumentPipeline
-from chunky_worker.search import QdrantPointSearcher, SearchError, parse_search_request, run_search
+from chunky_worker.search import QdrantPointSearcher, SearchError, parse_scroll_offset, parse_search_request, run_search, worker_read_target
 from chunky_worker.settings import Settings, is_loopback_url, require_token_when_exposed
 from chunky_worker.vlm import GRANITE_PRESET, GRANITE_REPO_ID, gpu_probe
 
@@ -227,7 +226,32 @@ def create_app(
             if exc.error_type:
                 content["error_type"] = exc.error_type
             return JSONResponse(status_code=exc.status_code, content=content)
+        if request.use_worker_qdrant:
+            _reject_secret(payload, settings.qdrant_api_key)
         return JSONResponse(status_code=200, content=payload)
+
+    @api.get("/v1/collections")
+    def collections() -> JSONResponse:
+        try:
+            url, key = worker_read_target(settings)
+            payload = searcher.list_collections(url=url, api_key=key)
+            _reject_secret(payload, key)
+            return JSONResponse(content=payload)
+        except SearchError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": str(exc), "error_type": exc.error_type})
+
+    @api.get("/v1/collections/{collection}/points")
+    def collection_points(collection: str, limit: int = 50, offset: str | None = None) -> JSONResponse:
+        try:
+            if not 1 <= limit <= 100:
+                raise SearchError("limit must be 1–100", status_code=422, error_type="invalid_limit")
+            cursor = parse_scroll_offset(offset)
+            url, key = worker_read_target(settings)
+            payload = searcher.scroll_points(url=url, api_key=key, collection=collection, limit=limit, offset=cursor)
+            _reject_secret(payload, key)
+            return JSONResponse(content=payload)
+        except SearchError as exc:
+            return JSONResponse(status_code=exc.status_code, content={"detail": str(exc), "error_type": exc.error_type})
 
     @api.get("/v1/ui/config")
     def ui_config() -> dict:
@@ -235,6 +259,7 @@ def create_app(
             "embedding_backend": settings.embedding_backend,
             "embedding_model": settings.embedding_model,
             "qdrant_available": _worker_qdrant_available(settings),
+            "qdrant_read_available": _worker_qdrant_read_available(settings),
             "qdrant_label": "Worker Qdrant",
             "vlm_models": ["standard", *TRANSFORMERS_VLM_MODELS],
         }
@@ -614,12 +639,16 @@ def _log_startup(settings: Settings) -> None:
         gpu["arch_list"],
     )
 
-def _worker_qdrant_available(settings: Settings) -> bool:
+def _worker_qdrant_read_available(settings: Settings) -> bool:
     try:
-        url = urlsplit(settings.qdrant_url)
-        return bool(url.scheme in {"http", "https"} and url.hostname and not url.username and not url.password and not url.query and not url.fragment and settings.qdrant_api_key)
-    except ValueError:
+        worker_read_target(settings)
+        return True
+    except SearchError:
         return False
+
+
+def _worker_qdrant_available(settings: Settings) -> bool:
+    return _worker_qdrant_read_available(settings) and bool((settings.qdrant_api_key or "").strip())
 
 
 def _job_payload(job: Job, *, include_embeddings: bool = True) -> dict:
