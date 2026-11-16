@@ -6,7 +6,7 @@ Chunky is a macOS app that turns documents into chunks and Qdrant vectors. Heavy
 
 - `Chunky/` is the macOS app. `Sources/Models` holds settings, jobs, and eval records. `Sources/Services` holds Docling, Ollama, Qdrant, the worker client, retrieval, pi, and the MCP server. `Sources/Views` is SwiftUI. `Resources/Scripts` is the local Docling pipeline.
 - `worker/` is the FastAPI worker (`chunky_worker`). It converts, chunks, embeds, ingests to Qdrant Cloud, and searches. It serves the built browser workspace on its existing port and does not call a reranker.
-- `worker/web/` is the Svelte/Vite browser workspace. Its build writes generated assets to `worker/chunky_worker/web_dist/`; those assets are packaged with the worker and are not committed. The browser calls the same-origin worker API and never connects directly to Qdrant.
+- `worker/web/` is the Svelte/Vite browser workspace with shadcn-svelte components and shared light/dark theme tokens. Its build writes generated assets to `worker/chunky_worker/web_dist/`; those assets are packaged with the worker and are not committed. The browser calls the same-origin worker API and never connects directly to Qdrant.
 - `LocalPackages/qdrant-swift` is the vendored gRPC and REST client. `Sources/QdrantProto` is generated. Leave those files generated.
 - `docs/` is the operator guide. `docs/models.md` is the model choice for an Apple Silicon app machine and a ROCm worker host. `docs/worker-use-cases.md` is the topology list. `worker/README.md` is the HTTP API.
 
@@ -21,7 +21,7 @@ A paper library is a name plus a stable `library_id` on each point. The payload 
 - Xcode 27.2 on the `xcode-27` runner. The SDK is macOS 27. The deployment target is macOS 27.0.
 - Swift 6.4. The app target sets `SWIFT_VERSION` to 5.0 and `SWIFT_DEFAULT_ACTOR_ISOLATION` to `MainActor`. Do not change that language mode as a drive-by.
 - Python 3.12 for the worker and for `Chunky/Resources/Scripts`.
-- Node.js 24.22.1 for `worker/web`; use its committed npm lockfile.
+- Bun 1.4.4 for frontend package installation and scripts; use `worker/web/bun.lock` with `bun install --frozen-lockfile`. Node.js 24.22.1 remains pinned for the frontend tools that require Node.
 - Qdrant `v1.20.1` when a local server is needed. Unit tests do not start it.
 
 ## Commands
@@ -53,7 +53,7 @@ xcodebuild test \
 
 `make test-python` runs `test_docling_convert` and `test_fastembed_daemon` without live Docling or embedding models. `make test-worker` is `pytest` in `worker/`.
 
-`make build-web` installs the locked frontend dependencies, checks Svelte/TypeScript, and builds the worker assets. `make test-web` also runs frontend unit tests and browser component tests with mocked worker responses. Browser tests need Playwright Chromium; they do not run Docling, a GPU, or a live Qdrant server.
+`make build-web` installs the Bun-locked frontend dependencies, checks Svelte/TypeScript, and builds the worker assets. `make test-web` also runs frontend unit tests and browser component tests with mocked worker responses. Browser tests need Playwright Chromium; they do not run Docling, a GPU, or a live Qdrant server.
 
 From a Linux checkout, `python3 -m pytest -q worker` is the suite that can run here. Swift tests need the macOS runner.
 
@@ -75,6 +75,6 @@ From a Linux checkout, `python3 -m pytest -q worker` is the suite that can run h
 - The macOS job is skipped when a change is only Python, `worker/`, `docs/`, or other markdown. A skipped required check still counts as success. A failed path filter does not skip the job.
 - `swift test --skip IntegrationTests` in `qdrant-swift` runs only when that package or the workflow changes.
 - Screenshot artifacts are uploaded from `/tmp/chunky-*.png`.
-- `.github/workflows/web-ui.yml` checks the frontend, builds worker assets and their wheel package, runs mocked browser component tests on the macOS runner, and uploads `/tmp/chunky-web-*.png`. API requests remain protected by the existing bearer-token policy; the public login/static shell contains no job data or credentials.
+- `.github/workflows/web-ui.yml` checks the frontend, builds worker assets and their wheel package, runs mocked browser component tests on the macOS runner, and uploads `/tmp/chunky-web-*.png`. A Linux build job validates only the pinned frontend container stage, without starting the ROCm runtime or services. API requests remain protected by the existing bearer-token policy; the public login/static shell contains no job data or credentials.
 
 Squash-merge when that CI is green and review comments are addressed.

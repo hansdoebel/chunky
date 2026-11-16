@@ -562,7 +562,7 @@ def create_app(
     def web_shell():
         index = assets / "index.html"
         if not index.is_file():
-            return JSONResponse(status_code=503, content={"detail": "Web UI assets are missing. Build worker/web with npm ci && npm run build."})
+            return JSONResponse(status_code=503, content={"detail": "Web UI assets are missing. Build worker/web with bun install --frozen-lockfile && bun run build."})
         return FileResponse(index)
 
     if assets.is_dir():

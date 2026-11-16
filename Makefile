@@ -21,14 +21,14 @@ test-worker:
 	cd worker && python3 -m pytest -q
 
 build-web:
-	npm --prefix worker/web ci
-	npm --prefix worker/web run check
-	npm --prefix worker/web run build
+	cd worker/web && bun install --frozen-lockfile
+	cd worker/web && bun run check
+	cd worker/web && bun run build
 
 test-web: build-web
-	npm --prefix worker/web run test:unit
-	cd worker/web && npx playwright install chromium
-	npm --prefix worker/web run test:browser
+	cd worker/web && bun run test:unit
+	cd worker/web && bunx playwright install chromium
+	cd worker/web && bun run test:browser
 
 test-all: test test-python test-worker test-integration
 
