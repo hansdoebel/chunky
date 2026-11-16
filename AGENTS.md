@@ -1,6 +1,6 @@
 # AGENTS.md
 
-Chunky is a macOS app that turns documents into chunks and Qdrant vectors. Heavy conversion can run on this Mac or on an Ubuntu worker. The worker exposes an HTTP API and an optional browser workspace for upload, queue progress, cancellation, chunk preview, and job configuration. Evaluation and RAG chat stay in the app.
+Chunky is a macOS app that turns documents into chunks and Qdrant vectors. Heavy conversion can run on this Mac or on an Ubuntu worker. The worker exposes an HTTP API and an optional browser workspace for upload, queue progress, cancellation, chunk preview, job configuration, and collection browsing with semantic search. Evaluation and RAG chat stay in the app.
 
 ## Layout
 
