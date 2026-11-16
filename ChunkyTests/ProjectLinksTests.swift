@@ -18,6 +18,7 @@ struct ProjectLinksTests {
         .frame(width: 420, height: 150, alignment: .topLeading)
         .background(Color.white)
         .environment(\.colorScheme, .light)
+        .tint(.blue)
         let host = NSHostingView(rootView: view)
         host.frame = NSRect(x: 0, y: 0, width: 420, height: 150)
         host.appearance = NSAppearance(named: .aqua)
