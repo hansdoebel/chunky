@@ -113,8 +113,8 @@ struct EmbeddingBenchmarkReportTests {
             [false, true].map { hybrid in
                 EmbeddingBenchmarkReport.Run(
                     id: UUID(), corpusSHA256: hash, model: model, modelRevision: "fixed-revision",
-                    dimensions: model == "potion" ? 256 : 1024, machine: model == "potion" ? "Mac Studio CPU" : "R9700",
-                    runtime: model == "potion" ? "FastEmbed CPU" : "Ollama Vulkan",
+                    dimensions: model == "potion" ? 512 : 1024, machine: model == "potion" ? "Mac Studio CPU" : "R9700",
+                    runtime: model == "potion" ? "FastEmbed CPU" : "Ollama ROCm",
                     collection: "chunky-benchmark-\(model)", hybrid: hybrid,
                     coldStartupMs: 50, warmStartupMs: 2, embeddingSeconds: 1, indexingSeconds: 2,
                     peakMemoryBytes: 1_048_576,
@@ -122,7 +122,7 @@ struct EmbeddingBenchmarkReportTests {
                 )
             }
         }
-        return EmbeddingBenchmarkReport(schemaVersion: 1, corpusSHA256: hash, chunkCount: 10, chunking: "cached Docling fixture", set: RetrievalEvalSet(name: "Labeled papers", queries: [query]), runs: runs)
+        return EmbeddingBenchmarkReport(schemaVersion: 1, corpusSHA256: hash, chunkCount: 10, chunking: "Synthetic UI fixture, not benchmark measurements", set: RetrievalEvalSet(name: "Labeled papers", queries: [query]), runs: runs)
     }
 
     @Test func comparisonRoundTripsAndReusesEvalMetrics() throws {
@@ -161,20 +161,27 @@ struct EmbeddingBenchmarkReportTests {
     }
 
     @Test @MainActor func comparisonScreenshotIsNotBlank() throws {
-        let renderer = ImageRenderer(content: EmbeddingBenchmarkResults(report: Self.fixture()).padding().frame(width: 1100).environment(\.colorScheme, .light))
+        let renderer = ImageRenderer(content: EmbeddingBenchmarkResults(report: Self.fixture()).padding().frame(width: 1100).background(Color.white).environment(\.colorScheme, .light))
         renderer.scale = 1
         let image = try #require(renderer.nsImage)
         let tiff = try #require(image.tiffRepresentation)
         let bitmap = try #require(NSBitmapImageRep(data: tiff))
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         try png.write(to: URL(fileURLWithPath: "/tmp/chunky-embedding-benchmark.png"))
-        var ink = 0
+        var darkPixels = 0
+        var lightPixels = 0
+        var transparentPixels = 0
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: 4) {
             for x in stride(from: 0, to: bitmap.pixelsWide, by: 4) {
                 guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
-                if color.alphaComponent > 0.1 && min(color.redComponent, color.greenComponent, color.blueComponent) < 0.8 { ink += 1 }
+                if color.alphaComponent < 0.99 { transparentPixels += 1 }
+                let brightness = (color.redComponent + color.greenComponent + color.blueComponent) / 3
+                if color.alphaComponent > 0.99 && brightness < 0.6 { darkPixels += 1 }
+                if color.alphaComponent > 0.99 && brightness > 0.95 { lightPixels += 1 }
             }
         }
-        #expect(ink > 100)
+        #expect(darkPixels > 100)
+        #expect(lightPixels > 100)
+        #expect(transparentPixels == 0)
     }
 }
