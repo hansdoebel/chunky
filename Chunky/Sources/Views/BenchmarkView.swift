@@ -1,4 +1,5 @@
 import SwiftUI
+import UniformTypeIdentifiers
 
 struct BenchmarkView: View {
     var hosts: [ProcessingHost]
@@ -9,6 +10,8 @@ struct BenchmarkView: View {
     var productionCollection: String
     var collectionName: String
     var status: String
+    var embeddingReport: EmbeddingBenchmarkReport? = nil
+    var onImportEmbeddingReport: () -> Void = {}
     var scrolls: Bool = true
     var onToggleHost: (ProcessingHost) -> Void = { _ in }
     var onToggleRuntime: (BenchmarkRuntime) -> Void = { _ in }
@@ -35,6 +38,11 @@ struct BenchmarkView: View {
                      : "Refusing the production collection")
                     .font(.caption.weight(.medium))
                     .foregroundStyle(BenchmarkPlanner.accepts(collection: collectionName, production: productionCollection) ? Color.secondary : Color.red)
+
+                Button("Import embedding comparison…", action: onImportEmbeddingReport)
+                if let report = embeddingReport {
+                    EmbeddingBenchmarkResults(report: report)
+                }
 
                 Text("Hosts")
                     .font(.headline)
@@ -105,6 +113,8 @@ struct BenchmarkScreen: View {
     @State private var preparedRuntimes = false
     @State private var collectionName = ""
     @State private var status = "Idle"
+    @State private var importingEmbeddingReport = false
+    @State private var embeddingReport: EmbeddingBenchmarkReport?
 
     var body: some View {
         let runtimes = BenchmarkPlanner.offeredRuntimes(settings: appState.settings)
@@ -117,6 +127,8 @@ struct BenchmarkScreen: View {
             productionCollection: appState.settings.defaultCollection,
             collectionName: collectionName.isEmpty ? "chunky-benchmark-…" : collectionName,
             status: status,
+            embeddingReport: embeddingReport,
+            onImportEmbeddingReport: { importingEmbeddingReport = true },
             onToggleHost: { host in
                 if selectedHosts.contains(host.rawValue) {
                     selectedHosts.remove(host.rawValue)
@@ -133,6 +145,17 @@ struct BenchmarkScreen: View {
             },
             onRun: { start(runtimes: runtimes) }
         )
+        .fileImporter(isPresented: $importingEmbeddingReport, allowedContentTypes: [.json]) { result in
+            do {
+                let url = try result.get()
+                let access = url.startAccessingSecurityScopedResource()
+                defer { if access { url.stopAccessingSecurityScopedResource() } }
+                embeddingReport = try EmbeddingBenchmarkReport.decode(Data(contentsOf: url), productionCollection: appState.settings.defaultCollection)
+                status = "Imported measured embedding comparison. Existing settings are unchanged."
+            } catch {
+                status = error.localizedDescription
+            }
+        }
         .disabled(appState.isProcessing)
         .onAppear {
             guard !preparedRuntimes else { return }
@@ -199,5 +222,28 @@ struct BenchmarkScreen: View {
         }
         status = BenchmarkPlanner.summary(completed: completed, failed: failed, skipped: skipped, cancelled: cancelled)
         appState.reloadHistory()
+    }
+}
+
+struct EmbeddingBenchmarkResults: View {
+    var report: EmbeddingBenchmarkReport
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Static CPU embedding comparison").font(.headline)
+            Text("\(report.chunkCount) frozen chunks · \(report.set.queries.count) labeled queries · \(report.chunking)")
+            Text("Corpus SHA-256: \(report.corpusSHA256)").font(.caption).textSelection(.enabled)
+            ForEach(report.runs) { run in
+                let score = run.score(set: report.set)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("\(run.model) @ \(run.modelRevision) · \(run.dimensions) dimensions").font(.subheadline.weight(.medium))
+                    Text("\(run.machine) · \(run.runtime) · \(run.hybrid ? "BM25 hybrid RRF" : "Dense")").font(.caption)
+                    Text("Cold \(run.coldStartupMs, specifier: "%.1f") ms · warm \(run.warmStartupMs, specifier: "%.1f") ms · \(Double(report.chunkCount) / run.embeddingSeconds, specifier: "%.1f") chunks/s")
+                    Text("Index \(run.indexingSeconds, specifier: "%.2f") s · peak \(Double(run.peakMemoryBytes) / 1_048_576, specifier: "%.1f") MiB · query \(score.latencyMs, specifier: "%.1f") ms")
+                    Text("Recall@10 \(score.recallAtK, specifier: "%.3f") · MRR@10 \(score.mrr, specifier: "%.3f") · nDCG@10 \(score.ndcgAtK, specifier: "%.3f") · hit \(score.hitRate, specifier: "%.3f")")
+                }
+                .font(.caption.monospacedDigit())
+            }
+        }
     }
 }
