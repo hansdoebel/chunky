@@ -99,3 +99,28 @@ test('blocked localStorage does not prevent switching appearance', async ({ page
   await theme(page, 'dark');
   expect(errors).toEqual([]);
 });
+
+test('narrow native selects reserve space for the decorative arrow', async ({ page }) => {
+  await mockWorker(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto('/');
+  await connect(page);
+  const appearance = page.getByLabel('Appearance', { exact: true });
+  await expect(appearance).toBeVisible();
+  await page.getByRole('button', { name: 'Job settings', exact: false }).first().click();
+  const model = page.getByLabel('Document model', { exact: true });
+  await model.locator('..').evaluate((element) => { element.style.width = '160px'; });
+  await model.selectOption('granite-docling-transformers');
+  await expect(model).toHaveValue('granite-docling-transformers');
+  for (const select of [appearance, model]) {
+    const spacing = await select.evaluate((element) => {
+      const arrow = element.parentElement!.querySelector('[data-slot="native-select-icon"]')!;
+      const control = getComputedStyle(element);
+      const icon = getComputedStyle(arrow);
+      return { width: element.getBoundingClientRect().width, padding: parseFloat(control.paddingRight), arrowWidth: arrow.getBoundingClientRect().width, inset: parseFloat(icon.right) };
+    });
+    expect(spacing.width).toBeLessThanOrEqual(160);
+    expect(spacing.arrowWidth).toBeGreaterThan(0);
+    expect(spacing.padding).toBeGreaterThanOrEqual(spacing.arrowWidth + spacing.inset + 4);
+  }
+});

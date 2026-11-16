@@ -245,6 +245,7 @@ button:hover:not(:disabled){filter:brightness(.97)}
 .wide{grid-column:1 / -1}
 label{font-size:11px;font-weight:600;color:var(--foreground)}
 input:not([type=file]):not([type=checkbox]),select{width:100%;min-height:41px;border:1px solid var(--border);border-radius:7px;background:var(--card);padding:9px 11px;color:var(--foreground);font-size:12px;box-shadow:0 1px 2px var(--shadow-color)}
+select[data-slot="native-select"]{padding-right:2rem}
 input::placeholder{color:var(--muted-foreground)}
 input:disabled,select:disabled{background:var(--muted);color:var(--muted-foreground)}
 .field-note{font-size:10px!important;color:var(--muted-foreground);line-height:1.7}
