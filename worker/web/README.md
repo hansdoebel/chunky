@@ -26,3 +26,5 @@ Appearance defaults to the operating system and follows changes immediately. The
 The UI uses official shadcn-svelte 1.8.1 registry components (Vega preset) with Tailwind CSS 4.3.5, native accessible selects, and system fonts. Component aliases and registry configuration live in `components.json`; generated components live under `src/lib/components/ui`. Vendored component licensing is served at `/assets/THIRD_PARTY_NOTICES.txt`. Theme initialization and generated styles respect the worker's existing content security policy without inline bootstrap scripts.
 
 Theme browser tests additionally capture `/tmp/chunky-web-light-login.png` and `/tmp/chunky-web-dark-{login,queue,settings,collections,search,mobile}.png`. These use the same synthetic fixtures and blank-image checks as the light screenshots. Linux local captures supplement the required macOS CI validation.
+
+Parallel worktrees must set distinct `CHUNKY_WEB_TEST_PORT` and `CHUNKY_WEB_SCREENSHOT_DIR` values. Browser tests always launch their own preview server and fail if that port is already occupied. CI uses the default isolated runner port and `/tmp` screenshot directory.
