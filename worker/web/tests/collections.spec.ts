@@ -33,10 +33,13 @@ async function mockCollections(page: Page) {
   });
   return { searches, cursors, urls };
 }
-async function connect(page: Page) {
+async function login(page: Page) {
   await page.goto('/');
   await page.getByLabel('Worker access token').fill('fixture-token');
   await page.getByRole('button', { name: 'Connect to worker' }).click();
+}
+async function connect(page: Page) {
+  await login(page);
   await page.getByRole('button', { name: 'Collections', exact: true }).click();
   await expect(page.getByRole('heading', { name: 'Collections', exact: true })).toBeVisible();
 }
@@ -116,7 +119,7 @@ test('late collection and search responses cannot replace a newer selection', as
   await expect(page.getByLabel('Find a passage')).toBeDisabled();
 });
 
-test('search changes and logout discard delayed results and auth rejection clears the session', async ({ page }) => {
+test('search changes discard delayed results and logout clears the workspace', async ({ page }) => {
   await mockCollections(page);
   let release: (() => void) | undefined;
   const hold = new Promise<void>((resolve) => release = resolve);
@@ -134,11 +137,18 @@ test('search changes and logout discard delayed results and auth rejection clear
   await page.getByRole('button', { name: 'Sign out' }).click();
   await expect(page.getByLabel('Worker access token')).toHaveValue('');
   await expect(page.getByText('Fixture findings')).toHaveCount(0);
-  await page.unroute('**/v1/search');
+});
+
+test('collection authorization rejection clears the token and workspace immediately', async ({ page }) => {
+  await mockCollections(page);
   await page.route('**/v1/collections', (route) => route.fulfill({ status: 401, contentType: 'application/json', body: '{"detail":"Expired token"}' }));
-  await connect(page);
+  await login(page);
+  await page.getByRole('button', { name: 'Collections', exact: true }).click();
   await expect(page.getByLabel('Worker access token')).toHaveValue('');
   await expect(page.getByRole('alert')).toContainText('rejected this token');
+  await expect(page.getByRole('heading', { name: 'Collections', exact: true })).toHaveCount(0);
+  await expect(page.getByText('Fixture findings', { exact: true })).toHaveCount(0);
+  expect(await page.evaluate(() => [localStorage.length, sessionStorage.length])).toEqual([0, 0]);
 });
 
 test('collection changes and logout invalidate in-flight semantic searches', async ({ page }) => {
