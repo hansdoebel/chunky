@@ -334,6 +334,7 @@ struct PreferencesView: View {
                     appState.settings.doclingAccelerator = host.defaultAccelerator.rawValue
                 }
                 if appState.settings.processingHost == .devbox {
+                    LocalFallbackSettingsPane(enabled: $appState.settings.allowLocalFallback)
                     WorkerEndpointsPane(
                         endpoints: workerEndpoints,
                         selectedID: selectedWorkerEndpointID,

@@ -150,6 +150,9 @@ class AppSettings: ObservableObject {
     @Published var processingHost: ProcessingHost {
         didSet { defaults.set(processingHost.rawValue, forKey: prefix + "processingHost") }
     }
+    @Published var allowLocalFallback: Bool {
+        didSet { defaults.set(allowLocalFallback, forKey: prefix + "allowLocalFallback") }
+    }
     @Published var doclingModel: String {
         didSet { defaults.set(doclingModel, forKey: prefix + "doclingModel") }
     }
@@ -472,6 +475,7 @@ class AppSettings: ObservableObject {
         self.processingHost = ProcessingHost(
             rawValue: defaults.string(forKey: prefix + "processingHost") ?? ""
         ) ?? .localMac
+        self.allowLocalFallback = defaults.bool(forKey: prefix + "allowLocalFallback")
         self.doclingModel = defaults.string(forKey: prefix + "doclingModel") ?? DoclingModel.graniteDoclingMLX.rawValue
         self.layoutModel = defaults.string(forKey: prefix + "layoutModel") ?? LayoutModel.heron.rawValue
         self.doclingWorkers = defaults.object(forKey: prefix + "doclingWorkers") as? Int ?? 8

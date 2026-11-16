@@ -11,6 +11,7 @@ class ProcessingJob: ObservableObject, Identifiable {
     @Published var chunksCount: Int = 0
     @Published var embeddedCount: Int = 0
     @Published var error: String?
+    @Published var localFallbackNotice: String?
     var jobType: JobType
 
     @Published var startTime: Date?

@@ -262,6 +262,22 @@ final class DevboxWorkerService {
         self.session = session
     }
 
+    func checkFallbackAvailability(baseURL: String) async throws {
+        guard WorkerProbe.accepts(url: baseURL), let root = URL(string: baseURL) else {
+            throw DevboxClientError.invalidURL(baseURL)
+        }
+        let url = root.appendingPathComponent("v1").appendingPathComponent("health")
+        var request = URLRequest(url: url)
+        request.timeoutInterval = 5
+        let (_, response) = try await session.data(for: request)
+        guard let http = response as? HTTPURLResponse else {
+            throw DevboxClientError.http(url: baseURL, status: 0, detail: "No HTTP response")
+        }
+        guard http.statusCode == 200 else {
+            throw DevboxErrorMapper.classify(url: baseURL, status: http.statusCode, body: "Health check failed")
+        }
+    }
+
     func probe(baseURL: String, token: String) async -> WorkerProbeReport {
         let started = Date()
         func finish(
