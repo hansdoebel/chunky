@@ -9,6 +9,7 @@
 
   import { onDestroy } from 'svelte';
   import Collections from './Collections.svelte';
+  import JobInsights from './JobInsights.svelte';
   import { APIError, WorkerAPI, buildJobSettings, type Job, type JobOptions, type WorkerConfig, type JobEvent } from './lib/api';
 
   let token = $state('');
@@ -355,6 +356,10 @@
             </Card.Root>
 
             {#if selected}<Card.Root class="card preview-card"><div class="section-heading"><div><div class="eyebrow">DOCUMENT PREVIEW</div><h2>{selected.filename}</h2><p>{selected.result ? `${chunks.length} chunks${selected.result.page_count ? ` · ${selected.result.page_count} pages` : ''}` : labels[selected.status]}</p></div>{#if selected.status === 'succeeded'}<Button variant="ghost" class="secondary" onclick={download}>Download JSON <span aria-hidden="true">↓</span></Button>{/if}</div>{#if selected.error}<div class="notice danger" role="alert">{selected.error}</div>{/if}{#if detailState === 'loading'}<p class="preview-empty" role="status">Loading document preview…</p>{:else if detailState === 'error'}<p class="preview-empty" role="status">Document preview could not be loaded. Refresh the queue to retry.</p>{:else if !chunks.length}<p class="preview-empty">{active(selected) ? 'Chunks will appear here when processing finishes.' : 'This job has no chunks to preview.'}</p>{:else}<div class="chunks">{#each visibleChunks as chunk, index}<article class="chunk"><div class="chunk-meta"><span>CHUNK {previewPage * chunkLimit + index + 1}</span>{#if chunk.page}<span>Page {chunk.page}{chunk.page_end && chunk.page_end !== chunk.page ? `–${chunk.page_end}` : ''}</span>{/if}{#if chunk.token_count}<span>{chunk.token_count} tokens</span>{/if}</div>{#if chunk.headings?.length}<h3>{chunk.headings.join(' › ')}</h3>{/if}<p>{chunk.text ?? chunk.embedding_text ?? ''}</p></article>{/each}</div><div class="queue-footer"><span>Showing {previewPage * chunkLimit + 1}–{Math.min((previewPage + 1) * chunkLimit, chunks.length)} of {chunks.length} chunks</span><div><Button variant="ghost" class="quiet" disabled={previewPage === 0} aria-label="Previous chunks" onclick={() => previewPage -= 1}>←</Button><Button variant="ghost" class="quiet" disabled={(previewPage + 1) * chunkLimit >= chunks.length} aria-label="Next chunks" onclick={() => previewPage += 1}>→</Button></div></div>{/if}</Card.Root>{/if}
+            {#if selected && api && detailState === 'loaded'}
+              {@const insightsClient = api}
+              <JobInsights job={selected} loadVerification={(id, signal) => insightsClient.verification(id, signal)} onAuthFailure={(problem) => collectionFailure(problem, insightsClient)} />
+            {/if}
           </div>
           <aside class="setup-column"><Card.Root class="card setup-card"><div class="eyebrow">NEXT UPLOAD</div><h2>Job setup</h2><dl><dt>Output</dt><dd>{options.mode === 'chunks' ? 'Chunks only' : options.mode === 'vectors' ? 'Chunks and vectors' : config?.qdrant_label}</dd><dt>Document model</dt><dd>{vlmName(options.vlm)}</dd><dt>Processing</dt><dd>{options.accelerator === 'cuda' ? 'GPU on worker' : 'CPU on worker'}</dd>{#if options.mode !== 'chunks'}<dt>Embedding model</dt><dd>{options.model || 'Choose a model'}</dd>{/if}{#if options.mode === 'ingest'}<dt>Collection</dt><dd>{options.collection}</dd>{/if}</dl><Button variant="ghost" class="secondary full" onclick={() => tab = 'settings'}>Edit job settings <span aria-hidden="true">→</span></Button></Card.Root><div class="workspace-note"><span aria-hidden="true">◈</span><p>Your browser talks only to this worker. Qdrant credentials stay on the server.</p></div></aside>
         </div>

@@ -37,6 +37,10 @@ Worker embedding backends are Ollama and OpenAI-compatible embeddings. Choose th
 
 Queue pages have an explicit size and navigation. Progress is streamed with the authorization header. Chunk previews show a bounded number of chunks with their page and headings; the full result can be downloaded explicitly. Preview requests omit vectors without deleting them from the job result. Treat downloads as document data. A failed upload response may still mean a job was accepted: refresh the queue before resubmitting. The browser does not automatically replay an uncertain upload.
 
+Select a job to view its recorded total and stage timings, throughput, and worker resource measurements when available. Missing or partial measurements are labeled Not recorded; measured zeroes remain zero. Stages and verification pages and findings use explicit pagination, and long lists of page flags can be expanded.
+
+The verification viewer reads the job's stored report without re-running checks or changing its collection. It shows recorded text coverage, page attribution, store, vector, and retrieval checks. Reports become available after processing finishes; missing reports and failed requests are shown explicitly. Viewing a report does not claim that an unrecorded check passed.
+
 The queue is the worker's in-memory job store, shared with app/API submissions. Restarting the process clears that queue. This feature does not introduce durable job recovery or resumable uploads.
 
 ## Worker Qdrant credentials
@@ -85,6 +89,11 @@ The light and dark captures below came from macOS browser CI run [43977623510](h
 
 ![Dark mobile workspace](images/web-dark-mobile.png)
 
+Job insight captures from macOS CI run [43978441720](https://github.com/hansdoebel/chunky/actions/runs/43978441720) use mocked timing and verification data, with nonblank image assertions. These are interface fixtures, not hardware measurements or document-quality results.
+
+![Light job insights](images/web-insights-light.png)
+
+![Dark mobile job insights](images/web-insights-dark-mobile.png)
 Filter captures from macOS CI run [43977736859](https://github.com/hansdoebel/chunky/actions/runs/43977736859) use mocked responses and nonblank image assertions.
 
 ![Light semantic search filters](images/web-filters-light.png)

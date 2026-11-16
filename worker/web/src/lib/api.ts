@@ -10,7 +10,7 @@ export type Job = {
   progress?: JobEvent | null;
   error?: string | null;
   error_type?: string | null;
-  result?: { chunks?: Chunk[]; page_count?: number; embedding_dim?: number; embeddings?: number[][] | null } | null;
+  result?: { chunks?: Chunk[]; page_count?: number; embedding_dim?: number; embeddings?: number[][] | null; metrics?: unknown; verification_status?: string | null } | null;
 };
 export type WorkerConfig = {
   embedding_backend: 'ollama' | 'openai';
@@ -215,6 +215,9 @@ export class WorkerAPI {
     body.append('file', file);
     body.append('settings', JSON.stringify(settings));
     return (await this.request('jobs', { method: 'POST', body })).json();
+  }
+  async verification(id: string, signal?: AbortSignal): Promise<unknown> {
+    return (await this.request(`jobs/${encodeURIComponent(id)}/verification`, { signal })).json();
   }
   async cancel(id: string): Promise<void> { await this.request(`jobs/${encodeURIComponent(id)}/cancel`, { method: 'POST' }); }
   async events(id: string, onEvent: (event: JobEvent) => void, signal: AbortSignal): Promise<void> {
