@@ -976,6 +976,9 @@ struct LiveRetrievalEmbedding: RetrievalEmbedding {
     }
 
     func embed(text: String, backend: String, model: String, ollamaURL: String, apiURL: String) async throws -> [Float] {
+        if backend == "fastembed" {
+            return try await FastEmbedService.shared.embed(texts: [text], model: model, query: true)[0]
+        }
         if backend == EmbeddingBackendKind.openai.rawValue {
             return try await Self.openAIEmbed(url: apiURL, model: model, text: text)
         }
@@ -1158,6 +1161,9 @@ struct RetrievalService {
                 page = try await searchLocal(request, index: index)
             }
         case .worker:
+            guard request.embeddingBackend != "fastembed" else {
+                throw NSError(domain: "Chunky.FastEmbed", code: 3, userInfo: [NSLocalizedDescriptionKey: "Local CPU embeddings cannot run on the worker. Select Local Mac."])
+            }
             guard !request.workerURL.isEmpty, !request.workerToken.isEmpty else {
                 throw RetrievalError.missingWorker
             }
@@ -1221,6 +1227,7 @@ struct RetrievalService {
     }
 
     private func searchLocal(_ request: RetrievalRequest, index: any RetrievalIndex) async throws -> RetrievalPage {
+        try FastEmbedCollectionIdentity.validate(collection: request.collection, backend: request.embeddingBackend, model: request.embeddingModel)
         let ollamaURL = request.embeddingBackend == EmbeddingBackendKind.openai.rawValue ? "" : request.embeddingURL
         let apiURL = request.embeddingBackend == EmbeddingBackendKind.openai.rawValue ? request.embeddingURL : ""
         let probed = try await embedding.probe(
