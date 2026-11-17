@@ -99,3 +99,5 @@ Filter captures from macOS CI run [43977736859](https://github.com/hansdoebel/ch
 ![Light semantic search filters](images/web-filters-light.png)
 
 ![Dark semantic search filters](images/web-filters-dark.png)
+
+Search for offers Passages, Papers, or Papers with supporting passages. Paper search requires stored document summaries. Paper paging advances by up to ten summaries; supporting passages are the top ten matches across those papers, not every chunk in every paper. Year, author, DOI and title filters apply to both searches. Heading and element-type filters are unavailable for paper search: retained values must be explicitly cleared before submission. Changing search kind clears stale results and resets paging. This view does not expand whole sections.
