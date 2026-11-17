@@ -19,7 +19,7 @@ struct PreferenceSearchItem: Identifiable, Equatable {
         .init(id: "export", title: "File export", detail: "Output format and destination folder", tab: 3, icon: "square.and.arrow.up", keywords: "save files markdown html json text export folder"),
         .init(id: "datasets", title: "Dataset downloads", detail: "Open Datasets to choose the download folder and sample size", tab: 6, icon: "arrow.down.circle", keywords: "hugging face huggingface wikipedia download folder"),
         .init(id: "chat", title: "Chat", detail: "pi and OpenAI-compatible chat models", tab: 4, icon: "bubble.left.and.bubble.right", keywords: "api key endpoint fallback node"),
-        .init(id: "chunk-cache", title: "Chunk cache", detail: "Size limit, disk usage and Clear cache", tab: 5, icon: "internaldrive", keywords: "chunks storage cached clear limit"),
+        .init(id: "chunk-cache", title: "Chunk cache", detail: "Size limit and Clear cache", tab: 5, icon: "internaldrive", keywords: "chunks storage cached clear limit"),
         .init(id: "about", title: "App and dependencies", detail: "Version, Docling and watched folders", tab: 5, icon: "info.circle", keywords: "update python runtime health installation"),
         .init(id: "appearance", title: "Appearance", detail: "System, Light or Dark", tab: 5, icon: "circle.lefthalf.filled", keywords: "theme color colour")
     ]
