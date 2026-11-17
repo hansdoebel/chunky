@@ -1,5 +1,7 @@
 # First run on a MacBook
 
+For installation and routine updates on your own Mac, start with [the personal installation guide](personal-installation.md). This page covers the longer processing and service checklist.
+
 The native app requires macOS 27 or newer, Xcode 27.2 or newer with Swift 6.4, and Python 3.12 for local document processing. These requirements also apply to the vendored Swift client. Updating Xcode alone does not make the app run on an older macOS release.
 
 ## Build and open the app
