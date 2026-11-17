@@ -36,6 +36,11 @@ struct ChunkyApp: App {
             }
         }
 
+        Window("Datasets", id: "datasets") {
+            DatasetLibraryView()
+        }
+        .defaultSize(width: 820, height: 760)
+
         Settings {
             PreferencesView()
                 .environmentObject(appState)
