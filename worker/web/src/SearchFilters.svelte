@@ -26,7 +26,7 @@
       {#if errors.yearTo}<p id="search-year-to-error" class="text-sm text-destructive" role="alert">{errors.yearTo}</p>{/if}
     </div>
     <div class="grid gap-2"><Label for="search-author">Author contains</Label><Input id="search-author" value={value.author} oninput={(event) => update('author', event.currentTarget.value)} placeholder="Any author" /></div>
-    <div class="grid gap-2"><Label for="search-doi">DOI</Label><Input id="search-doi" value={value.doi} oninput={(event) => update('doi', event.currentTarget.value)} placeholder="Exact DOI as stored" /></div>
+    <div class="grid gap-2"><Label for="search-doi">DOI</Label><Input id="search-doi" disabled={papers} value={value.doi} oninput={(event) => update('doi', event.currentTarget.value)} placeholder="Exact DOI as stored" /></div>
     <div class="grid gap-2"><Label for="search-title">Document title contains</Label><Input id="search-title" value={value.title} oninput={(event) => update('title', event.currentTarget.value)} placeholder="Any title" /></div>
     <div class="grid gap-2"><Label for="search-heading">Heading contains</Label><Input id="search-heading" disabled={papers} value={value.heading} oninput={(event) => update('heading', event.currentTarget.value)} placeholder="Any heading" /></div>
     <div class="grid gap-2">
@@ -36,7 +36,7 @@
       </NativeSelect.Root>
     </div>
     <div class="flex items-end"><Button type="button" variant="outline" size="sm" disabled={!hasSearchFilters(value)} onclick={() => onChange(emptySearchFilters())}>Clear filters</Button></div>
-    {#if papers}<p class="text-sm text-muted-foreground sm:col-span-2">Heading and element-type filters apply only to passage search.</p>{#if value.heading.trim() || value.contentType}<div class="sm:col-span-2"><p class="text-sm text-destructive" role="alert">Clear heading and element-type filters before searching papers.</p><Button variant="outline" onclick={() => onChange({ ...value, heading: '', contentType: '' })}>Clear passage filters</Button></div>{/if}{/if}
+    {#if papers}<p class="text-sm text-muted-foreground sm:col-span-2">DOI, heading and element-type filters are available only in passage search. Stored paper summaries may not contain DOI metadata.</p>{#if value.doi.trim() || value.heading.trim() || value.contentType}<div class="sm:col-span-2"><p class="text-sm text-destructive" role="alert">Clear DOI, heading and element-type filters before searching papers.</p><Button variant="outline" onclick={() => onChange({ ...value, doi: '', heading: '', contentType: '' })}>Clear incompatible filters</Button></div>{/if}{/if}
     <p id="search-filter-help" class="text-xs text-muted-foreground sm:col-span-2">Filters apply on the worker to every search page. Empty fields include all values.</p>
   </div>
 </details>

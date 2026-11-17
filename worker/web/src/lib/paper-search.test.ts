@@ -9,6 +9,10 @@ it('preserves passage requests and explicitly requests paper expansion with pape
   expect(buildSearchRequest('docs', { ...options, resultKind: 'papers-with-passages' }, config)).toMatchObject({ papers_first: true, expand_documents: true, use_worker_qdrant: true });
 });
 it('rejects ignored passage filters while retaining document metadata filters', () => {
-  for (const filter of [{ heading: 'Results' }, { contentType: 'table' as const }]) expect(() => buildSearchRequest('docs', { ...options, resultKind: 'papers', filters: { ...emptySearchFilters(), ...filter } }, config)).toThrow('Clear heading');
+  for (const resultKind of ['papers', 'papers-with-passages'] as const) for (const filter of [{ doi: '10.1234/fixture' }, { heading: 'Results' }, { contentType: 'table' as const }]) expect(() => buildSearchRequest('docs', { ...options, resultKind, filters: { ...emptySearchFilters(), ...filter } }, config)).toThrow('Clear DOI');
   expect(buildSearchRequest('docs', { ...options, resultKind: 'papers', filters: { ...emptySearchFilters(), author: 'Ada' } }, config)).toMatchObject({ filters: [{ key: 'authors', text: 'Ada' }] });
+});
+
+it('keeps exact DOI filtering in passage mode', () => {
+  expect(buildSearchRequest('docs', { ...options, filters: { ...emptySearchFilters(), doi: '10.1234/fixture' } }, config)).toMatchObject({ filters: [{ key: 'doi', match: '10.1234/fixture' }] });
 });

@@ -51,7 +51,7 @@ test('paper modes retain metadata filters and paginate papers separately from su
   await expect(page.getByLabel('Find a paper')).toBeVisible();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   expect(searches).toHaveLength(0);
-  await page.getByRole('button', { name: 'Clear passage filters' }).click();
+  await page.getByRole('button', { name: 'Clear incompatible filters' }).click();
   await page.getByLabel('Author contains').fill('Ada');
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect(page.getByText('Paper summary', { exact: true })).toBeVisible();
@@ -126,3 +126,29 @@ test('paper mode changes and collection changes discard responses even when canc
   await expect(page.getByLabel('Author contains', { exact: true })).toHaveCount(0);
 });
 
+
+test('DOI paper filters fail closed while passage DOI requests remain supported', async ({ page }) => {
+  const searches = await mockWorker(page); await connectSearch(page);
+  await page.getByLabel('DOI', { exact: true }).fill('10.1234/fixture');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect.poll(() => searches.length).toBe(1);
+  expect(searches[0]).toMatchObject({ filters: [{ key: 'doi', match: '10.1234/fixture' }] });
+  for (const resultKind of ['papers', 'papers-with-passages']) {
+    await page.getByLabel('Search for', { exact: true }).selectOption(resultKind);
+    await expect(page.getByLabel('DOI', { exact: true })).toBeDisabled();
+    await page.getByRole('button', { name: 'Search', exact: true }).click();
+    await expect(page.getByRole('alert').first()).toContainText('Clear DOI');
+    expect(searches).toHaveLength(1);
+    await page.getByLabel('Search for', { exact: true }).selectOption('passages');
+    await expect(page.getByLabel('DOI', { exact: true })).toBeEnabled();
+    await expect(page.getByLabel('DOI', { exact: true })).toHaveValue('10.1234/fixture');
+  }
+  await page.getByLabel('Search for', { exact: true }).selectOption('papers');
+  await page.getByRole('button', { name: 'Clear incompatible filters' }).click();
+  await expect(page.getByLabel('DOI', { exact: true })).toHaveValue('');
+  await page.getByRole('button', { name: 'Search', exact: true }).click();
+  await expect.poll(() => searches.length).toBe(2);
+  expect(searches[1]).not.toHaveProperty('filters');
+  await page.getByLabel('Search for', { exact: true }).selectOption('passages');
+  await expect(page.getByLabel('DOI', { exact: true })).toBeEnabled();
+});

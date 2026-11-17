@@ -76,7 +76,7 @@ export function buildSearchRequest(collection: string, options: SearchOptions, c
   if (!Number.isInteger(offset) || offset < 0) throw new Error('Invalid search page.');
   const filters = options.filters ? buildSearchFilters(options.filters) : [];
   const papers = options.resultKind === 'papers' || options.resultKind === 'papers-with-passages';
-  if (papers && filters.some((filter) => filter.key === 'headings' || filter.key === 'content_type')) throw new Error('Clear heading and element-type filters before searching papers.');
+  if (papers && filters.some((filter) => filter.key === 'headings' || filter.key === 'content_type' || filter.key === 'doi')) throw new Error('Clear DOI, heading and element-type filters before searching papers.');
   return {
     query: options.query.trim(), collection, use_worker_qdrant: true,
     mode: options.mode, embedding_backend: options.backend, embedding_model: options.model.trim(),
