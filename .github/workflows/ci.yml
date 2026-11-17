@@ -116,6 +116,9 @@ jobs:
       - name: Show selected Xcode
         run: xcodebuild -version
 
+      - name: Check actual Mac build prerequisites
+        run: make doctor
+
       - name: Build and run ChunkyTests
         run: |
           rm -rf /tmp/chunky-chat-settings-screenshots /tmp/chunky-verification-screenshots /tmp/chunky-bibliography-screenshots /tmp/chunky-citation-screenshots /tmp/chunky-health-screenshots /tmp/chunky-watched-folder-screenshots
