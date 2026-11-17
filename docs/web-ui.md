@@ -8,7 +8,7 @@ Captured by the macOS browser unit tests with explicitly labeled fixture chunks;
 
 ## Build and start
 
-From the repository root, use Bun 1.4.4, Node.js 24.22.1 for compatible frontend tooling, and the committed `worker/web/bun.lock`:
+From the repository root, use Bun 1.4.4, Node.js 26.13.1 for compatible frontend tooling, and the committed `worker/web/bun.lock`:
 
 ```bash
 make build-web

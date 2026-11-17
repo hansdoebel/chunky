@@ -50,7 +50,7 @@ services:
     volumes:
       - ollama_models:/root/.ollama
   vllm:
-    image: vllm/vllm-openai-rocm:v0.33.0-rocm100
+    image: vllm/vllm-openai-rocm:v0.34.0-rocm100
     profiles: [vllm]
     restart: unless-stopped
     network_mode: service:worker
