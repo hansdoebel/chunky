@@ -23,6 +23,7 @@ nonisolated final class URLSessionDatasetHTTP: DatasetHTTP {
         request.timeoutInterval = 45
         request.setValue("application/json", forHTTPHeaderField: "Accept")
         let (bytes, response) = try await session.bytes(for: request)
+        defer { bytes.task.cancel() }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw DatasetError.unavailable }
         guard response.expectedContentLength <= maximumBytes else { throw DatasetError.limitExceeded }
         var data = Data()
