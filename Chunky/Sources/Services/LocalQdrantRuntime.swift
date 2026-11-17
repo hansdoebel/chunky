@@ -1,4 +1,9 @@
 import Foundation
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 nonisolated struct RuntimeCommand: Sendable {
     let executable: String
@@ -25,36 +30,85 @@ nonisolated struct LocalQdrantSnapshot: Sendable, Equatable {
     var running = false
 }
 
+nonisolated final class LocalRuntimeProcessControl: @unchecked Sendable {
+    private let lock = NSLock()
+    private var process: Process?
+    private var cancelled = false
+
+    func start(_ child: Process) throws {
+        try lock.withLock {
+            guard !cancelled else { throw CancellationError() }
+            try child.run()
+            process = child
+        }
+    }
+
+    func cancel() {
+        lock.withLock {
+            cancelled = true
+            if process?.isRunning == true { process?.terminate() }
+        }
+    }
+
+    func finish() {
+        let child = lock.withLock { process }
+        guard let child else { return }
+        if child.isRunning {
+            child.terminate()
+            let deadline = Date().addingTimeInterval(1)
+            while child.isRunning && Date() < deadline { Thread.sleep(forTimeInterval: 0.02) }
+            if child.isRunning { kill(child.processIdentifier, SIGKILL) }
+        }
+        child.waitUntilExit()
+    }
+}
+
 nonisolated enum LocalRuntimeProcess {
     static func run(_ command: RuntimeCommand) async throws -> RuntimeCommandResult {
-        try await Task.detached {
-            let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
-            try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
-            defer { try? FileManager.default.removeItem(at: directory) }
-            let output = directory.appendingPathComponent("output")
-            _ = FileManager.default.createFile(atPath: output.path, contents: nil)
-            let handle = try FileHandle(forWritingTo: output)
-            defer { try? handle.close() }
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: command.executable)
-            process.arguments = command.arguments
-            process.environment = command.environment
-            process.standardInput = FileHandle.nullDevice
-            process.standardOutput = handle
-            process.standardError = handle
-            try process.run()
-            let deadline = Date().addingTimeInterval(command.timeout)
-            while process.isRunning && Date() < deadline { try await Task.sleep(nanoseconds: 50_000_000) }
-            if process.isRunning {
-                process.terminate()
-                throw LocalRuntimeError.unavailable("The local runtime command timed out. Refresh status before retrying; Colima may still be starting.")
-            }
-            process.waitUntilExit()
-            let reader = try FileHandle(forReadingFrom: output)
-            defer { try? reader.close() }
-            let bytes = try reader.read(upToCount: 1_048_576) ?? Data()
-            return RuntimeCommandResult(status: process.terminationStatus, output: String(decoding: bytes, as: UTF8.self))
-        }.value
+        let control = LocalRuntimeProcessControl()
+        let worker = Task.detached { try runSynchronously(command, control: control) }
+        return try await withTaskCancellationHandler {
+            let result = try await worker.value
+            try Task.checkCancellation()
+            return result
+        } onCancel: {
+            control.cancel()
+            worker.cancel()
+        }
+    }
+
+    private static func runSynchronously(_ command: RuntimeCommand, control: LocalRuntimeProcessControl) throws -> RuntimeCommandResult {
+        try Task.checkCancellation()
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let output = directory.appendingPathComponent("output")
+        _ = FileManager.default.createFile(atPath: output.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: output)
+        defer { try? handle.close() }
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: command.executable)
+        process.arguments = command.arguments
+        process.environment = command.environment
+        process.standardInput = FileHandle.nullDevice
+        process.standardOutput = handle
+        process.standardError = handle
+        defer { control.finish() }
+        try control.start(process)
+        let deadline = Date().addingTimeInterval(command.timeout)
+        while process.isRunning && Date() < deadline {
+            try Task.checkCancellation()
+            Thread.sleep(forTimeInterval: 0.02)
+        }
+        try Task.checkCancellation()
+        guard !process.isRunning else {
+            throw LocalRuntimeError.unavailable("The local runtime command timed out. Refresh status before retrying; Colima may still be starting.")
+        }
+        process.waitUntilExit()
+        let reader = try FileHandle(forReadingFrom: output)
+        defer { try? reader.close() }
+        let bytes = try reader.read(upToCount: 1_048_576) ?? Data()
+        return RuntimeCommandResult(status: process.terminationStatus, output: String(decoding: bytes, as: UTF8.self))
     }
 }
 
@@ -101,10 +155,12 @@ nonisolated struct LocalQdrantRuntime: Sendable {
     var ownsProfile: Bool { (try? String(contentsOf: marker, encoding: .utf8)) == "chunky-v1\n" }
 
     private func execute(_ executable: String?, _ arguments: [String], timeout: TimeInterval = 30) async throws -> String {
+        try Task.checkCancellation()
         guard let executable else {
             throw LocalRuntimeError.unavailable("Install Colima and the Docker CLI with brew install colima docker, then reopen Preferences. Nothing is installed automatically.")
         }
         let result = try await run(RuntimeCommand(executable: executable, arguments: arguments, environment: environment, timeout: timeout))
+        try Task.checkCancellation()
         guard result.status == 0 else {
             throw LocalRuntimeError.unavailable("Local runtime command failed (\(result.status)): \(result.output.prefix(2000))")
         }
@@ -155,7 +211,7 @@ nonisolated struct LocalQdrantRuntime: Sendable {
             try "chunky-v1\n".write(to: marker, atomically: true, encoding: .utf8)
         }
         if profile?.status.lowercased() != "running" {
-            _ = try await execute(colima, ["start", "--profile", Self.profile, "--runtime", "docker", "--cpu", "2", "--memory", "4", "--disk", "30"], timeout: 600)
+            _ = try await execute(colima, ["start", "--profile", Self.profile, "--activate=false", "--runtime", "docker", "--cpu", "2", "--memory", "4", "--disk", "30"], timeout: 600)
         }
         if let running = try await ownedContainer() {
             try await prepareVolume()

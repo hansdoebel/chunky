@@ -1,5 +1,10 @@
 import Foundation
 import Testing
+#if canImport(Darwin)
+import Darwin
+#else
+import Glibc
+#endif
 
 @testable import Chunky
 
@@ -22,7 +27,7 @@ struct LocalQdrantRuntimeTests {
         try await fixture.runtime.start()
         #expect(fixture.runtime.ownsProfile)
         let calls = await fixture.script.calls
-        #expect(calls[1].arguments == ["start", "--profile", "chunky", "--runtime", "docker", "--cpu", "2", "--memory", "4", "--disk", "30"])
+        #expect(calls[1].arguments == ["start", "--profile", "chunky", "--activate=false", "--runtime", "docker", "--cpu", "2", "--memory", "4", "--disk", "30"])
         let dockerCalls = calls.filter { $0.executable == "/fixture/docker" }
         #expect(dockerCalls.allSatisfy { $0.arguments.prefix(2) == ["--host", fixture.runtime.socket] })
         #expect(dockerCalls.allSatisfy { $0.environment["DOCKER_HOST"] == nil })
@@ -80,6 +85,49 @@ struct LocalQdrantRuntimeTests {
         defer { fixture.cleanup() }
         await #expect(throws: LocalRuntimeError.self) { try await fixture.runtime.start() }
         #expect(await fixture.script.calls.count == 4)
+    }
+
+    @Test func cancelledStartDoesNotMutateResources() async throws {
+        let fixture = try RuntimeFixture(owned: false, outputs: [])
+        defer { fixture.cleanup() }
+        let task = Task { try await fixture.runtime.start() }
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(await fixture.script.calls.isEmpty)
+        #expect(!fixture.runtime.ownsProfile)
+    }
+
+    @Test func processCancellationTerminatesAndReapsChild() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pidFile = directory.appendingPathComponent("pid")
+        let command = Self.sleepCommand(pidFile: pidFile, timeout: 10)
+        let task = Task { try await LocalRuntimeProcess.run(command) }
+        let deadline = Date().addingTimeInterval(3)
+        while !FileManager.default.fileExists(atPath: pidFile.path) && Date() < deadline {
+            try await Task.sleep(nanoseconds: 10_000_000)
+        }
+        let pid = try #require(Int32(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+        task.cancel()
+        await #expect(throws: CancellationError.self) { try await task.value }
+        #expect(kill(pid, 0) == -1)
+    }
+
+    @Test func processTimeoutTerminatesAndReapsChild() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pidFile = directory.appendingPathComponent("pid")
+        await #expect(throws: LocalRuntimeError.self) {
+            try await LocalRuntimeProcess.run(Self.sleepCommand(pidFile: pidFile, timeout: 0.5))
+        }
+        let pid = try #require(Int32(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
+        #expect(kill(pid, 0) == -1)
+    }
+
+    private static func sleepCommand(pidFile: URL, timeout: TimeInterval) -> RuntimeCommand {
+        RuntimeCommand(executable: "/bin/sh", arguments: ["-c", "echo $$ > \"$1\"; exec /bin/sleep 30", "fixture", pidFile.path], environment: [:], timeout: timeout)
     }
 
     private static let runningProfile = "{\"name\":\"chunky\",\"status\":\"Running\",\"runtime\":\"docker\"}"
