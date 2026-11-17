@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-struct HuggingFaceDataset: Identifiable, Equatable {
+nonisolated struct HuggingFaceDataset: Identifiable, Equatable, Sendable {
     var id: String
     var revision: String
     var downloads: Int
@@ -11,13 +11,13 @@ struct HuggingFaceDataset: Identifiable, Equatable {
     var cardURL: URL { URL(string: "https://huggingface.co/datasets/\(id)")! }
 }
 
-struct DatasetSplit: Identifiable, Equatable {
+nonisolated struct DatasetSplit: Identifiable, Equatable, Sendable {
     var config: String
     var split: String
     var id: String { config + "/" + split }
 }
 
-struct DatasetManifest: Codable, Equatable {
+nonisolated struct DatasetManifest: Codable, Equatable, Sendable {
     var schemaVersion: Int
     var datasetID: String
     var revision: String
@@ -32,7 +32,7 @@ struct DatasetManifest: Codable, Equatable {
     var sha256: String
 }
 
-struct DatasetSnapshot {
+nonisolated struct DatasetSnapshot: Sendable {
     var manifest: DatasetManifest
     var directory: URL
     var rowsURL: URL { directory.appendingPathComponent("rows.jsonl") }
@@ -62,6 +62,7 @@ struct DatasetSnapshot {
         let lines = data.split(separator: 10, omittingEmptySubsequences: false)
         guard lines.last?.isEmpty == true, lines.count - 1 == manifest.rowCount else { throw DatasetError.invalidSnapshot }
         for line in lines.dropLast() {
+            try Task.checkCancellation()
             guard (try JSONSerialization.jsonObject(with: Data(line))) is [String: Any] else { throw DatasetError.invalidSnapshot }
         }
         return Self(manifest: manifest, directory: directory)
@@ -87,7 +88,7 @@ struct DatasetSnapshot {
     static func validRevision(_ value: String) -> Bool { value.count == 40 && value.allSatisfy(\.isHexDigit) }
 }
 
-enum DatasetError: LocalizedError {
+nonisolated enum DatasetError: LocalizedError {
     case invalidDataset, unavailable, revisionChanged, invalidResponse, limitExceeded, invalidSnapshot
 
     var errorDescription: String? {
