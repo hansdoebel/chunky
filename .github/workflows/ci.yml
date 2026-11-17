@@ -39,7 +39,7 @@ jobs:
       macos: ${{ steps.filter.outputs.macos }}
       qdrant: ${{ steps.filter.outputs.qdrant }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
         with:
           # Push diffs against the commit before the push. Full history keeps
           # that parent available when several commits land at once.
@@ -72,10 +72,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Set up Python 3.12
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0
         with:
           python-version: "3.12"
 
@@ -105,7 +105,7 @@ jobs:
     runs-on: xcode-27
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1
 
       - name: Select Xcode 27.2
         run: sudo xcode-select -s /Applications/Xcode_27.2.app/Contents/Developer
@@ -131,7 +131,7 @@ jobs:
 
       - name: Upload analytics screenshot
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: analytics-screenshot
           path: /tmp/chunky-*.png
@@ -152,7 +152,7 @@ jobs:
 
       - name: Upload chat settings screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: chat-settings-screenshots
           path: chat-screenshots/*.png
@@ -167,7 +167,7 @@ jobs:
 
       - name: Upload verification screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: verification-screenshots
           path: verification-screenshots/*.png
@@ -182,7 +182,7 @@ jobs:
 
       - name: Upload bibliography screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: bibliography-screenshots
           path: bibliography-screenshots/*.png
@@ -197,7 +197,7 @@ jobs:
 
       - name: Upload citation screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: citation-screenshots
           path: citation-screenshots/*.png
@@ -212,7 +212,7 @@ jobs:
 
       - name: Upload health screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: health-screenshots
           path: health-screenshots/*.png
@@ -227,7 +227,7 @@ jobs:
 
       - name: Upload watched folder screenshots
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
         with:
           name: watched-folder-screenshots
           path: watched-folder-screenshots/*.png
