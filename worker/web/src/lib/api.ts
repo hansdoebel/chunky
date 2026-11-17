@@ -49,7 +49,7 @@ export type CollectionPage = {
   semantic_search_reason: string | null;
   embedding: CollectionEmbedding | null;
 };
-export type SearchOptions = { query: string; backend: 'ollama' | 'openai'; model: string; endpoint: string; mode: 'dense' | 'hybrid'; filters?: SearchFilterDraft };
+export type SearchOptions = { query: string; backend: 'ollama' | 'openai'; model: string; endpoint: string; mode: 'dense' | 'hybrid'; filters?: SearchFilterDraft; resultKind?: 'passages' | 'papers' | 'papers-with-passages' };
 export type SearchPage = {
   results: (CollectionPoint & { score: number })[];
   limit: number;
@@ -75,11 +75,14 @@ export function buildSearchRequest(collection: string, options: SearchOptions, c
   if (options.endpoint.trim()) validateEmbeddingEndpoint(options.endpoint);
   if (!Number.isInteger(offset) || offset < 0) throw new Error('Invalid search page.');
   const filters = options.filters ? buildSearchFilters(options.filters) : [];
+  const papers = options.resultKind === 'papers' || options.resultKind === 'papers-with-passages';
+  if (papers && filters.some((filter) => filter.key === 'headings' || filter.key === 'content_type' || filter.key === 'doi')) throw new Error('Clear DOI, heading and element-type filters before searching papers.');
   return {
     query: options.query.trim(), collection, use_worker_qdrant: true,
     mode: options.mode, embedding_backend: options.backend, embedding_model: options.model.trim(),
     ...(options.endpoint.trim() ? { embedding_url: options.endpoint.trim() } : {}),
     ...(filters.length ? { filters } : {}),
+    ...(papers ? { papers_first: true, expand_documents: options.resultKind === 'papers-with-passages' } : {}),
     limit: 10, offset,
   };
 }
@@ -227,6 +230,7 @@ export class WorkerAPI {
     return (await this.request('search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })).json();
   }
   async config(): Promise<WorkerConfig> { return (await this.request('ui/config')).json(); }
+  async modelCatalog(signal?: AbortSignal): Promise<unknown> { return (await this.request('models', { signal })).json(); }
   async models(): Promise<{ embeddings?: { name: string }[] }> { return (await this.request('models')).json(); }
   async jobs(offset = 0): Promise<JobPage> { return (await this.request(`jobs?limit=50&offset=${offset}`)).json(); }
   async job(id: string, vectors = false): Promise<Job> {
