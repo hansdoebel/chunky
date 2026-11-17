@@ -1108,6 +1108,8 @@ struct LiveRetrievalWorker: RetrievalWorker {
 struct RetrievalService {
     var embedding: any RetrievalEmbedding
     var worker: any RetrievalWorker
+    var identityDefaults: UserDefaults
+    var preembeddedQuery: (DatasetCloudEmbeddingProfile, String, String) async throws -> [Float]
     var reranker: any Reranker
     var sectionSiblings: @Sendable (RetrievalRequest, [RetrievalHit], (any RetrievalIndex)?) async -> [SectionSibling] = { request, hits, index in
         let sources = Array(Set(hits.map(\.source))).filter { !$0.isEmpty }
@@ -1133,11 +1135,17 @@ struct RetrievalService {
     init(
         embedding: any RetrievalEmbedding = LiveRetrievalEmbedding(),
         worker: any RetrievalWorker = LiveRetrievalWorker(),
-        reranker: any Reranker = LiveReranker()
+        reranker: any Reranker = LiveReranker(),
+        identityDefaults: UserDefaults = .standard,
+        preembeddedQuery: @escaping (DatasetCloudEmbeddingProfile, String, String) async throws -> [Float] = { profile, endpoint, text in
+            try await DatasetCloudPreembeddedQuery.embed(profile: profile, endpoint: endpoint, text: text)
+        }
     ) {
         self.embedding = embedding
         self.worker = worker
         self.reranker = reranker
+        self.identityDefaults = identityDefaults
+        self.preembeddedQuery = preembeddedQuery
     }
 
     func search(_ request: RetrievalRequest, index: (any RetrievalIndex)?) async throws -> RetrievalPage {
@@ -1150,7 +1158,7 @@ struct RetrievalService {
             throw RetrievalError.invalidWeights
         }
         guard !request.collection.isEmpty else { throw RetrievalError.missingCollection(request.collection) }
-        if let profile = try DatasetCloudCollectionIdentity.profile(collection: request.collection) {
+        if let profile = try DatasetCloudCollectionIdentity.profile(collection: request.collection, defaults: identityDefaults) {
             try profile.validateConfiguration(backend: request.embeddingBackend, model: request.embeddingModel)
             guard request.route == .localQdrant else {
                 throw DatasetCloudEmbeddingError.invalid("Use Local Mac query routing for this pre-embedded Cloud collection so its query gateway model identity can be verified.")
@@ -1233,13 +1241,13 @@ struct RetrievalService {
     }
 
     private func searchLocal(_ request: RetrievalRequest, index: any RetrievalIndex) async throws -> RetrievalPage {
-        try FastEmbedCollectionIdentity.validate(collection: request.collection, backend: request.embeddingBackend, model: request.embeddingModel, allowPreembeddedQuery: true)
+        try FastEmbedCollectionIdentity.validate(collection: request.collection, backend: request.embeddingBackend, model: request.embeddingModel, defaults: identityDefaults, allowPreembeddedQuery: true)
         let ollamaURL = request.embeddingBackend == EmbeddingBackendKind.openai.rawValue ? "" : request.embeddingURL
         let apiURL = request.embeddingBackend == EmbeddingBackendKind.openai.rawValue ? request.embeddingURL : ""
         let verifiedVector: [Float]?
         let probed: Int
-        if let profile = try DatasetCloudCollectionIdentity.profile(collection: request.collection) {
-            let result = try await DatasetCloudPreembeddedQuery.embed(profile: profile, endpoint: apiURL, text: request.text)
+        if let profile = try DatasetCloudCollectionIdentity.profile(collection: request.collection, defaults: identityDefaults) {
+            let result = try await preembeddedQuery(profile, apiURL, request.text)
             verifiedVector = result
             probed = result.count
         } else {
