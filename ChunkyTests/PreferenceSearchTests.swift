@@ -6,6 +6,7 @@ struct PreferenceSearchTests {
     @Test func matchesEveryWordAcrossTitlesAndAliases() {
         #expect(PreferenceSearchItem.matches("  QDRANT timeout ").map(\.id) == ["upload"])
         #expect(PreferenceSearchItem.matches("download folder").map(\.id) == ["datasets"])
+        #expect(PreferenceSearchItem.matches("chunk cache").map(\.id) == ["chunk-cache"])
         #expect(PreferenceSearchItem.matches("dark").map(\.id) == ["appearance"])
         #expect(PreferenceSearchItem.matches("OCR").map(\.id) == ["documents"])
         #expect(PreferenceSearchItem.matches(" ").isEmpty)
