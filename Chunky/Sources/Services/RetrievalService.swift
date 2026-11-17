@@ -1150,6 +1150,12 @@ struct RetrievalService {
             throw RetrievalError.invalidWeights
         }
         guard !request.collection.isEmpty else { throw RetrievalError.missingCollection(request.collection) }
+        if let profile = try DatasetCloudCollectionIdentity.profile(collection: request.collection) {
+            try profile.validateConfiguration(backend: request.embeddingBackend, model: request.embeddingModel)
+            guard request.route == .localQdrant else {
+                throw DatasetCloudEmbeddingError.invalid("Use Local Mac query routing for this pre-embedded Cloud collection so its query gateway model identity can be verified.")
+            }
+        }
 
         let page: RetrievalPage
         switch request.route {
@@ -1227,15 +1233,19 @@ struct RetrievalService {
     }
 
     private func searchLocal(_ request: RetrievalRequest, index: any RetrievalIndex) async throws -> RetrievalPage {
-        try FastEmbedCollectionIdentity.validate(collection: request.collection, backend: request.embeddingBackend, model: request.embeddingModel)
+        try FastEmbedCollectionIdentity.validate(collection: request.collection, backend: request.embeddingBackend, model: request.embeddingModel, allowPreembeddedQuery: true)
         let ollamaURL = request.embeddingBackend == EmbeddingBackendKind.openai.rawValue ? "" : request.embeddingURL
         let apiURL = request.embeddingBackend == EmbeddingBackendKind.openai.rawValue ? request.embeddingURL : ""
-        let probed = try await embedding.probe(
-            backend: request.embeddingBackend,
-            model: request.embeddingModel,
-            ollamaURL: ollamaURL,
-            apiURL: apiURL
-        )
+        let verifiedVector: [Float]?
+        let probed: Int
+        if let profile = try DatasetCloudCollectionIdentity.profile(collection: request.collection) {
+            let result = try await DatasetCloudPreembeddedQuery.embed(profile: profile, endpoint: apiURL, text: request.text)
+            verifiedVector = result
+            probed = result.count
+        } else {
+            verifiedVector = nil
+            probed = try await embedding.probe(backend: request.embeddingBackend, model: request.embeddingModel, ollamaURL: ollamaURL, apiURL: apiURL)
+        }
         guard let existing = try await index.vectorSize(collection: request.collection) else {
             throw RetrievalError.missingCollection(request.collection)
         }
@@ -1247,13 +1257,12 @@ struct RetrievalService {
                 detail: "Collection \(request.collection) has vector size \(existing), but \(request.embeddingModel) probes \(probed). Refusing to search."
             )
         }
-        let vector = try await embedding.embed(
-            text: request.text,
-            backend: request.embeddingBackend,
-            model: request.embeddingModel,
-            ollamaURL: ollamaURL,
-            apiURL: apiURL
-        )
+        let vector: [Float]
+        if let verifiedVector {
+            vector = verifiedVector
+        } else {
+            vector = try await embedding.embed(text: request.text, backend: request.embeddingBackend, model: request.embeddingModel, ollamaURL: ollamaURL, apiURL: apiURL)
+        }
         if vector.count != probed {
             throw RetrievalError.dimensionMismatch(
                 collection: request.collection,
