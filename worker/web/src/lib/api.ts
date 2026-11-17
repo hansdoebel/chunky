@@ -31,6 +31,10 @@ export type JobOptions = {
   collection: string;
   hybrid: boolean;
   chunkTokens: number;
+  enableOcr?: boolean;
+  ocrLanguage?: string;
+  tableMode?: string;
+  maxPages?: string;
 };
 
 export type CollectionEmbedding = { backend: 'ollama' | 'openai'; model: string; dimensions: number; distance: string; hybrid: boolean };
@@ -105,6 +109,24 @@ export function buildJobSettings(options: JobOptions, config: WorkerConfig): Rec
     accelerator: options.accelerator,
     format: 'json',
   };
+  const maxPages = options.maxPages?.trim() ?? '';
+  if (maxPages) {
+    if (!/^[0-9]+$/.test(maxPages) || !Number.isSafeInteger(Number(maxPages)) || Number(maxPages) < 1) throw new Error('Maximum pages must be a positive whole number, or blank for all pages.');
+    body.max_pages = Number(maxPages);
+  }
+  if (options.vlm === 'standard') {
+    if (options.enableOcr) {
+      body.enable_ocr = true;
+      if (options.ocrLanguage) {
+        if (!['en', 'fr', 'de'].includes(options.ocrLanguage)) throw new Error('Choose a supported OCR language.');
+        body.ocr_language = options.ocrLanguage;
+      }
+    }
+    if (options.tableMode && options.tableMode !== 'fast') {
+      if (options.tableMode !== 'accurate') throw new Error('Choose a supported table recognition mode.');
+      body.table_mode = options.tableMode;
+    }
+  }
   if (full) {
     body.embedding_backend = options.backend;
     body.embedding_model = options.model.trim();

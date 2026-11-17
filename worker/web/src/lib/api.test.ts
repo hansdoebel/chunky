@@ -119,3 +119,25 @@ describe('collection browsing and semantic search', () => {
     expect(buildSearchRequest('papers', { ...query, endpoint: 'http://worker-model.example:8002' }, config)).toHaveProperty('embedding_url', 'http://worker-model.example:8002');
   });
 });
+
+describe('PDF processing controls', () => {
+  it('preserves the existing request when processing controls are untouched', () => {
+    expect(buildJobSettings({ ...options, enableOcr: false, ocrLanguage: '', tableMode: 'fast', maxPages: '' }, config)).toEqual(buildJobSettings(options, config));
+  });
+  it('maps Standard OCR, language, tables and page limits without credentials', () => {
+    expect(buildJobSettings({ ...options, enableOcr: true, ocrLanguage: 'de', tableMode: 'accurate', maxPages: ' 12 ' }, config)).toMatchObject({ enable_ocr: true, ocr_language: 'de', table_mode: 'accurate', max_pages: 12 });
+    expect(buildJobSettings({ ...options, enableOcr: false, ocrLanguage: 'de' }, config)).not.toHaveProperty('ocr_language');
+  });
+  it('omits Standard-only options for VLM while keeping its page limit', () => {
+    const body = buildJobSettings({ ...options, vlm: 'granite-docling-transformers', enableOcr: true, ocrLanguage: 'de', tableMode: 'accurate', maxPages: '2' }, config);
+    expect(body).toMatchObject({ vlm_model: 'granite-docling-transformers', max_pages: 2 });
+    for (const field of ['enable_ocr', 'ocr_language', 'table_mode']) expect(body).not.toHaveProperty(field);
+  });
+  it.each(['0', '-1', '1.5', '1e2', 'abc', '9007199254740992'])('rejects unsafe page limit %s before uploading', (maxPages) => {
+    expect(() => buildJobSettings({ ...options, maxPages }, config)).toThrow('Maximum pages');
+  });
+  it('rejects unsupported Standard options', () => {
+    expect(() => buildJobSettings({ ...options, enableOcr: true, ocrLanguage: 'invalid' }, config)).toThrow('OCR language');
+    expect(() => buildJobSettings({ ...options, tableMode: 'invalid' }, config)).toThrow('table recognition');
+  });
+});

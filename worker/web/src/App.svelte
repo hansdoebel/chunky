@@ -32,7 +32,7 @@
   let connectionError = $state('');
   let models = $state<string[]>([]);
   let modelNotice = $state('');
-  let options = $state<JobOptions>({ mode: 'chunks', backend: 'ollama', model: '', endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512 });
+  let options = $state<JobOptions>({ mode: 'chunks', backend: 'ollama', model: '', endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512, enableOcr: false, ocrLanguage: '', tableMode: 'fast', maxPages: '' });
   let generation = 0;
   let selectionGeneration = 0;
   let poll: ReturnType<typeof setInterval> | undefined;
@@ -63,7 +63,7 @@
     detailState = 'idle';
     files = [];
     models = [];
-    options = { mode: 'chunks', backend: 'ollama', model: '', endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512 };
+    options = { mode: 'chunks', backend: 'ollama', model: '', endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512, enableOcr: false, ocrLanguage: '', tableMode: 'fast', maxPages: '' };
     modelNotice = '';
     uploading = false;
     refreshing = false;
@@ -97,7 +97,7 @@
       const settings = await candidate.config();
       if (session !== generation) return;
       config = settings;
-      options = { mode: 'chunks', backend: settings.embedding_backend, model: settings.embedding_model, endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512 };
+      options = { mode: 'chunks', backend: settings.embedding_backend, model: settings.embedding_model, endpoint: '', vlm: 'standard', accelerator: 'cuda', collection: 'documents', hybrid: false, chunkTokens: 512, enableOcr: false, ocrLanguage: '', tableMode: 'fast', maxPages: '' };
       connected = true;
       token = '';
       await refresh();
@@ -334,6 +334,12 @@
             <div class="field"><Label for="embedding-model">Embedding model</Label><Input id="embedding-model" bind:value={options.model} list="embedding-models" disabled={options.mode === 'chunks'} /><datalist id="embedding-models">{#each models as model}<option value={model}></option>{/each}</datalist></div>
             {#if modelNotice}<p class="field-note wide">{modelNotice}</p>{/if}
             {#if options.mode === 'ingest'}<div class="field wide"><Label for="collection">Collection</Label><Input id="collection" bind:value={options.collection} placeholder="documents" /><Label class="checkbox"><input type="checkbox" bind:checked={options.hybrid} />Enable BM25 hybrid search</Label><p class="field-note">Use a new collection for a different model. Existing collections must have matching verified model settings.</p></div>{/if}
+            <div class="field"><Label for="max-pages">Maximum pages <span class="optional">optional</span></Label><Input id="max-pages" inputmode="numeric" bind:value={options.maxPages} placeholder="All pages" aria-describedby="max-pages-help" /><p id="max-pages-help" class="field-note">Limit PDF conversion to a positive whole number of pages. Leave blank for all pages.</p></div>
+            {#if options.vlm === 'standard'}
+              <div class="field"><Label for="table-mode">Table recognition</Label><NativeSelect.Root id="table-mode" bind:value={options.tableMode}><option value="fast">Fast · default</option><option value="accurate">Accurate</option></NativeSelect.Root><p class="field-note">Standard PDF pipeline only. Accurate mode can take longer.</p></div>
+              <div class="field"><Label for="enable-ocr">OCR for scanned PDFs</Label><NativeSelect.Root id="enable-ocr" value={options.enableOcr ? 'on' : 'off'} onchange={(event) => options.enableOcr = event.currentTarget.value === 'on'}><option value="off">Off · default</option><option value="on">On</option></NativeSelect.Root></div>
+              <div class="field"><Label for="ocr-language">OCR language</Label><NativeSelect.Root id="ocr-language" bind:value={options.ocrLanguage} disabled={!options.enableOcr}><option value="">Worker default</option><option value="en">English</option><option value="fr">French</option><option value="de">German</option></NativeSelect.Root><p class="field-note">Used only when OCR is enabled.</p></div>
+            {:else}<p class="field-note wide">The document model handles text and tables. Standard OCR and table recognition settings do not apply to VLM uploads.</p>{/if}
             <div class="field"><Label for="chunk-tokens">Maximum chunk tokens</Label><Input id="chunk-tokens" type="number" min="64" max="4096" step="1" bind:value={options.chunkTokens} /></div>
             <div class="field"><Label for="embedding-endpoint">Embedding endpoint <span class="optional">optional</span></Label><Input id="embedding-endpoint" bind:value={options.endpoint} placeholder="Use worker default" disabled={options.mode === 'chunks'} /><p class="field-note">A worker-side HTTP(S) endpoint. Required when changing providers.</p></div>
           </div>
