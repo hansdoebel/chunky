@@ -113,3 +113,5 @@ Processing controls captured by macOS browser CI [43984267460](https://github.co
 ![Light processing settings](images/web-processing-light.png)
 
 ![Dark mobile processing settings](images/web-processing-dark-mobile.png)
+
+New worker-ingested summaries now preserve permitted DOI metadata. The worker API checks older-summary coverage before accepting a paper DOI query and reports an explicit conflict when coverage is incomplete; it never backfills existing collections. The browser continues to require clearing DOI when choosing paper search, because it does not yet expose that coverage check. Switching back to passages retains exact DOI filtering.

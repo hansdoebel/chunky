@@ -156,6 +156,9 @@ class QdrantSearcher(Protocol):
     def describe(self, *, url: str, api_key: str, collection: str) -> CollectionLayout | None:
         ...
 
+    def has_legacy_summary_doi_gap(self, *, url: str, api_key: str, collection: str, filters: list[PayloadFilter]) -> bool:
+        ...
+
     def query_dense(
         self,
         *,
@@ -570,6 +573,22 @@ def run_search(
             raise SearchError(str(exc), status_code=409, error_type="embedding_identity_mismatch") from None
         if request.mode == "hybrid" and not stored["hybrid"]:
             raise SearchError("This collection has no compatible hybrid layout. Use dense search.", status_code=409, error_type="embedding_identity_mismatch")
+    if request.papers_first and any(item.key == "doi" for item in request.filters):
+        coverage = getattr(searcher, "has_legacy_summary_doi_gap", None)
+        try:
+            incomplete = not callable(coverage) or coverage(
+                url=url, api_key=api_key, collection=collection, filters=request.filters,
+            )
+        except SearchError:
+            raise
+        except Exception as exc:
+            raise SearchError(redact(str(exc), api_key), status_code=502, error_type="qdrant_error") from None
+        if incomplete:
+            raise SearchError(
+                "DOI filtering for papers is unavailable: older summaries in this scope lack DOI coverage. "
+                "Use passage search or remove the DOI filter. Existing records were not changed.",
+                status_code=409, error_type="summary_doi_coverage_incomplete",
+            )
     try:
         vectors = backend.embed([request.query], model)
     except SearchError:
@@ -750,6 +769,25 @@ class QdrantPointSearcher:
             return
         if _ensure_filter_indexes(client, collection):
             self._indexed.add(key)
+
+    def has_legacy_summary_doi_gap(self, *, url: str, api_key: str, collection: str, filters: list[PayloadFilter]) -> bool:
+        doi_alternative = any(item.key == "doi" and item.should for item in filters)
+        scoped = record_scope([item for item in filters if item.key != "doi" and not (doi_alternative and item.should)], True)
+        scoped.extend([
+            PayloadFilter(key="doi", empty=True),
+            PayloadFilter(key="summary_metadata_version", match=1, negate=True),
+        ])
+        client = self._open(url, api_key)
+        try:
+            points, _ = client.scroll(
+                collection_name=collection, scroll_filter=build_query_filter(scoped),
+                limit=1, with_payload=False, with_vectors=False,
+            )
+            return bool(points)
+        finally:
+            close = getattr(client, "close", None)
+            if callable(close):
+                close()
 
     def section_chunks(
         self,
