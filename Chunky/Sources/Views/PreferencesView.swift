@@ -81,6 +81,7 @@ private struct PreferencesContent: View {
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }
+            .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             Divider()
             preferencesTabs
