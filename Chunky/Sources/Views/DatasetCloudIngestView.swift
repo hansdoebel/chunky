@@ -113,12 +113,7 @@ struct DatasetCloudIngestView: View {
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { selection in
             do { load(try selection.get()) } catch { status = error.localizedDescription }
         }
-        .onChange(of: field) { _, _ in plan = nil }
-        .onChange(of: preembedded) { _, _ in plan = nil }
-        .onChange(of: chunkBytes) { _, _ in plan = nil }
-        .onChange(of: tier) { _, _ in plan = nil }
-        .onChange(of: ramGB) { _, _ in plan = nil }
-        .onChange(of: diskGB) { _, _ in plan = nil }
+        .onChange(of: planInputs) { _, _ in plan = nil }
         .onDisappear { task?.cancel(); accessURL?.stopAccessingSecurityScopedResource(); accessURL = nil }
     }
 
@@ -138,6 +133,10 @@ struct DatasetCloudIngestView: View {
     private var saveAction: (() -> Void)? {
         guard result != nil else { return nil }
         return { save() }
+    }
+
+    private var planInputs: [String] {
+        [field, String(preembedded), String(chunkBytes), tier.rawValue, ramGB, diskGB] + settingsIdentity
     }
 
     private func load(_ url: URL) {
