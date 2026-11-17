@@ -138,24 +138,63 @@ struct LocalQdrantRuntimeTests {
         #expect(!fixture.runtime.ownsProfile)
     }
 
-    @Test func processCancellationTerminatesAndReapsChild() async throws {
+    @Test @concurrent nonisolated func processCancellationTerminatesAndReapsChild() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
         let pidFile = directory.appendingPathComponent("pid")
         let command = Self.sleepCommand(pidFile: pidFile, timeout: 10)
         let task = Task { try await LocalRuntimeProcess.run(command) }
-        let deadline = Date().addingTimeInterval(3)
-        while !FileManager.default.fileExists(atPath: pidFile.path) && Date() < deadline {
-            try await Task.sleep(nanoseconds: 10_000_000)
+        do {
+            let pid = try await Self.waitForPID(at: pidFile)
+            task.cancel()
+            await #expect(throws: CancellationError.self) { try await task.value }
+            #expect(kill(pid, 0) == -1)
+        } catch {
+            task.cancel()
+            _ = try? await task.value
+            throw error
         }
-        let pid = try #require(Int32(String(contentsOf: pidFile, encoding: .utf8).trimmingCharacters(in: .whitespacesAndNewlines)))
-        task.cancel()
-        await #expect(throws: CancellationError.self) { try await task.value }
-        #expect(kill(pid, 0) == -1)
     }
 
-    @Test func processTimeoutTerminatesAndReapsChild() async throws {
+    @Test @concurrent nonisolated func processReadinessWaitsForCompletePID() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let pidFile = directory.appendingPathComponent("pid")
+        try "12".write(to: pidFile, atomically: true, encoding: .utf8)
+        let writer = Task {
+            try await Task.sleep(for: .milliseconds(100))
+            try "12345\n".write(to: pidFile, atomically: true, encoding: .utf8)
+        }
+        defer { writer.cancel() }
+        #expect(try await Self.waitForPID(at: pidFile) == 12345)
+        try await writer.value
+    }
+
+    @Test @concurrent nonisolated func processReadinessHasABoundedFailure() async throws {
+        let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        await #expect(throws: LocalRuntimeError.self) {
+            try await Self.waitForPID(at: missing, timeout: .milliseconds(50))
+        }
+    }
+
+    @concurrent private nonisolated static func waitForPID(at file: URL, timeout: Duration = .seconds(3)) async throws -> Int32 {
+        let clock = ContinuousClock()
+        let deadline = clock.now.advanced(by: timeout)
+        repeat {
+            try Task.checkCancellation()
+            if let contents = try? String(contentsOf: file, encoding: .utf8),
+               contents.hasSuffix("\n"),
+               let pid = Int32(contents.trimmingCharacters(in: .whitespacesAndNewlines)), pid > 0 {
+                return pid
+            }
+            try await Task.sleep(for: .milliseconds(10))
+        } while clock.now < deadline
+        throw LocalRuntimeError.unavailable("Test child did not publish a complete PID before the readiness deadline")
+    }
+
+    @Test @concurrent nonisolated func processTimeoutTerminatesAndReapsChild() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -167,7 +206,7 @@ struct LocalQdrantRuntimeTests {
         #expect(kill(pid, 0) == -1)
     }
 
-    private static func sleepCommand(pidFile: URL, timeout: TimeInterval) -> RuntimeCommand {
+    private nonisolated static func sleepCommand(pidFile: URL, timeout: TimeInterval) -> RuntimeCommand {
         RuntimeCommand(executable: "/bin/sh", arguments: ["-c", "echo $$ > \"$1\"; exec /bin/sleep 30", "fixture", pidFile.path], environment: [:], timeout: timeout)
     }
 
