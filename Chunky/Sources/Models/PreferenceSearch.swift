@@ -16,7 +16,8 @@ struct PreferenceSearchItem: Identifiable, Equatable {
         .init(id: "database", title: "Database connection", detail: "Qdrant endpoints, credentials and collections", tab: 2, icon: "externaldrive", keywords: "cloud api key server grpc"),
         .init(id: "colima", title: "Local Qdrant", detail: "Colima virtual machine and container controls", tab: 2, icon: "desktopcomputer", keywords: "docker start stop cpu ram disk configuration"),
         .init(id: "upload", title: "Database tuning", detail: "Batch size, timeout, distance, quantization and hybrid search", tab: 2, icon: "slider.horizontal.3", keywords: "qdrant compression upload"),
-        .init(id: "export", title: "File export", detail: "Output format and destination folder", tab: 3, icon: "square.and.arrow.up", keywords: "save files markdown html json text download folder"),
+        .init(id: "export", title: "File export", detail: "Output format and destination folder", tab: 3, icon: "square.and.arrow.up", keywords: "save files markdown html json text export folder"),
+        .init(id: "datasets", title: "Dataset downloads", detail: "Open Datasets to choose the download folder and sample size", tab: 6, icon: "arrow.down.circle", keywords: "hugging face huggingface wikipedia download folder"),
         .init(id: "chat", title: "Chat", detail: "pi and OpenAI-compatible chat models", tab: 4, icon: "bubble.left.and.bubble.right", keywords: "api key endpoint fallback node"),
         .init(id: "about", title: "App and dependencies", detail: "Version, Docling and watched folders", tab: 5, icon: "info.circle", keywords: "update python runtime health installation"),
         .init(id: "appearance", title: "Appearance", detail: "System, Light or Dark", tab: 5, icon: "circle.lefthalf.filled", keywords: "theme color colour")

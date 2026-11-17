@@ -24,6 +24,7 @@ struct PreferencesView: View {
 }
 
 private struct PreferencesContent: View {
+    @Environment(\.openWindow) private var openWindow
     @EnvironmentObject var appState: AppState
     @ObservedObject var settings: AppSettings
     let automaticallyCheckConnections: Bool
@@ -149,14 +150,15 @@ private struct PreferencesContent: View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
                 Text("Settings results").font(.headline)
-                Text("Opening a result switches to Advanced and expands tuning sections.")
+                Text("Results open the related settings pane, or the Datasets window. Advanced tuning sections expand automatically.")
                     .foregroundStyle(.secondary)
                 ForEach(PreferenceSearchItem.matches(searchText)) { item in
                     Button {
                         performanceExpanded = true
                         metadataExpanded = true
                         uploadExpanded = true
-                        openSettings(item.tab)
+                        if item.id == "datasets" { openWindow(id: "datasets") }
+                        else { openSettings(item.tab) }
                         searchText = ""
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
