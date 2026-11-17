@@ -771,7 +771,8 @@ class QdrantPointSearcher:
             self._indexed.add(key)
 
     def has_legacy_summary_doi_gap(self, *, url: str, api_key: str, collection: str, filters: list[PayloadFilter]) -> bool:
-        scoped = record_scope([item for item in filters if item.key != "doi"], True)
+        doi_alternative = any(item.key == "doi" and item.should for item in filters)
+        scoped = record_scope([item for item in filters if item.key != "doi" and not (doi_alternative and item.should)], True)
         scoped.extend([
             PayloadFilter(key="doi", empty=True),
             PayloadFilter(key="summary_metadata_version", match=1, negate=True),

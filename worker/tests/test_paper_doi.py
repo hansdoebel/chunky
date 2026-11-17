@@ -133,3 +133,26 @@ def test_failed_coverage_lookup_never_reports_no_matches(paper_client):
     assert "qdrant_error" in response.text
     assert "results" not in response.json()
     assert embeddings.embed_calls == []
+
+
+@pytest.mark.parametrize("expand", [False, True])
+@pytest.mark.parametrize("library", ["wanted", "other"])
+def test_doi_or_year_coverage_does_not_require_other_alternative(paper_client, expand, library):
+    db, client, embeddings = paper_client
+    store(db,
+          {"record_type": "document", "source": "old", "library_id": library, "year": 1999},
+          {"source": "old", "doi": DOI, "library_id": library, "year": 1999})
+    before = deepcopy(db.scroll("papers", with_vectors=True)[0])
+    response = client.post("/v1/search", json={"collection": "papers", "query": "paper", "use_worker_qdrant": True, "papers_first": True, "expand_documents": expand, "filters": [{"key": "doi", "match": DOI, "should": True}, {"key": "year", "match": 2024, "should": True}, {"key": "library_id", "match": "wanted"}]})
+    if library == "wanted":
+        assert response.status_code == 409
+        assert "summary_doi_coverage_incomplete" in response.text
+        assert embeddings.embed_calls == []
+    else:
+        assert response.status_code == 200, response.text
+        assert response.json()["results"] == []
+    after = db.scroll("papers", with_vectors=True)[0]
+    assert [(p.id, p.payload) for p in after] == [(p.id, p.payload) for p in before]
+    for actual, original in zip(after, before):
+        assert actual.vector == pytest.approx(original.vector)
+
