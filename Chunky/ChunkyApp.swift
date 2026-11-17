@@ -41,6 +41,11 @@ struct ChunkyApp: App {
         }
         .defaultSize(width: 820, height: 760)
 
+        Window("Dataset Cloud Ingest", id: "dataset-cloud-ingest") {
+            DatasetCloudIngestView().environmentObject(appState)
+        }
+        .defaultSize(width: 780, height: 900)
+
         Settings {
             PreferencesView()
                 .environmentObject(appState)

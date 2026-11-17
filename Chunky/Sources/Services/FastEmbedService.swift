@@ -33,10 +33,15 @@ nonisolated final class FastEmbedService: @unchecked Sendable {
         _ = try await request(["command": "prepare", "model": model])
     }
 
-    func embed(texts: [String], model: String, query: Bool = false) async throws -> [[Float]] {
+    func embed(texts: [String], model: String, query: Bool = false, rejectTruncation: Bool = false) async throws -> [[Float]] {
         guard model == Self.model else { throw failure("Select \(Self.model) for local CPU embeddings.") }
         if texts.isEmpty { return [] }
-        let result = try await request(["command": "embed", "model": model, "texts": texts, "query": query])
+        var payload: [String: Any] = ["command": "embed", "model": model, "texts": texts, "query": query]
+        if rejectTruncation { payload["reject_truncation"] = true }
+        let result = try await request(payload)
+        guard !rejectTruncation || result["untruncated"] as? Bool == true else {
+            throw failure("The CPU embedding process did not confirm complete input tokenization. Restart the app with the updated helper before Cloud import.")
+        }
         guard result["model"] as? String == model,
               result["dimensions"] as? Int == Self.dimensions,
               let vectors = result["vectors"] as? [[NSNumber]], vectors.count == texts.count,

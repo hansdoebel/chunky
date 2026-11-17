@@ -11,9 +11,28 @@ CACHE = Path(os.environ.get("CHUNKY_FASTEMBED_CACHE", "~/.cache/chunky/fastembed
 
 
 class Runtime:
-    def __init__(self, factory=None):
+    def __init__(self, factory=None, tokenizer_factory=None):
         self.factory = factory
         self.encoder = None
+        self.tokenizer_factory = tokenizer_factory
+        self.strict_tokenizer = None
+
+    def validate_full_input(self, encoder, texts):
+        if self.strict_tokenizer is None:
+            tokenizer = getattr(getattr(encoder, "model", None), "tokenizer", None)
+            if tokenizer is None or (tokenizer.truncation or {}).get("max_length") != 512:
+                raise ValueError("Cannot verify the cached Potion tokenizer's 512-token context; refusing Cloud import")
+            factory = self.tokenizer_factory
+            if factory is None:
+                from tokenizers import Tokenizer
+                factory = Tokenizer.from_str
+            clone = factory(tokenizer.to_str())
+            clone.no_truncation()
+            clone.no_padding()
+            self.strict_tokenizer = clone
+        encoded = self.strict_tokenizer.encode_batch(texts, add_special_tokens=False)
+        if len(encoded) != len(texts) or any(len(value.ids) > 512 for value in encoded):
+            raise ValueError("Potion input exceeds 512 tokens. Choose smaller Cloud import chunks; no text was truncated")
 
     def load(self, download=False):
         if self.encoder is None:
@@ -46,11 +65,19 @@ class Runtime:
             raise ValueError("Embedding input must contain non-empty text strings")
         if request.get("query") not in (True, False):
             raise ValueError("Specify document or query embedding")
+        strict = request.get("reject_truncation", False)
+        if not isinstance(strict, bool):
+            raise ValueError("reject_truncation must be a boolean")
+        if strict:
+            self.validate_full_input(encoder, texts)
         method = encoder.query_embed if request["query"] else encoder.passage_embed
         vectors = [v.tolist() for v in method(texts, batch_size=64)] if texts else []
         if len(vectors) != len(texts) or any(len(v) != DIMENSIONS or not all(math.isfinite(x) for x in v) for v in vectors):
             raise ValueError("Potion returned invalid vectors; refusing to index or search")
-        return {"vectors": vectors, "model": MODEL, "dimensions": DIMENSIONS}
+        result = {"vectors": vectors, "model": MODEL, "dimensions": DIMENSIONS}
+        if strict:
+            result["untruncated"] = True
+        return result
 
 
 def main():
