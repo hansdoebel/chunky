@@ -1,7 +1,11 @@
 import Foundation
 
 enum FastEmbedCollectionIdentity {
-    static func validate(collection: String, backend: String, model: String, defaults: UserDefaults = .standard) throws {
+    static func validate(collection: String, backend: String, model: String, defaults: UserDefaults = .standard, allowPreembeddedQuery: Bool = false) throws {
+        try DatasetCloudCollectionIdentity.validate(collection: collection, backend: backend, model: model, defaults: defaults)
+        if !allowPreembeddedQuery, try DatasetCloudCollectionIdentity.profile(collection: collection, defaults: defaults) != nil {
+            throw DatasetCloudEmbeddingError.invalid("Pre-embedded dataset collections cannot receive ordinary document ingestion. Import another dataset into a new collection to preserve its verified vector identity.")
+        }
         let plan = CollectionPlanStore.load(name: collection, defaults: defaults)
         guard backend == "fastembed" || plan?.embeddingBackend == "fastembed" else { return }
         guard let plan, plan.embeddingBackend == backend, plan.embeddingModel == model,
