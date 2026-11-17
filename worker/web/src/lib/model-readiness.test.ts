@@ -10,7 +10,7 @@ describe('worker model discovery', () => {
   it('distinguishes not detected from failed discovery and an unobservable vLLM server', () => {
     expect(modelReadiness({ vlm: [{ name: 'model', available: false, engine: 'transformers' }] }).rows[0].state).toBe('Not detected');
     const failed = modelReadiness({ cache_error: 'private internal error', vlm: [{ name: 'model', available: false }] });
-    expect(failed.rows[0].state).toBe('Unknown');
+    expect(failed.rows[0]).toMatchObject({ state: 'Unknown', source: 'Worker document catalog' });
     expect(failed.warnings).toEqual(['Hugging Face cache discovery is incomplete.']);
     expect(modelReadiness({ vlm: [{ name: 'model', available: false, engine: 'vllm' }] }).rows[0].state).toBe('Unknown');
   });

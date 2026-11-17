@@ -16,7 +16,7 @@ export function modelReadiness(value: unknown): { rows: ModelRow[]; warnings: st
     for (const row of rows(data[field])) {
       const name = text(row.name);
       if (!name || !compatible(name) || row.engine === 'mlx') continue;
-      const source = text(row.engine) ?? text(row.source) ?? 'Worker embedding provider';
+      const source = text(row.engine) ?? text(row.source) ?? (field === 'embeddings' ? 'Worker embedding provider' : field === 'vlm' ? 'Worker document catalog' : 'Worker inventory');
       const uncertain = field === 'embeddings' ? !!data.embeddings_error : field === 'vlm' ? !!data.cache_error || source === 'vllm' : row.source === 'ollama' ? !!data.ollama_error : !!data.cache_error;
       const available = field === 'installed' ? !uncertain : row.available === true;
       result.push({ name, kind, source, state: available ? 'Reported available' : row.available === false && !uncertain ? 'Not detected' : 'Unknown', revision: text(row.revision), size: typeof row.size === 'number' && Number.isFinite(row.size) && row.size >= 0 ? row.size : null, recommended: recommendations.has(name) || recommendations.has(text(row.repo_id) ?? '') });
