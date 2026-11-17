@@ -1154,6 +1154,7 @@ private struct PreferencesContent: View {
     private func testQdrantConnection() async {
         let url = settings.qdrantURL
         let key = settings.qdrantAPIKey
+        let timeout = settings.qdrantTimeout
         guard !url.isEmpty else { invalidateQdrantCheck(); return }
         qdrantProbeURL = url
         qdrantProbeKey = key
@@ -1164,12 +1165,13 @@ private struct PreferencesContent: View {
         let probe = QdrantService()
         do {
             try await probe.configure(url: url, apiKey: key.isEmpty ? nil : key)
-            try await probe.connect()
+            try await probe.connect(timeout: timeout)
             let collections = try await probe.listCollections()
             await probe.disconnect()
             guard generation == qdrantGeneration, settings.qdrantURL == url,
                   settings.qdrantAPIKey == key else { return }
             appState.availableCollections = CollectionPlanStore.mergedNames(server: collections, selected: settings.defaultCollection, defaults: settings.defaults)
+            settings.noteQdrantSuccess()
             qdrantStatus = .connected
         } catch {
             await probe.disconnect()
