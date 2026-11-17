@@ -41,6 +41,10 @@ class AppSettings: ObservableObject {
     private let secrets: SettingsSecretStore
     private let prefix = "chunky."
 
+    var usesWorkerCloud: Bool {
+        processingHost == .devbox && devboxIngestTarget == .qdrantCloud
+    }
+
     @Published var interfaceMode: InterfaceMode {
         didSet { defaults.set(interfaceMode.rawValue, forKey: prefix + "interfaceMode") }
     }

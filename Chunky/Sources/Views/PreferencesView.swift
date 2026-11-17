@@ -170,7 +170,7 @@ private struct PreferencesContent: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Section("Service checks") {
-                    if usesWorkerCloud {
+                    if settings.usesWorkerCloud {
                         Label("Qdrant Cloud via worker", systemImage: "cloud")
                         Text("Cloud access is checked by the worker when you ingest or search. A connection check from this Mac would not verify that route.")
                             .font(.callout).foregroundStyle(.secondary)
@@ -216,10 +216,6 @@ private struct PreferencesContent: View {
     private func openSettings(_ tab: Int) {
         selectedTab = tab
         settings.interfaceMode = .advanced
-    }
-
-    private var usesWorkerCloud: Bool {
-        settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud
     }
 
     private var diagnosticSecrets: [String] {

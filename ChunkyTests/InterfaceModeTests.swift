@@ -55,4 +55,19 @@ struct InterfaceModeTests {
             #expect(InterfaceMode.advanced.visibleViews(selected: selected) == ViewMode.allCases)
         }
     }
+    @Test func databaseCheckPresentationMatchesRetrievalRoute() {
+        let settings = IsolatedSettings.make()
+        settings.qdrantURL = "http://localhost:6334"
+        settings.qdrantCloudURL = "https://cloud.example.test:6333"
+        for host in ProcessingHost.allCases {
+            for target in DevboxIngestTarget.allCases {
+                settings.processingHost = host
+                settings.devboxIngestTarget = target
+                let request = RetrievalRequest.make(text: "test", collection: "saved", limit: 1, settings: settings)
+                #expect(settings.usesWorkerCloud == (request.route == .worker))
+                #expect(request.qdrantURL == (settings.usesWorkerCloud ? settings.qdrantCloudURL : settings.qdrantURL))
+            }
+        }
+    }
+
 }
