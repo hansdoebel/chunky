@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 
 nonisolated enum DatasetStreamStop: String, Codable, Sendable {
-    case byteBudget, rowLimit, sourceExhausted
+    case byteBudget, rowLimit, sourceExhausted, legacyRowLimit
 }
 
 nonisolated struct DatasetStreamManifest: Codable, Equatable, Sendable {
@@ -54,7 +54,7 @@ nonisolated enum DatasetStreamSnapshot {
         if version == 1 {
             let legacy = try decoder.decode(DatasetManifest.self, from: data)
             guard legacy.requestedRows >= legacy.rowCount, legacy.requestedRows <= DatasetSnapshot.maximumRows else { throw DatasetError.invalidSnapshot }
-            manifest = DatasetStreamManifest(schemaVersion: 2, datasetID: legacy.datasetID, revision: legacy.revision, config: legacy.config, split: legacy.split, sourceURL: legacy.sourceURL, license: legacy.license, downloadedAt: legacy.downloadedAt, rowCount: legacy.rowCount, totalRows: legacy.totalRows, sha256: legacy.sha256, requestedByteBudget: DatasetSnapshot.maximumBytes, maximumRows: DatasetSnapshot.maximumRows, stopReason: .rowLimit)
+            manifest = DatasetStreamManifest(schemaVersion: 2, datasetID: legacy.datasetID, revision: legacy.revision, config: legacy.config, split: legacy.split, sourceURL: legacy.sourceURL, license: legacy.license, downloadedAt: legacy.downloadedAt, rowCount: legacy.rowCount, totalRows: legacy.totalRows, sha256: legacy.sha256, requestedByteBudget: DatasetSnapshot.maximumBytes, maximumRows: DatasetSnapshot.maximumRows, stopReason: .legacyRowLimit)
         } else {
             manifest = try decoder.decode(DatasetStreamManifest.self, from: data)
         }
