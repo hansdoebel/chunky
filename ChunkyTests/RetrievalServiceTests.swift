@@ -186,6 +186,66 @@ struct RetrievalServiceTests {
         #expect(RetrievalFilter.playground(source: "  ", page: "nope", contentType: " ").isEmpty)
     }
 
+    @Test func registeredDatasetSearchUsesOnlyVerifiedVector() async throws {
+        let settings = IsolatedSettings.make()
+        let profile = DatasetCloudEmbeddingProfile.dbpedia
+        let name = "chunky-dataset-test-" + UUID().uuidString
+        try DatasetCloudCollectionIdentity.register(collection: name, profile: profile, defaults: settings.defaults)
+        let embedding = FakeEmbedding(probeSize: 3, vector: [1, 2, 3])
+        let index = FakeIndex(vectorSize: 1536)
+        let expected = Array(repeating: Float(0.25), count: 1536)
+        var probes = 0
+        let service = RetrievalService(embedding: embedding, worker: FakeWorker(), identityDefaults: settings.defaults, preembeddedQuery: { selected, endpoint, text in
+            #expect(selected == profile)
+            #expect(text == "verified query")
+            #expect(endpoint == "https://gateway.invalid")
+            probes += 1
+            let response = try JSONSerialization.data(withJSONObject: ["model": profile.model, "data": [["index": 0, "embedding": expected]]])
+            return try selected.decodeQueryResponse(response)
+        })
+        var request = localRequest()
+        request.collection = name
+        request.embeddingBackend = profile.backend
+        request.embeddingModel = profile.model
+        request.embeddingURL = "https://gateway.invalid"
+        request.text = "verified query"
+        _ = try await service.search(request, index: index)
+        #expect(probes == 1)
+        #expect(index.lastVector == expected)
+        #expect(index.searchCalls == 1)
+        #expect(embedding.embedCalls == 0)
+    }
+
+    @Test func registeredDatasetRejectsGatewayModelAndWorkerRoute() async throws {
+        let settings = IsolatedSettings.make()
+        let profile = DatasetCloudEmbeddingProfile.dbpedia
+        let name = "chunky-dataset-test-" + UUID().uuidString
+        try DatasetCloudCollectionIdentity.register(collection: name, profile: profile, defaults: settings.defaults)
+        let index = FakeIndex(vectorSize: 1536)
+        let worker = FakeWorker()
+        var probes = 0
+        let service = RetrievalService(worker: worker, identityDefaults: settings.defaults, preembeddedQuery: { selected, _, _ in
+            probes += 1
+            let response = try JSONSerialization.data(withJSONObject: ["model": "text-embedding-ada-002", "data": [["index": 0, "embedding": Array(repeating: 0.1, count: 1536)]]])
+            return try selected.decodeQueryResponse(response)
+        })
+        var request = localRequest()
+        request.collection = name
+        request.embeddingBackend = profile.backend
+        request.embeddingModel = profile.model
+        await #expect(throws: Error.self) { try await service.search(request, index: index) }
+        #expect(probes == 1)
+        #expect(index.searchCalls == 0)
+        request.route = .worker
+        await #expect(throws: Error.self) { try await service.search(request, index: index) }
+        #expect(probes == 1)
+        #expect(worker.calls == 0)
+        request.route = .localQdrant
+        request.embeddingModel = "text-embedding-ada-002"
+        await #expect(throws: Error.self) { try await service.search(request, index: index) }
+        #expect(probes == 1)
+    }
+
     @Test func localDimensionMismatchRefusesBeforeSearch() async {
         let embedding = FakeEmbedding(probeSize: 3, vector: [0.1, 0.2, 0.3])
         let index = FakeIndex(vectorSize: 1024)
@@ -531,6 +591,7 @@ private final class FakeIndex: RetrievalIndex {
     var hits: [SearchResult]
     var searchCalls = 0
     var lastOffset: Int?
+    var lastVector: [Float]?
     var responses: [[SearchResult]] = []
     var offsets: [Int] = []
 
@@ -561,6 +622,7 @@ private final class FakeIndex: RetrievalIndex {
         searchCalls += 1
         offsets.append(offset)
         lastOffset = offset
+        lastVector = vector
         lastSeenName = vectorName
         _ = filter
         if !responses.isEmpty {
