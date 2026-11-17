@@ -144,6 +144,7 @@ private struct PreferencesContent: View {
                 }
                 .tag(5)
         }
+        .tabViewStyle(.grouped)
     }
 
     private var chatTab: some View {
