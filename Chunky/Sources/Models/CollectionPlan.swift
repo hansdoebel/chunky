@@ -300,11 +300,14 @@ enum CollectionPlanStore {
         }.sorted()
     }
 
-    static func mergedNames(server: [String], defaults: UserDefaults = .standard) -> [String] {
+    static func mergedNames(server: [String], selected: String? = nil, defaults: UserDefaults = .standard) -> [String] {
         var seen = Set(server)
         var merged = server
         for name in names(defaults: defaults) where seen.insert(name).inserted {
             merged.append(name)
+        }
+        if let selected, !selected.isEmpty, seen.insert(selected).inserted {
+            merged.append(selected)
         }
         return merged
     }

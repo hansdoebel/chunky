@@ -1169,7 +1169,7 @@ private struct PreferencesContent: View {
             await probe.disconnect()
             guard generation == qdrantGeneration, settings.qdrantURL == url,
                   settings.qdrantAPIKey == key else { return }
-            appState.availableCollections = Array(Set(collections + [settings.defaultCollection])).sorted()
+            appState.availableCollections = CollectionPlanStore.mergedNames(server: collections, selected: settings.defaultCollection, defaults: settings.defaults)
             qdrantStatus = .connected
         } catch {
             await probe.disconnect()

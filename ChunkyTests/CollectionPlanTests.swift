@@ -58,6 +58,21 @@ struct CollectionPlanTests {
         #expect(scalar.binaryWarning != nil)
     }
 
+    @Test func connectionResultsPreserveUncreatedPlansAndSavedSelection() {
+        let settings = IsolatedSettings.make()
+        for name in ["plan-a", "plan-b"] {
+            CollectionPlanStore.save(CollectionPlan.preset(
+                .recommended, name: name, vectorSize: 1024,
+                embeddingBackend: "ollama", embeddingModel: "qwen3-embedding"
+            ), defaults: settings.defaults)
+        }
+        #expect(CollectionPlanStore.mergedNames(server: ["existing"], selected: "plan-b", defaults: settings.defaults)
+                == ["existing", "plan-a", "plan-b"])
+        #expect(CollectionPlanStore.mergedNames(server: [], selected: "legacy", defaults: settings.defaults)
+                == ["plan-a", "plan-b", "legacy"])
+        #expect(CollectionPlanStore.names(defaults: settings.defaults) == ["plan-a", "plan-b"])
+    }
+
     @Test func savedPlanBecomesCreateOptions() {
         let defaults = UserDefaults(suiteName: "chunky.collection-plan-tests")!
         defaults.removePersistentDomain(forName: "chunky.collection-plan-tests")
