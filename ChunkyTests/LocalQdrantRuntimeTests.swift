@@ -138,7 +138,7 @@ struct LocalQdrantRuntimeTests {
         #expect(!fixture.runtime.ownsProfile)
     }
 
-    @Test nonisolated func processCancellationTerminatesAndReapsChild() async throws {
+    @Test @concurrent nonisolated func processCancellationTerminatesAndReapsChild() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -157,7 +157,7 @@ struct LocalQdrantRuntimeTests {
         }
     }
 
-    @Test nonisolated func processReadinessWaitsForCompletePID() async throws {
+    @Test @concurrent nonisolated func processReadinessWaitsForCompletePID() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -172,14 +172,14 @@ struct LocalQdrantRuntimeTests {
         try await writer.value
     }
 
-    @Test nonisolated func processReadinessHasABoundedFailure() async throws {
+    @Test @concurrent nonisolated func processReadinessHasABoundedFailure() async throws {
         let missing = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         await #expect(throws: LocalRuntimeError.self) {
             try await Self.waitForPID(at: missing, timeout: .milliseconds(50))
         }
     }
 
-    private nonisolated static func waitForPID(at file: URL, timeout: Duration = .seconds(3)) async throws -> Int32 {
+    @concurrent private nonisolated static func waitForPID(at file: URL, timeout: Duration = .seconds(3)) async throws -> Int32 {
         let clock = ContinuousClock()
         let deadline = clock.now.advanced(by: timeout)
         repeat {
@@ -194,7 +194,7 @@ struct LocalQdrantRuntimeTests {
         throw LocalRuntimeError.unavailable("Test child did not publish a complete PID before the readiness deadline")
     }
 
-    @Test nonisolated func processTimeoutTerminatesAndReapsChild() async throws {
+    @Test @concurrent nonisolated func processTimeoutTerminatesAndReapsChild() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
