@@ -80,9 +80,18 @@ struct InterfaceModeScreenshotTests {
         let frame = try #require(window.contentView?.superview)
         frame.layoutSubtreeIfNeeded()
         frame.displayIfNeeded()
-        let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
-        frame.cacheDisplay(in: frame.bounds, to: bitmap)
-        let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        let destination = URL(fileURLWithPath: "/tmp/chunky-interface-\(name).png")
+        if FileManager.default.fileExists(atPath: destination.path) {
+            try FileManager.default.removeItem(at: destination)
+        }
+        let capture = Process()
+        capture.executableURL = URL(fileURLWithPath: "/usr/sbin/screencapture")
+        capture.arguments = ["-x", "-o", "-l", String(window.windowNumber), destination.path]
+        try capture.run()
+        capture.waitUntilExit()
+        try #require(capture.terminationStatus == 0)
+        let png = try Data(contentsOf: destination)
+        let bitmap = try #require(NSBitmapImageRep(data: png))
         var contentLuminance: [Double] = []
         var headerLightest = 0.0
         var headerDarkest = 1.0
@@ -108,7 +117,6 @@ struct InterfaceModeScreenshotTests {
         #expect(png.count > 5000 && lightest - darkest > 0.2)
         #expect(interiorOpaque)
         #expect(headerLightest - headerDarkest > 0.2)
-        try png.write(to: URL(fileURLWithPath: "/tmp/chunky-interface-\(name).png"))
         return contentLuminance
     }
 }
