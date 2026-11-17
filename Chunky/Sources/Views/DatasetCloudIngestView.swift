@@ -32,7 +32,7 @@ struct DatasetCloudIngestPanel: View {
             Button("Choose downloaded dataset…", action: onChoose).disabled(running)
             if !dataset.isEmpty {
                 Text(dataset).font(.headline)
-                Text("\(rows) source rows · \(ByteCountFormatter.string(fromByteCount: Int64(snapshotBytes), countStyle: .binary)) local JSONL")
+                Text("\(rows) source rows · \(bytes(Double(snapshotBytes))) local JSONL")
             }
             Toggle("Use curated pre-embedded vectors", isOn: $preembedded).disabled(running)
             if preembedded {
@@ -81,7 +81,11 @@ struct DatasetCloudIngestPanel: View {
         .background(AppTheme.surfaceGrouped)
     }
 
-    private func bytes(_ value: Double) -> String { ByteCountFormatter.string(fromByteCount: Int64(value.rounded(.up)), countStyle: .binary) }
+    private func bytes(_ value: Double) -> String {
+        if value >= 1024 * 1024 * 1024 { return String(format: "%.2f GiB", value / (1024 * 1024 * 1024)) }
+        if value >= 1024 * 1024 { return String(format: "%.2f MiB", value / (1024 * 1024)) }
+        return String(format: "%.2f KiB", value / 1024)
+    }
 }
 
 struct DatasetCloudIngestView: View {
