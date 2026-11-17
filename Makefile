@@ -1,3 +1,5 @@
+.DEFAULT_GOAL := build
+
 .PHONY: build run test test-python test-worker build-web test-web test-all clean open-xcode \
        services qdrant ollama \
        setup-venv first-launch doctor test-setup

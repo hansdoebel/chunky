@@ -5,8 +5,9 @@ import subprocess
 import sys
 
 
-def version_at_least(output, minimum):
-    match = re.search(r"\b(\d+)\.(\d+)(?:\.(\d+))?", output)
+def version_at_least(output, minimum, label=None):
+    prefix = re.escape(label) + r"\s+" if label else r"\b"
+    match = re.search(prefix + r"(\d+)\.(\d+)(?:\.(\d+))?", output)
     return match is not None and tuple(int(part or 0) for part in match.groups()) >= minimum
 
 
@@ -25,7 +26,7 @@ def check(system=platform.system, which=shutil.which, run=subprocess.run):
             continue
         try:
             result = run(command, capture_output=True, text=True, timeout=30)
-            if result.returncode or not version_at_least(result.stdout, minimum):
+            if result.returncode or not version_at_least(result.stdout, minimum, "Swift version" if command[0] == "xcrun" else None):
                 failures.append(message)
         except (OSError, subprocess.TimeoutExpired):
             failures.append(message)
