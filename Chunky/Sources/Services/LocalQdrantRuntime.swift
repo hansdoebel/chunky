@@ -211,7 +211,9 @@ nonisolated struct LocalQdrantRuntime: Sendable {
             try "chunky-v1\n".write(to: marker, atomically: true, encoding: .utf8)
         }
         if profile?.status.lowercased() != "running" {
-            _ = try await execute(colima, ["start", "--profile", Self.profile, "--activate=false", "--runtime", "docker", "--cpu", "2", "--memory", "4", "--disk", "30"], timeout: 600)
+            var arguments = ["start", "--profile", Self.profile, "--activate=false"]
+            if profile == nil { arguments += ["--runtime", "docker", "--cpu", "2", "--memory", "4", "--disk", "30"] }
+            _ = try await execute(colima, arguments, timeout: 600)
         }
         if let running = try await ownedContainer() {
             try await prepareVolume()

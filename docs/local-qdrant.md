@@ -2,7 +2,7 @@
 
 Preferences → Qdrant includes a local runtime panel. Install the tools yourself with `brew install colima docker`, then reopen Preferences. Chunky does not install Homebrew, Docker Desktop or Colima automatically.
 
-**Start Qdrant** creates a dedicated Colima profile named `chunky` with two CPUs, 4 GiB memory and a 30 GiB disk, then starts `qdrant/qdrant:v1.20.2`. First start downloads a VM and container image and can take several minutes. The VM is separate from Colima's default profile. Existing profiles named `chunky` are refused unless previously created by Chunky; rename or manage a pre-existing profile manually rather than deleting it.
+**Start Qdrant** creates a dedicated Colima profile named `chunky` with two CPUs, 4 GiB memory and a 30 GiB disk, then starts `qdrant/qdrant:v1.20.2`. First start downloads a VM and container image and can take several minutes. The VM is separate from Colima's default profile. Subsequent starts retain the profile’s configured CPU, memory and disk sizes. Existing profiles named `chunky` are refused unless previously created by Chunky; rename or manage a pre-existing profile manually rather than deleting it.
 
 The app uses the explicit local socket `~/.colima/chunky/docker.sock`. Docker context, host, TLS, Colima-home and Lima-home environment overrides are removed for these commands. Startup explicitly passes `--activate=false`, so Docker Desktop and other contexts retain their settings.
 

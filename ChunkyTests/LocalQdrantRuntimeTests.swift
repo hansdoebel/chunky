@@ -40,6 +40,15 @@ struct LocalQdrantRuntimeTests {
         #expect(!calls.flatMap(\.arguments).contains("rm"))
     }
 
+    @Test func existingProfileRetainsResourceConfigurationOnRestart() async throws {
+        let fixture = try RuntimeFixture(owned: true, outputs: ["{\"name\":\"chunky\",\"status\":\"Stopped\",\"runtime\":\"docker\"}", "started", "chunky-qdrant", String(decoding: Self.containerData(), as: UTF8.self), "chunky-qdrant-data", "[{\"Driver\":\"local\",\"Labels\":{\"io.chunky.managed\":\"qdrant-v1\"},\"Options\":null}]"])
+        defer { fixture.cleanup() }
+        try await fixture.runtime.start()
+        let calls = await fixture.script.calls
+        #expect(calls[1].arguments == ["start", "--profile", "chunky", "--activate=false"])
+        #expect(calls.count == 6)
+    }
+
     @Test func existingUnownedProfileIsNeverAdopted() async throws {
         let fixture = try RuntimeFixture(owned: false, outputs: [Self.runningProfile])
         defer { fixture.cleanup() }
