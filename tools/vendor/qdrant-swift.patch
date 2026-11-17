@@ -321,7 +321,7 @@ index b9157e1..848b0a1 100644
          return vectors
      }
 diff --git a/Sources/QdrantGRPC/Services/CollectionsService.swift b/Sources/QdrantGRPC/Services/CollectionsService.swift
-index 8ce6a0f..b2a04f3 100644
+index 8ce6a0f..a340370 100644
 --- a/Sources/QdrantGRPC/Services/CollectionsService.swift
 +++ b/Sources/QdrantGRPC/Services/CollectionsService.swift
 @@ -90,61 +90,44 @@ public final class CollectionsService: Sendable {
@@ -399,7 +399,26 @@ index 8ce6a0f..b2a04f3 100644
  
          let request = ClientRequest(message: grpcRequest, metadata: metadata)
  
-@@ -179,6 +162,35 @@ public final class CollectionsService: Sendable {
+@@ -166,9 +149,15 @@ public final class CollectionsService: Sendable {
+         var grpcRequest = options.grpc
+         grpcRequest.collectionName = name
+         let request = ClientRequest(message: grpcRequest, metadata: metadata)
+-        let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
+-        if !response.result {
+-            throw QdrantError.unexpectedResponse("Collection creation failed")
++        do {
++            let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
++            if !response.result {
++                throw QdrantError.unexpectedResponse("Collection creation failed")
++            }
++        } catch let error as QdrantError {
++            throw error
++        } catch {
++            throw QdrantError.from(error)
+         }
+     }
+ 
+@@ -179,6 +168,35 @@ public final class CollectionsService: Sendable {
      ///   - writeConsistencyFactor: How many replicas should apply for success.
      ///   - onDiskPayload: Whether to store payload on disk.
      ///   - indexingThreshold: Minimum number of vectors to trigger indexing.
@@ -528,10 +547,10 @@ index a789def..286e92b 100644
          try container.encodeIfPresent(maxResidentMemoryPercent, forKey: .maxResidentMemoryPercent)
 diff --git a/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift b/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift
 new file mode 100644
-index 0000000..cc24c29
+index 0000000..cefa37f
 --- /dev/null
 +++ b/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift
-@@ -0,0 +1,69 @@
+@@ -0,0 +1,91 @@
 +import Foundation
 +import Testing
 +import QdrantCore
@@ -539,6 +558,28 @@ index 0000000..cc24c29
 +
 +@Suite("Chunky client compatibility integration", .serialized)
 +struct ChunkyCompatibilityIntegrationTests {
++    @Test func duplicateOptionsCreationPreservesTypedError() async throws {
++        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
++        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
++        defer { client.close() }
++        let name = "chunky-duplicate-" + UUID().uuidString.lowercased()
++        let options = CollectionOptions(vectors: .single(VectorConfig(size: 3, distance: .cosine)))
++        try await client.collections.create(name: name, options: options)
++        do {
++            do {
++                try await client.collections.create(name: name, options: options)
++                Issue.record("Duplicate creation should fail")
++            } catch QdrantError.collectionAlreadyExists(let message) {
++                #expect(message.contains(name))
++            }
++            #expect(try await client.collections.exists(name: name))
++        } catch {
++            try? await client.collections.delete(name: name)
++            throw error
++        }
++        try await client.collections.delete(name: name)
++    }
++
 +    @Test func strictModeEnforcesBatchLimitOnlyWhenEnabled() async throws {
 +        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
 +        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)

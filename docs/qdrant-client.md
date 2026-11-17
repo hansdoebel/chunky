@@ -17,3 +17,5 @@ Hybrid BM25 requests, embedding identity metadata, collection health and snapsho
 Synchronization refuses modified, untracked, and ignored files under managed paths before replacing anything. The compatibility patch also fixes upstream mock reset tracking until that fix is adopted upstream ([PER-204](https://linear.app/hansdoebel/issue/PER-204)). Run guard regressions with `python3 -m unittest discover -s tools/vendor -p "test_*.py"`.
 
 Strict-mode limits require explicit `StrictModeConfig(enabled: true, ...)`. The nil default preserves server defaults and explicit false disables enforcement. This upstream fix is tracked in [PER-211](https://linear.app/hansdoebel/issue/PER-211); both transports preserve omitted/false/true values.
+
+Options-based collection creation preserves the same typed `QdrantError` contract as the legacy overload; upstream adoption is tracked in [PER-214](https://linear.app/hansdoebel/issue/PER-214).
