@@ -16,3 +16,12 @@ it('rejects ignored passage filters while retaining document metadata filters', 
 it('keeps exact DOI filtering in passage mode', () => {
   expect(buildSearchRequest('docs', { ...options, filters: { ...emptySearchFilters(), doi: '10.1234/fixture' } }, config)).toMatchObject({ filters: [{ key: 'doi', match: '10.1234/fixture' }] });
 });
+
+it('keeps restored DOI filters guarded in both paper modes until coverage is available in the browser', () => {
+  const restored = { ...emptySearchFilters(), doi: '10.1234/Exact.Case' };
+  for (const resultKind of ['papers', 'papers-with-passages'] as const) {
+    expect(() => buildSearchRequest('docs', { ...options, resultKind, filters: restored }, config, 10)).toThrow('Clear DOI');
+  }
+  expect(restored.doi).toBe('10.1234/Exact.Case');
+  expect(buildSearchRequest('docs', { ...options, resultKind: 'passages', filters: restored }, config)).toMatchObject({ filters: [{ key: 'doi', match: '10.1234/Exact.Case' }] });
+});
