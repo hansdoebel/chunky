@@ -48,6 +48,7 @@ test('paper modes retain metadata filters and paginate papers separately from su
   await page.getByLabel('Heading contains').fill('Results');
   await page.getByLabel('Search for', { exact: true }).selectOption('papers-with-passages');
   await expect(page.getByLabel('Heading contains')).toBeDisabled();
+  await expect(page.getByLabel('Find a paper')).toBeVisible();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   expect(searches).toHaveLength(0);
   await page.getByRole('button', { name: 'Clear passage filters' }).click();
@@ -62,6 +63,7 @@ test('paper modes retain metadata filters and paginate papers separately from su
   expect(searches[1]).toMatchObject({ offset: 10, papers_first: true });
   await page.getByLabel('Search for', { exact: true }).selectOption('papers');
   await expect(page.getByText('Paper summary', { exact: true })).toHaveCount(0);
+  await expect(page.getByText('Up to 10 paper summaries per page. Papers need stored document summaries.')).toBeVisible();
   await page.getByRole('button', { name: 'Search', exact: true }).click();
   await expect.poll(() => searches.length).toBe(3);
   expect(searches[2]).toMatchObject({ offset: 0, expand_documents: false });
