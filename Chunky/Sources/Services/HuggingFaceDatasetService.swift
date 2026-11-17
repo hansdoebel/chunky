@@ -1,3 +1,5 @@
+import CryptoKit
+import CoreFoundation
 import Foundation
 
 nonisolated struct DatasetHTTPResponse: Sendable {
@@ -41,6 +43,9 @@ nonisolated final class URLSessionDatasetHTTP: DatasetHTTP {
 
 nonisolated struct HuggingFaceDatasetService: Sendable {
     var http: any DatasetHTTP = URLSessionDatasetHTTP()
+    var availableCapacity: @Sendable (URL) throws -> Int64? = { url in
+        try url.resourceValues(forKeys: [.volumeAvailableCapacityForImportantUsageKey]).volumeAvailableCapacityForImportantUsage
+    }
     static let pageBytes = 5 * 1024 * 1024
 
     @concurrent func search(_ query: String) async throws -> [HuggingFaceDataset] {
@@ -70,6 +75,118 @@ nonisolated struct HuggingFaceDatasetService: Sendable {
         }
         guard splits.count == list.count, Set(splits.map(\.id)).count == splits.count else { throw DatasetError.invalidResponse }
         return splits
+    }
+
+    @concurrent func size(for dataset: HuggingFaceDataset, split: DatasetSplit) async throws -> DatasetSizeInfo {
+        let object = try await viewer(path: "/size", dataset: dataset, query: ["config": split.config])
+        guard object["partial"] as? Bool == false,
+              let size = object["size"] as? [String: Any],
+              let splits = size["splits"] as? [[String: Any]] else { throw DatasetError.invalidResponse }
+        let matching = splits.filter { $0["dataset"] as? String == dataset.id && $0["config"] as? String == split.config && $0["split"] as? String == split.split }
+        guard matching.count == 1, let row = matching.first,
+              let rows = Self.nonnegativeInteger(row["num_rows"]),
+              let bytes = Self.nonnegativeInteger(row["num_bytes_parquet_files"]) else { throw DatasetError.invalidResponse }
+        return DatasetSizeInfo(sourceRows: rows, parquetBytes: bytes)
+    }
+
+    @concurrent func estimate(for dataset: HuggingFaceDataset, split: DatasetSplit) async throws -> DatasetSampleEstimate {
+        let object = try await viewer(path: "/rows", dataset: dataset, query: ["config": split.config, "split": split.split, "offset": "0", "length": "20"])
+        try Task.checkCancellation()
+        guard let total = Self.nonnegativeInteger(object["num_rows_total"]), total > 0,
+              let rows = object["rows"] as? [[String: Any]], rows.count == min(total, 20) else { throw DatasetError.invalidResponse }
+        var bytes = 0
+        for (index, row) in rows.enumerated() {
+            guard Self.nonnegativeInteger(row["row_idx"]) == index,
+                  let value = row["row"] as? [String: Any],
+                  let truncated = row["truncated_cells"] as? [Any], truncated.isEmpty else { throw DatasetError.invalidResponse }
+            bytes += try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed]).count + 1
+        }
+        return DatasetSampleEstimate(previewRows: rows.count, previewBytes: bytes, totalRows: total)
+    }
+
+    private static func nonnegativeInteger(_ value: Any?) -> Int? {
+        guard let number = value as? NSNumber, CFGetTypeID(number) != CFBooleanGetTypeID(),
+              let integer = Int(number.stringValue), integer >= 0 else { return nil }
+        return integer
+    }
+
+    @concurrent func downloadStream(dataset: HuggingFaceDataset, split: DatasetSplit, byteBudget: Int, maximumRows: Int = DatasetStreamSnapshot.maximumRows, folder: URL, progress: @MainActor @Sendable (Int, Int) -> Void = { _, _ in }) async throws -> DatasetStreamDownload {
+        guard byteBudget > 0, byteBudget <= DatasetStreamSnapshot.maximumBytes,
+              maximumRows > 0, maximumRows <= DatasetStreamSnapshot.maximumRows,
+              folder.isFileURL, !split.config.isEmpty, !split.split.isEmpty else { throw DatasetError.limitExceeded }
+        try Task.checkCancellation()
+        let access = folder.startAccessingSecurityScopedResource()
+        defer { if access { folder.stopAccessingSecurityScopedResource() } }
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        let capacity = try availableCapacity(folder)
+        guard let capacity, capacity >= Int64(byteBudget) + 64 * 1024 * 1024 else { throw DatasetError.insufficientSpace }
+        let token = UUID().uuidString
+        let stage = folder.appendingPathComponent(".chunky-dataset-" + token, isDirectory: true)
+        let destination = folder.appendingPathComponent(dataset.id.replacingOccurrences(of: "/", with: "--") + "-" + String(dataset.revision.prefix(8)) + "-" + token, isDirectory: true)
+        try FileManager.default.createDirectory(at: stage, withIntermediateDirectories: false)
+        defer { try? FileManager.default.removeItem(at: stage) }
+        let rowsURL = stage.appendingPathComponent("rows.jsonl")
+        try Data().write(to: rowsURL, options: .withoutOverwriting)
+        let file = try FileHandle(forWritingTo: rowsURL)
+        defer { try? file.close() }
+        var hash = SHA256()
+        var count = 0
+        var savedBytes = 0
+        var total: Int?
+        var stop = DatasetStreamStop.rowLimit
+        var pageRows = 100
+        downloadLoop: while count < min(maximumRows, total ?? maximumRows) {
+            try Task.checkCancellation()
+            var length = min(pageRows, maximumRows - count)
+            let object: [String: Any]
+            while true {
+                do {
+                    object = try await viewer(path: "/rows", dataset: dataset, query: ["config": split.config, "split": split.split, "offset": String(count), "length": String(length)])
+                    break
+                } catch DatasetError.limitExceeded where length > 1 {
+                    length = max(1, length / 2)
+                    pageRows = length
+                    try Task.checkCancellation()
+                }
+            }
+            try Task.checkCancellation()
+            guard let available = Self.nonnegativeInteger(object["num_rows_total"]),
+                  let rows = object["rows"] as? [[String: Any]], total == nil || total == available,
+                  rows.count == min(length, max(0, available - count)) else { throw DatasetError.invalidResponse }
+            total = available
+            for row in rows {
+                try Task.checkCancellation()
+                guard Self.nonnegativeInteger(row["row_idx"]) == count, let value = row["row"] as? [String: Any],
+                      let truncated = row["truncated_cells"] as? [Any], truncated.isEmpty else { throw DatasetError.invalidResponse }
+                var line = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
+                guard line.count <= DatasetStreamSnapshot.maximumLineBytes else { throw DatasetError.limitExceeded }
+                line.append(10)
+                if savedBytes + line.count > byteBudget {
+                    guard count > 0 else { throw DatasetError.limitExceeded }
+                    stop = .byteBudget
+                    break downloadLoop
+                }
+                try file.write(contentsOf: line)
+                hash.update(data: line)
+                savedBytes += line.count
+                count += 1
+            }
+            await progress(count, savedBytes)
+        }
+        try Task.checkCancellation()
+        guard count > 0, let total else { throw DatasetError.invalidResponse }
+        if count == total { stop = .sourceExhausted }
+        let manifest = DatasetStreamManifest(schemaVersion: 2, datasetID: dataset.id, revision: dataset.revision, config: split.config, split: split.split, sourceURL: dataset.cardURL.absoluteString, license: dataset.license, downloadedAt: Date(), rowCount: count, totalRows: total, sha256: hash.finalize().map { String(format: "%02x", $0) }.joined(), requestedByteBudget: byteBudget, maximumRows: maximumRows, stopReason: stop)
+        try manifest.validate()
+        try file.synchronize()
+        try file.close()
+        let encoder = JSONEncoder()
+        encoder.dateEncodingStrategy = .iso8601
+        encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+        try encoder.encode(manifest).write(to: stage.appendingPathComponent("manifest.json"), options: .withoutOverwriting)
+        try Task.checkCancellation()
+        try FileManager.default.moveItem(at: stage, to: destination)
+        return DatasetStreamDownload(manifest: manifest, directory: destination, byteCount: savedBytes)
     }
 
     @concurrent func download(dataset: HuggingFaceDataset, split: DatasetSplit, rows requested: Int, folder: URL, progress: @MainActor @Sendable (Int) -> Void = { _ in }) async throws -> DatasetSnapshot {

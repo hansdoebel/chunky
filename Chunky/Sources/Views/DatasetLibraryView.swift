@@ -10,6 +10,13 @@ final class DatasetLibraryState: ObservableObject {
     @Published var splits: [DatasetSplit] = []
     @Published var splitID = ""
     @Published var rowLimit = "100"
+    @Published var sampleSize = DatasetSampleSize.small
+    @Published var streamSnapshot: DatasetStreamDownload?
+    @Published var sizeInfo: DatasetSizeInfo?
+    @Published var sampleEstimate: DatasetSampleEstimate?
+    @Published var sizeStatus = "Size information has not been loaded."
+    private var sizeOperation: Task<Void, Never>?
+    private var sizeRequestID = UUID()
     @Published var folder: URL
     @Published var status = "Search public Hugging Face datasets to download a reproducible local sample."
     @Published var busy = false
@@ -38,10 +45,12 @@ final class DatasetLibraryState: ObservableObject {
     }
 
     func search() {
+        clearSizes()
         selected = nil
         splits = []
         splitID = ""
         snapshot = nil
+        streamSnapshot = nil
         results = []
         let query = query
         perform {
@@ -53,37 +62,97 @@ final class DatasetLibraryState: ObservableObject {
         }
     }
 
-    func select(_ dataset: HuggingFaceDataset) {
+    func select(_ dataset: HuggingFaceDataset) { select(id: dataset.id) }
+
+    func recommend(_ recommendation: DatasetRecommendation) {
+        query = recommendation.datasetID
+        results = []
+        select(id: recommendation.datasetID, preferred: recommendation.split)
+    }
+
+    private func select(id: String, preferred: DatasetSplit? = nil) {
+        clearSizes()
         selected = nil
         splits = []
         splitID = ""
         snapshot = nil
+        streamSnapshot = nil
         perform {
-            let details = try await self.service.details(dataset.id)
+            let details = try await self.service.details(id)
             let splits = try await self.service.splits(for: details)
             return {
                 self.selected = details
                 self.splits = splits
-                self.splitID = splits.first?.id ?? ""
-                self.status = splits.isEmpty ? "No Dataset Viewer splits are available for this dataset." : "Choose a split and row limit. Review the dataset license before use."
+                self.splitID = preferred.map { wanted in splits.first { $0 == wanted }?.id ?? "" } ?? splits.first?.id ?? ""
+                self.status = self.splitID.isEmpty ? "The requested configuration/split is unavailable. Choose an available split explicitly." : "Choose a split and row limit. Review the dataset license before use."
+                self.refreshSizes()
             }
         }
     }
 
+    var estimatedBytes: Int? { requestedRows.flatMap { sampleEstimate?.bytes(for: $0) } }
+
+    static func byteLabel(_ count: Int) -> String {
+        ByteCountFormatter.string(fromByteCount: Int64(count), countStyle: .binary)
+    }
+
+    private func clearSizes() {
+        sizeOperation?.cancel()
+        sizeOperation = nil
+        sizeRequestID = UUID()
+        sizeInfo = nil
+        sampleEstimate = nil
+        sizeStatus = "Size information has not been loaded."
+    }
+
+    func refreshSizes() {
+        clearSizes()
+        guard let selected, let split = selectedSplit else { return }
+        let token = sizeRequestID
+        sizeStatus = "Loading source size and a preview of up to 20 rows…"
+        sizeOperation = Task {
+            let source: DatasetSizeInfo?
+            let estimate: DatasetSampleEstimate?
+            do { source = try await service.size(for: selected, split: split) }
+            catch { source = nil }
+            guard !Task.isCancelled, token == sizeRequestID else { return }
+            do { estimate = try await service.estimate(for: selected, split: split) }
+            catch { estimate = nil }
+            guard !Task.isCancelled, token == sizeRequestID else { return }
+            sizeInfo = source
+            sampleEstimate = estimate
+            sizeStatus = source == nil || estimate == nil ? "Some size metadata is unavailable or could not be verified. Downloads still enforce all limits." : "Sizes verified against the selected dataset revision."
+            sizeOperation = nil
+        }
+    }
+
     func download() {
-        guard let selected, let split = selectedSplit, let count = requestedRows, folderAvailable else { return }
+        guard let selected, let split = selectedSplit, folderAvailable else { return }
         let destination = folder
         snapshot = nil
-        perform {
-            let snapshot = try await self.service.download(dataset: selected, split: split, rows: count, folder: destination)
-            return {
-                self.snapshot = snapshot
-                self.status = "Saved \(snapshot.manifest.rowCount) of \(snapshot.manifest.totalRows) rows. This sample is not a measured benchmark or a relevance-labeled evaluation set."
+        streamSnapshot = nil
+        if let budget = sampleSize.byteBudget {
+            perform {
+                let snapshot = try await self.service.downloadStream(dataset: selected, split: split, byteBudget: budget, folder: destination)
+                return {
+                    self.streamSnapshot = snapshot
+                    let route = snapshot.benchmarkCompatible ? "Compatible with Benchmark and Cloud ingest." : "Use Cloud ingest; this exceeds the legacy benchmark's 50 MiB / 10,000-row limit."
+                    self.status = "Saved \(snapshot.manifest.rowCount.formatted()) rows · \(Self.byteLabel(snapshot.byteCount)). Stop: \(snapshot.manifest.stopReason.rawValue). \(route)"
+                }
+            }
+        } else if let count = requestedRows {
+            perform {
+                let snapshot = try await self.service.download(dataset: selected, split: split, rows: count, folder: destination)
+                return {
+                    self.snapshot = snapshot
+                    self.status = "Saved \(snapshot.manifest.rowCount) of \(snapshot.manifest.totalRows) rows. This sample is not a measured benchmark or a relevance-labeled evaluation set."
+                }
             }
         }
     }
 
     func cancel() {
+        clearSizes()
         requestID = UUID()
         operation?.cancel()
         operation = nil
@@ -154,6 +223,17 @@ struct DatasetLibraryPane: View {
                     .font(.title2.weight(.semibold))
                 Text("Find public datasets and save a bounded, revision-checked JSONL sample for benchmarking or test collections.")
                     .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Recommended Wikipedia samples").font(.headline)
+                    LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading) {
+                        ForEach(DatasetRecommendation.wikipedia) { recommendation in
+                            Button(recommendation.title) { state.recommend(recommendation) }
+                        }
+                    }
+                    .disabled(state.busy)
+                    Text("Mini corpus or November 2023 articles · review each source’s license and attribution on its dataset card.")
+                        .font(.caption).foregroundStyle(.secondary)
+                }
                 HStack {
                     TextField("Dataset name or topic", text: $state.query)
                         .textFieldStyle(.roundedBorder)
@@ -184,16 +264,40 @@ struct DatasetLibraryPane: View {
                             }
                             Text("License: \(selected.license ?? "Not reported — review the dataset card")")
                             Text("Revision: \(selected.revision)").font(.caption.monospaced()).textSelection(.enabled)
-                            Picker("Configuration / split", selection: $state.splitID) {
+                            Picker("Configuration / split", selection: Binding(get: { state.splitID }, set: { state.splitID = $0; state.refreshSizes() })) {
                                 ForEach(state.splits) { split in Text(split.id).tag(split.id) }
                             }
                             .disabled(state.busy)
-                            HStack {
+                            Picker("Sample size", selection: $state.sampleSize) {
+                                ForEach(DatasetSampleSize.allCases) { size in Text(size.title).tag(size) }
+                            }
+                            .disabled(state.busy)
+                            if state.sampleSize == .legacy {
+                              HStack {
                                 TextField("Maximum rows", text: $state.rowLimit).frame(width: 180)
                                     .disabled(state.busy)
                                 Text("1–10,000 rows · first rows only · 50 MiB maximum").font(.caption).foregroundStyle(.secondary)
                             }
-                            if state.requestedRows == nil { Text("Enter a whole number from 1 to 10,000.").foregroundStyle(.red) }
+                              if state.requestedRows == nil { Text("Enter a whole number from 1 to 10,000.").foregroundStyle(.red) }
+                            } else {
+                                Text("Whole-row JSONL sample · up to 1,000,000 rows · stops before the selected byte budget. Full source is not downloaded.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
+                            if let size = state.sizeInfo {
+                                Text("Full split: \(size.sourceRows.formatted()) rows · \(DatasetLibraryState.byteLabel(size.parquetBytes)) compressed Parquet (not downloaded)")
+                            } else { Text("Full split compressed size: unavailable") }
+                            if state.sampleSize == .legacy, let bytes = state.estimatedBytes, let estimate = state.sampleEstimate {
+                                Text("Sample JSONL estimate: ~\(DatasetLibraryState.byteLabel(bytes)) · based on first \(estimate.previewRows) rows")
+                                if bytes > DatasetSnapshot.maximumBytes {
+                                    Text("Estimate exceeds the 50 MiB snapshot limit. Choose fewer rows; an oversized download will fail without saving.").foregroundStyle(.orange)
+                                }
+                            } else if let budget = state.sampleSize.byteBudget {
+                                Text("Download budget: up to \(DatasetLibraryState.byteLabel(budget)) JSONL. Actual size may be smaller; requires budget + 64 MiB free disk space.")
+                                Text("Benchmark accepts snapshots up to 50 MiB and 10,000 rows. Larger samples use Cloud ingest.").font(.caption).foregroundStyle(.secondary)
+                            } else { Text("Sample JSONL size: unknown until downloaded") }
+                            Text("Approximate disk size only; article lengths vary and network traffic includes metadata and response overhead. Cloud storage is checked separately during import; vectors and indexes need additional space.")
+                                .font(.caption).foregroundStyle(.secondary)
+                            Text(state.sizeStatus).font(.caption).foregroundStyle(.secondary)
                         }
                         .padding(8)
                     }
@@ -214,13 +318,13 @@ struct DatasetLibraryPane: View {
                 }
                 HStack {
                     Button("Download sample", action: state.download)
-                        .disabled(state.busy || state.selectedSplit == nil || state.requestedRows == nil || !state.folderAvailable)
+                        .disabled(state.busy || state.selectedSplit == nil || (state.sampleSize == .legacy && state.requestedRows == nil) || !state.folderAvailable)
                     if state.busy {
                         ProgressView().controlSize(.small)
                         Button("Cancel", action: state.cancel)
                     }
-                    if let snapshot = state.snapshot {
-                        Button("Show saved snapshot") { NSWorkspace.shared.activateFileViewerSelecting([snapshot.directory]) }
+                    if let directory = state.streamSnapshot?.directory ?? state.snapshot?.directory {
+                        Button("Show saved snapshot") { NSWorkspace.shared.activateFileViewerSelecting([directory]) }
                     }
                 }
                 Text(state.status).font(.callout).accessibilityIdentifier("dataset-status")
