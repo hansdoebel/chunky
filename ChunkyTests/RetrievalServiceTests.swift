@@ -186,7 +186,7 @@ struct RetrievalServiceTests {
         #expect(RetrievalFilter.playground(source: "  ", page: "nope", contentType: " ").isEmpty)
     }
 
-    @Test func registeredDatasetSearchUsesOnlyVerifiedVector() async throws {
+    @Test @MainActor func registeredDatasetSearchUsesOnlyVerifiedVector() async throws {
         let settings = IsolatedSettings.make()
         let profile = DatasetCloudEmbeddingProfile.dbpedia
         let name = "chunky-dataset-test-" + UUID().uuidString
@@ -216,7 +216,7 @@ struct RetrievalServiceTests {
         #expect(embedding.embedCalls == 0)
     }
 
-    @Test func registeredDatasetRejectsGatewayModelAndWorkerRoute() async throws {
+    @Test @MainActor func registeredDatasetRejectsGatewayModelAndWorkerRoute() async throws {
         let settings = IsolatedSettings.make()
         let profile = DatasetCloudEmbeddingProfile.dbpedia
         let name = "chunky-dataset-test-" + UUID().uuidString
