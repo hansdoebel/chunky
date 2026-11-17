@@ -13,7 +13,7 @@ A native macOS application for processing documents into semantic chunks and sto
 - Vector storage in local Docker Qdrant or Qdrant Cloud, with optional Colima controls in Preferences
 - Public Hugging Face dataset search and bounded local snapshots with a remembered download folder
 - Dataset embedding benchmarks and optional isolated Qdrant test collections with source provenance
-- Planned Cloud dataset imports with capacity checks, text chunking and a pinned pre-embedded DBpedia profile
+- Cloud dataset imports with explicit capacity plans, text chunking and a pinned pre-embedded DBpedia profile
 - Optional worker browser workspace for uploads, queue progress, cancellation, chunk preview, job settings, semantic collection search, and system-aware light/dark appearance
 - Named worker profiles (wired LAN, Wi-Fi, Tailscale) with a reachability and latency check
 - Retrieval over dense search or hybrid dense plus BM25 with RRF, plus an optional reranker
