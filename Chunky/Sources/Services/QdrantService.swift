@@ -116,6 +116,15 @@ class QdrantService: ObservableObject {
         )
     }
 
+    func createDatasetTestCollection(name: String, vectorSize: Int, productionCollection: String) async throws {
+        try DatasetBenchmarkSafety.validateCollection(name, production: productionCollection)
+        guard (1...16384).contains(vectorSize) else {
+            throw DatasetBenchmarkError.invalid("Invalid dataset embedding dimensions.")
+        }
+        guard let client else { throw QdrantServiceError.notConnected }
+        try await client.collections.create(name: name, vectorSize: vectorSize, distance: .cosine)
+    }
+
     func createCollectionIfNeeded(
         name: String,
         vectorSize: Int,

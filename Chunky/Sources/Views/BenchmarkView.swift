@@ -12,6 +12,7 @@ struct BenchmarkView: View {
     var status: String
     var embeddingReport: EmbeddingBenchmarkReport? = nil
     var onImportEmbeddingReport: () -> Void = {}
+    var onDatasetBenchmark: () -> Void = {}
     var scrolls: Bool = true
     var onToggleHost: (ProcessingHost) -> Void = { _ in }
     var onToggleRuntime: (BenchmarkRuntime) -> Void = { _ in }
@@ -39,6 +40,7 @@ struct BenchmarkView: View {
                     .font(.caption.weight(.medium))
                     .foregroundStyle(BenchmarkPlanner.accepts(collection: collectionName, production: productionCollection) ? Color.secondary : Color.red)
 
+                Button("Use downloaded dataset…", action: onDatasetBenchmark)
                 Button("Import embedding comparison…", action: onImportEmbeddingReport)
                 if let report = embeddingReport {
                     EmbeddingBenchmarkResults(report: report)
@@ -114,6 +116,7 @@ struct BenchmarkScreen: View {
     @State private var collectionName = ""
     @State private var status = "Idle"
     @State private var importingEmbeddingReport = false
+    @State private var showingDatasetBenchmark = false
     @State private var embeddingReport: EmbeddingBenchmarkReport?
 
     var body: some View {
@@ -129,6 +132,7 @@ struct BenchmarkScreen: View {
             status: status,
             embeddingReport: embeddingReport,
             onImportEmbeddingReport: { importingEmbeddingReport = true },
+            onDatasetBenchmark: { showingDatasetBenchmark = true },
             onToggleHost: { host in
                 if selectedHosts.contains(host.rawValue) {
                     selectedHosts.remove(host.rawValue)
@@ -145,6 +149,10 @@ struct BenchmarkScreen: View {
             },
             onRun: { start(runtimes: runtimes) }
         )
+        .disabled(appState.isProcessing)
+        .sheet(isPresented: $showingDatasetBenchmark) {
+            DatasetBenchmarkScreen().environmentObject(appState)
+        }
         .fileImporter(isPresented: $importingEmbeddingReport, allowedContentTypes: [.json]) { result in
             do {
                 let url = try result.get()
@@ -156,7 +164,6 @@ struct BenchmarkScreen: View {
                 status = error.localizedDescription
             }
         }
-        .disabled(appState.isProcessing)
         .onAppear {
             guard !preparedRuntimes else { return }
             selectedRuntimes = Set(runtimes.map(\.id))
