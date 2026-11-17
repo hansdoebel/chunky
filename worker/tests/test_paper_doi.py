@@ -155,4 +155,3 @@ def test_doi_or_year_coverage_does_not_require_other_alternative(paper_client, e
     assert [(p.id, p.payload) for p in after] == [(p.id, p.payload) for p in before]
     for actual, original in zip(after, before):
         assert actual.vector == pytest.approx(original.vector)
-
