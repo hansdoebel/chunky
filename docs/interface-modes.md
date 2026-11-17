@@ -1,5 +1,7 @@
 # Simple and Advanced
 
+See the [native readability and disclosure audit](native-ux-audit.md) for proposed follow-up improvements; those recommendations are not yet implemented.
+
 Chunky starts in Simple mode on both new and existing installations. The switch is at the top of Preferences and the main sidebar. It changes presentation only: saved models, dimensions, worker profiles, credentials, collection names and processing options remain active.
 
 Simple Preferences starts with an output choice. **Save files** shows the file format and destination folder. **Add to a searchable library** shows the saved collection and embedding model, compatibility warnings, and service checks. Named buttons open the relevant Advanced page when a connection or model needs configuration. Switching back preserves the selected page and ongoing local database operations.

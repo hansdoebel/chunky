@@ -1,5 +1,7 @@
 # Installing and distributing Chunky
 
+For the short personal-use workflow, see [personal installation and updates](personal-installation.md). The release and Homebrew sections below are optional.
+
 ## Try the app on your Mac
 
 The current source build requires macOS 27 or later and Xcode 27.2 or later. Install and open Xcode once, accept its license and select it as the active developer directory. From a checkout of this repository:
