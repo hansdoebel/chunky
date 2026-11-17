@@ -13,6 +13,7 @@ A native macOS application for processing documents into semantic chunks and sto
 - Vector storage in local Docker Qdrant or Qdrant Cloud, with optional Colima controls in Preferences
 - Public Hugging Face dataset search and bounded local snapshots with a remembered download folder
 - Dataset embedding benchmarks and optional isolated Qdrant test collections with source provenance
+- Cloud dataset imports with explicit capacity plans, text chunking and a pinned pre-embedded DBpedia profile
 - Optional worker browser workspace for uploads, queue progress, cancellation, chunk preview, job settings, semantic collection search, and system-aware light/dark appearance
 - Named worker profiles (wired LAN, Wi-Fi, Tailscale) with a reachability and latency check
 - Retrieval over dense search or hybrid dense plus BM25 with RRF, plus an optional reranker
@@ -86,6 +87,8 @@ Open **Window → Datasets** to search public Hugging Face datasets and save a b
 
 In Benchmark, choose **Use downloaded dataset…**, select a snapshot and text field, and run a small embedding-only test first. Optional collection filling creates a unique dense-cosine test collection using real embeddings; select the Default library to browse its points. Failed or cancelled writes may leave partial test data for inspection. These are throughput measurements, not retrieval-quality scores. See [dataset benchmarks](docs/dataset-benchmarks.md).
 
+Open **Window → Dataset Cloud Ingest** for larger text snapshots or the curated pre-embedded DBpedia profile. **Small**, **Medium** and **Large** download budgets are 10 MiB, 100 MiB and 1 GiB of JSONL; they do not predict Qdrant capacity or relax Benchmark’s text limits. Cloud import requires an explicit plan using current available per-node resources and creates only a new collection. See [Cloud dataset ingestion](docs/dataset-cloud-ingest.md), [pre-embedded compatibility](docs/preembedded-datasets.md), and the [first-run smoke steps](docs/macbook-first-run.md).
+
 ## VLM Models
 
 Chunky supports local vision-language models for document processing via Docling's built-in model specs. These run directly on Apple Silicon using MLX — no Ollama needed for VLM inference.
@@ -131,8 +134,8 @@ No collection is recreated or reconfigured by changing these controls.
 ```
 Chunky/Sources/
   Models/         AppState, settings, jobs, retrieval eval, dataset snapshots and reports
-  Services/       Docling, embeddings, Qdrant, Colima, datasets, benchmarks, worker client, retrieval, pi, MCP
-  Views/          Queue, Collections, Retrieval, Eval, Analytics, Benchmark, Datasets, Preferences
+  Services/       Docling, embeddings, Qdrant, Colima, datasets, Cloud import, benchmarks, worker client, retrieval, pi, MCP
+  Views/          Queue, Collections, Retrieval, Eval, Analytics, Benchmark, Datasets, Dataset Cloud Ingest, Preferences
   Theme/          AppTheme
 worker/           FastAPI worker: jobs, ingest, dense and hybrid search
 LocalPackages/    qdrant-swift (gRPC and REST client)
@@ -163,6 +166,8 @@ These replace the old `grpc-swift` repository and 1.x transport/protobuf bounds.
 - [Verified version audit](docs/version-audit.md)
 - [Hugging Face dataset snapshots](docs/datasets.md)
 - [Dataset benchmarks and test collections](docs/dataset-benchmarks.md)
+- [Dataset ingestion into Qdrant Cloud](docs/dataset-cloud-ingest.md)
+- [Pre-embedded dataset compatibility](docs/preembedded-datasets.md)
 - [Local Qdrant with Colima](docs/local-qdrant.md)
 - [Qdrant client provenance](docs/qdrant-client.md)
 - [Model choices](docs/models.md)
