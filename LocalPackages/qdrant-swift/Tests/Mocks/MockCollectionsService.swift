@@ -1,7 +1,15 @@
 import Foundation
 import QdrantCore
 
+/// A mock implementation of `CollectionsServiceProtocol` for unit testing.
+///
+/// This mock allows you to:
+/// - Track which methods were called and with what arguments
+/// - Configure return values and errors for each method
+/// - Verify interactions in your tests
 public final class MockCollectionsService: CollectionsServiceProtocol, @unchecked Sendable {
+
+    // MARK: - Call Tracking
 
     public private(set) var listCallCount = 0
     public private(set) var getCallCount = 0
@@ -21,6 +29,8 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
     public private(set) var listAliasesCalls: [String] = []
     public private(set) var listAllAliasesCallCount = 0
 
+    // MARK: - Stubbed Results
+
     public var listResult: Result<[CollectionDescription], Error> = .success([])
     public var getResult: Result<CollectionInfo, Error> = .success(
         CollectionInfo(name: "test", status: .green)
@@ -33,7 +43,11 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
     public var listAliasesResult: Result<[AliasDescription], Error> = .success([])
     public var listAllAliasesResult: Result<[AliasDescription], Error> = .success([])
 
+    // MARK: - Initialization
+
     public init() {}
+
+    // MARK: - Reset
 
     public func reset() {
         listCallCount = 0
@@ -53,6 +67,8 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
         listAliasesCalls = []
         listAllAliasesCallCount = 0
     }
+
+    // MARK: - CollectionsServiceProtocol
 
     public func list() async throws -> [CollectionDescription] {
         listCallCount += 1
@@ -80,6 +96,15 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
         createCallCount += 1
         createCalls.append(
             (name: name, vectorSize: vectorSize, distance: distance, onDiskPayload: onDiskPayload))
+        try createResult.get()
+    }
+
+    public private(set) var optionCreates: [CollectionOptions] = []
+
+    public func create(name: String, options: CollectionOptions) async throws {
+        createCallCount += 1
+        optionCreates.append(options)
+        _ = name
         try createResult.get()
     }
 

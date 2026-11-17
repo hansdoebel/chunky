@@ -1,7 +1,15 @@
 import Foundation
 import QdrantCore
 
+/// A mock implementation of `PointsServiceProtocol` for unit testing.
+///
+/// This mock allows you to:
+/// - Track which methods were called and with what arguments
+/// - Configure return values and errors for each method
+/// - Verify interactions in your tests
 public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable {
+
+    // MARK: - Call Tracking
 
     public private(set) var upsertCallCount = 0
     public private(set) var upsertCalls: [(collection: String, points: [Point], wait: Bool)] = []
@@ -57,11 +65,18 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
 
     public private(set) var createFieldIndexCallCount = 0
     public private(set) var createFieldIndexCalls:
-        [(collection: String, fieldName: String, fieldType: FieldType, wait: Bool, isTenant: Bool)] = []
+        [(collection: String, fieldName: String, fieldType: FieldType, wait: Bool)] = []
 
     public private(set) var deleteFieldIndexCallCount = 0
     public private(set) var deleteFieldIndexCalls:
         [(collection: String, fieldName: String, wait: Bool)] = []
+
+    public private(set) var queryCallCount = 0
+    public private(set) var queryCalls: [QueryRequest] = []
+    public private(set) var queryBatchCallCount = 0
+    public private(set) var queryGroupsCallCount = 0
+
+    // MARK: - Stubbed Results
 
     public var upsertResult: Result<Void, Error> = .success(())
     public var getResult: Result<[RetrievedPoint], Error> = .success([])
@@ -77,8 +92,15 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
     public var clearPayloadResult: Result<Void, Error> = .success(())
     public var createFieldIndexResult: Result<Void, Error> = .success(())
     public var deleteFieldIndexResult: Result<Void, Error> = .success(())
+    public var queryResult: Result<[ScoredPoint], Error> = .success([])
+    public var queryBatchResult: Result<[[ScoredPoint]], Error> = .success([])
+    public var queryGroupsResult: Result<[PointGroup], Error> = .success([])
+
+    // MARK: - Initialization
 
     public init() {}
+
+    // MARK: - Reset
 
     public func reset() {
         upsertCallCount = 0
@@ -107,16 +129,44 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
         createFieldIndexCalls = []
         deleteFieldIndexCallCount = 0
         deleteFieldIndexCalls = []
+        queryCallCount = 0
+        queryCalls = []
+        queryBatchCallCount = 0
+        queryGroupsCallCount = 0
     }
+
+    // MARK: - PointsServiceProtocol
 
     public func upsert(
         collection: String,
         points: [Point],
-        wait: Bool
+        wait: Bool,
+        updateMode: UpdateMode
     ) async throws {
         upsertCallCount += 1
         upsertCalls.append((collection: collection, points: points, wait: wait))
+        lastUpdateMode = updateMode
         try upsertResult.get()
+    }
+
+    public private(set) var lastUpdateMode: UpdateMode?
+    public private(set) var vectorNameCalls: [(collection: String, name: String, spec: NamedVectorSpec?, wait: Bool)] = []
+
+    public func createVectorName(
+        collection: String,
+        name: String,
+        spec: NamedVectorSpec,
+        wait: Bool
+    ) async throws {
+        vectorNameCalls.append((collection, name, spec, wait))
+    }
+
+    public func deleteVectorName(
+        collection: String,
+        name: String,
+        wait: Bool
+    ) async throws {
+        vectorNameCalls.append((collection, name, nil, wait))
     }
 
     public func get(
@@ -255,12 +305,24 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool,
-        isTenant: Bool
+        wait: Bool
     ) async throws {
         createFieldIndexCallCount += 1
         createFieldIndexCalls.append(
-            (collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: isTenant))
+            (collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait))
+        try createFieldIndexResult.get()
+    }
+
+    public private(set) var createFieldSchemaCalls: [(collection: String, fieldName: String, schema: FieldIndexSchema, wait: Bool)] = []
+
+    public func createFieldIndex(
+        collection: String,
+        fieldName: String,
+        schema: FieldIndexSchema,
+        wait: Bool
+    ) async throws {
+        createFieldIndexCallCount += 1
+        createFieldSchemaCalls.append((collection, fieldName, schema, wait))
         try createFieldIndexResult.get()
     }
 
@@ -272,5 +334,78 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
         deleteFieldIndexCallCount += 1
         deleteFieldIndexCalls.append((collection: collection, fieldName: fieldName, wait: wait))
         try deleteFieldIndexResult.get()
+    }
+
+    public func query(
+        collection: String,
+        query: QueryInput?,
+        prefetch: [PrefetchQuery],
+        using: String?,
+        filter: Filter?,
+        limit: UInt64,
+        offset: UInt64?,
+        scoreThreshold: Float?,
+        withPayload: Bool,
+        withVectors: Bool,
+        idf: IdfParams?
+    ) async throws -> [ScoredPoint] {
+        queryCallCount += 1
+        queryCalls.append(
+            QueryRequest(
+                query: query,
+                prefetch: prefetch,
+                using: using,
+                filter: filter,
+                limit: limit,
+                scoreThreshold: scoreThreshold,
+                withPayload: withPayload,
+                idf: idf
+            )
+        )
+        _ = offset
+        _ = withVectors
+        return try queryResult.get()
+    }
+
+    public func queryBatch(
+        collection: String,
+        queries: [QueryRequest]
+    ) async throws -> [[ScoredPoint]] {
+        queryBatchCallCount += 1
+        queryCalls.append(contentsOf: queries)
+        _ = collection
+        return try queryBatchResult.get()
+    }
+
+    public func queryGroups(
+        collection: String,
+        query: QueryInput?,
+        groupBy: String,
+        limit: UInt64,
+        groupSize: UInt64,
+        prefetch: [PrefetchQuery],
+        using: String?,
+        filter: Filter?,
+        scoreThreshold: Float?,
+        withPayload: Bool,
+        idf: IdfParams?
+    ) async throws -> [PointGroup] {
+        queryGroupsCallCount += 1
+        queryCalls.append(
+            QueryRequest(
+                query: query,
+                prefetch: prefetch,
+                using: using,
+                filter: filter,
+                limit: limit,
+                scoreThreshold: scoreThreshold,
+                withPayload: withPayload,
+                idf: idf
+            )
+        )
+        _ = collection
+        _ = groupBy
+        _ = groupSize
+        return try queryGroupsResult.get()
     }
 }

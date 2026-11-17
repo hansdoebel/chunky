@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for vector operations.
 internal final class VectorService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class VectorService: Sendable {
         self.base = base
     }
 
+    /// Updates vectors for specific points.
     func updateVectors(
         collection: String,
         points: [(id: PointID, vector: VectorData)],
@@ -33,11 +35,7 @@ internal final class VectorService: Sendable {
         do {
             let response: Qdrant_PointsOperationResponse = try await client.updateVectors(
                 request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Update vectors failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Update vectors")
         } catch let error as QdrantError {
             throw error
         } catch {
@@ -45,6 +43,7 @@ internal final class VectorService: Sendable {
         }
     }
 
+    /// Deletes specific named vectors from points.
     func deleteVectors(
         collection: String,
         ids: [PointID],
@@ -72,11 +71,7 @@ internal final class VectorService: Sendable {
         do {
             let response: Qdrant_PointsOperationResponse = try await client.deleteVectors(
                 request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Delete vectors failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Delete vectors")
         } catch let error as QdrantError {
             throw error
         } catch {

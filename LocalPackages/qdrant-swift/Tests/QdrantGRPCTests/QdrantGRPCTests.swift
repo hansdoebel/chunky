@@ -1,9 +1,12 @@
 import Testing
+import QdrantProto
 
 @testable import QdrantGRPC
 
 @Suite("QdrantGRPC Tests")
 struct QdrantGRPCTests {
+
+    // MARK: - PointID Tests
 
     @Test("PointID Integer")
     func pointIDInteger() {
@@ -28,6 +31,8 @@ struct QdrantGRPCTests {
         let id: PointID = "test-uuid"
         #expect(id.description == "test-uuid")
     }
+
+    // MARK: - PayloadValue Tests
 
     @Test("PayloadValue String")
     func payloadValueString() {
@@ -67,6 +72,8 @@ struct QdrantGRPCTests {
         #expect(value["num"]?.integerValue == 42)
     }
 
+    // MARK: - Filter Tests
+
     @Test("Filter Creation")
     func filterCreation() {
         let filter = Filter(
@@ -80,6 +87,8 @@ struct QdrantGRPCTests {
         #expect(filter.mustNot.count == 1)
     }
 
+    // MARK: - Range Tests
+
     @Test("Range Creation")
     func rangeCreation() {
         let range = Range.between(10.0, 100.0)
@@ -87,12 +96,16 @@ struct QdrantGRPCTests {
         #expect(range.lte == 100.0)
     }
 
+    // MARK: - GeoPoint Tests
+
     @Test("GeoPoint Creation")
     func geoPointCreation() {
         let point = GeoPoint(lat: 40.7128, lon: -74.0060)
         #expect(point.lat == 40.7128)
         #expect(point.lon == -74.0060)
     }
+
+    // MARK: - Distance Tests
 
     @Test("Distance enum values")
     func distanceEnumValues() {
@@ -102,11 +115,15 @@ struct QdrantGRPCTests {
         #expect(Distance.manhattan == .manhattan)
     }
 
+    // MARK: - VectorConfig Tests
+
     @Test("VectorConfig Creation")
     func vectorConfigCreation() {
         let config = VectorConfig(size: 384, distance: .cosine)
         #expect(config.size == 384)
     }
+
+    // MARK: - QdrantConfiguration Tests
 
     @Test("Configuration Defaults")
     func configurationDefaults() throws {
@@ -134,17 +151,89 @@ struct QdrantGRPCTests {
 
     @Test("Configuration TLS Required For Remote Host")
     func configurationTLSRequired() {
-
+        // Disabling TLS for remote host should throw
         #expect(throws: QdrantError.self) {
             _ = try QdrantConfiguration(host: "cloud.qdrant.io", useTLS: false)
         }
 
+        // Disabling TLS for localhost should be allowed
         #expect(throws: Never.self) {
             _ = try QdrantConfiguration(host: "localhost", useTLS: false)
         }
 
+        // Disabling TLS for 127.0.0.1 should be allowed
         #expect(throws: Never.self) {
             _ = try QdrantConfiguration(host: "127.0.0.1", useTLS: false)
         }
+    }
+
+    // MARK: - Qdrant v1.20.1 generated symbols
+
+    @Test("Generated protos include the v1.20.1 public messages")
+    func generatedProtosIncludeV120Symbols() {
+        #expect(Qdrant_Datatype.turbo8.rawValue == 5)
+        #expect(Qdrant_Datatype.turbo16.rawValue == 6)
+        #expect(Qdrant_Memory.cold.rawValue == 1)
+        #expect(Qdrant_Memory.cached.rawValue == 2)
+        #expect(Qdrant_Memory.pinned.rawValue == 3)
+        #expect(Qdrant_UpdateMode.insertOnly.rawValue == 1)
+        #expect(Qdrant_UpdateMode.updateOnly.rawValue == 2)
+        #expect(Qdrant_TokenizerType.code.rawValue == 5)
+        #expect(Qdrant_TextScoringType.bm25.rawValue == 0)
+        #expect(Qdrant_TurboQuantBitSize.bits8.rawValue == 4)
+
+        var slice = Qdrant_SliceCondition()
+        slice.total = 4
+        slice.index = 1
+        #expect(slice.total == 4)
+
+        var match = Qdrant_Match()
+        match.prefix = "usr_"
+        #expect(match.prefix == "usr_")
+        match.substring = "token"
+        #expect(match.substring == "token")
+
+        var expression = Qdrant_Expression()
+        expression.acosh = Qdrant_Expression()
+        if case .acosh = expression.variant {
+            #expect(Bool(true))
+        } else {
+            Issue.record("Expected acosh expression")
+        }
+        var max = Qdrant_MaxExpression()
+        max.max = [Qdrant_Expression()]
+        expression.max = max
+        if case .max(let value) = expression.variant {
+            #expect(value.max.count == 1)
+        } else {
+            Issue.record("Expected max expression")
+        }
+
+        var text = Qdrant_TextQuery()
+        text.query = "time travel"
+        var bm25 = Qdrant_Bm25Params()
+        bm25.k = 1.2
+        bm25.b = 0.75
+        text.bm25 = bm25
+        #expect(text.query == "time travel")
+        #expect(text.bm25.k == 1.2)
+
+        var rrf = Qdrant_Rrf()
+        rrf.k = 60
+        rrf.weights = [1, 0.5]
+        #expect(rrf.weights == [1, 0.5])
+
+        var strict = Qdrant_StrictModeConfig()
+        strict.requireTenantFilter = true
+        strict.searchMaxBatchsize = 64
+        strict.maxResidentMemoryPercent = 80
+        #expect(strict.hasRequireTenantFilter)
+        #expect(strict.hasSearchMaxBatchsize)
+        #expect(strict.hasMaxResidentMemoryPercent)
+
+        var info = Qdrant_CollectionInfo()
+        info.updateQueue.length = 3
+        #expect(info.hasUpdateQueue)
+        #expect(info.updateQueue.length == 3)
     }
 }

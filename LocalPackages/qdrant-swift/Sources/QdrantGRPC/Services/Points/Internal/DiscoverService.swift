@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for discover operations.
 internal final class DiscoverService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class DiscoverService: Sendable {
         self.base = base
     }
 
+    /// Discovers points using context pairs (positive/negative examples).
     func discover(
         collection: String,
         target: DiscoverTarget,
@@ -81,9 +83,7 @@ internal final class DiscoverService: Sendable {
             grpcRequest.filter = filter.grpc
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -95,6 +95,7 @@ internal final class DiscoverService: Sendable {
         }
     }
 
+    /// Performs multiple discover requests in a single batch.
     func discoverBatch(
         collection: String,
         requests: [DiscoverRequest]
@@ -164,9 +165,7 @@ internal final class DiscoverService: Sendable {
                 dp.filter = filter.grpc
             }
 
-            var payloadSelector = Qdrant_WithPayloadSelector()
-            payloadSelector.enable = req.withPayload
-            dp.withPayload = payloadSelector
+            dp.withPayload = .enabled(req.withPayload)
 
             return dp
         }

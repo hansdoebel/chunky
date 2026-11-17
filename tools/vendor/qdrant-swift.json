@@ -1,0 +1,12 @@
+{
+  "repository": "https://github.com/hansdoebel/qdrant-swift.git",
+  "revision": "2c8b61193a254d488cad6991761d2100b4fcfffc",
+  "paths": [
+    "Sources",
+    "Tests",
+    "Package.swift",
+    "Package.resolved",
+    "Makefile"
+  ],
+  "patch": "qdrant-swift.patch"
+}

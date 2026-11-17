@@ -1,4 +1,5 @@
 // swift-tools-version: 6.4
+// The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
 
@@ -6,7 +7,7 @@ let package = Package(
     name: "qdrant-swift",
     platforms: [
         .macOS(.v27),
-        .iOS(.v18),
+        .iOS(.v27),
     ],
     products: [
         .library(
@@ -51,14 +52,15 @@ let package = Package(
                 .product(name: "GRPCNIOTransportHTTP2", package: "grpc-swift-nio-transport"),
                 .product(name: "GRPCProtobuf", package: "grpc-swift-protobuf"),
             ],
-            path: "Sources/QdrantGRPC"
+            path: "Sources/QdrantGRPC",
+            exclude: ["Protos"]
         ),
         .target(
             name: "QdrantREST",
             dependencies: [
                 "QdrantCore"
             ],
-            path: "Sources/QdrantREST"
+            path: "Sources/QdrantRest"
         ),
         .target(
             name: "QdrantMocks",
@@ -72,13 +74,13 @@ let package = Package(
         ),
         .testTarget(
             name: "QdrantGRPCTests",
-            dependencies: ["QdrantGRPC", "QdrantMocks"],
+            dependencies: ["QdrantGRPC", "QdrantProto", "QdrantMocks"],
             path: "Tests/QdrantGRPCTests"
         ),
         .testTarget(
             name: "QdrantRESTTests",
             dependencies: ["QdrantREST", "QdrantMocks"],
-            path: "Tests/QdrantRESTTests"
+            path: "Tests/QdrantRestTests"
         ),
         .testTarget(
             name: "IntegrationTests",

@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for query operations.
 internal final class QueryService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class QueryService: Sendable {
         self.base = base
     }
 
+    /// Universal query API - performs various types of queries.
     func query(
         collection: String,
         query: QueryInput?,
@@ -21,7 +23,8 @@ internal final class QueryService: Sendable {
         offset: UInt64?,
         scoreThreshold: Float?,
         withPayload: Bool,
-        withVectors: Bool
+        withVectors: Bool,
+        idf: IdfParams?
     ) async throws -> [ScoredPoint] {
         let client = Qdrant_Points.Client(wrapping: base.grpcClient)
 
@@ -50,13 +53,13 @@ internal final class QueryService: Sendable {
             grpcRequest.scoreThreshold = scoreThreshold
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        if let idf {
+            grpcRequest.params = .idf(idf)
+        }
 
-        var vectorsSelector = Qdrant_WithVectorsSelector()
-        vectorsSelector.enable = withVectors
-        grpcRequest.withVectors = vectorsSelector
+        grpcRequest.withPayload = .enabled(withPayload)
+
+        grpcRequest.withVectors = .enabled(withVectors)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -68,6 +71,7 @@ internal final class QueryService: Sendable {
         }
     }
 
+    /// Performs multiple queries in a single batch request.
     func queryBatch(
         collection: String,
         queries: [QueryRequest]
@@ -98,9 +102,11 @@ internal final class QueryService: Sendable {
                 qp.scoreThreshold = scoreThreshold
             }
 
-            var payloadSelector = Qdrant_WithPayloadSelector()
-            payloadSelector.enable = queryReq.withPayload
-            qp.withPayload = payloadSelector
+            if let idf = queryReq.idf {
+                qp.params = .idf(idf)
+            }
+
+            qp.withPayload = .enabled(queryReq.withPayload)
 
             return qp
         }
@@ -117,6 +123,7 @@ internal final class QueryService: Sendable {
         }
     }
 
+    /// Performs a grouped query.
     func queryGroups(
         collection: String,
         query: QueryInput?,
@@ -127,7 +134,8 @@ internal final class QueryService: Sendable {
         using: String?,
         filter: Filter?,
         scoreThreshold: Float?,
-        withPayload: Bool
+        withPayload: Bool,
+        idf: IdfParams?
     ) async throws -> [PointGroup] {
         let client = Qdrant_Points.Client(wrapping: base.grpcClient)
 
@@ -154,9 +162,11 @@ internal final class QueryService: Sendable {
             grpcRequest.scoreThreshold = scoreThreshold
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        if let idf {
+            grpcRequest.params = .idf(idf)
+        }
+
+        grpcRequest.withPayload = .enabled(withPayload)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 

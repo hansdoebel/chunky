@@ -4,6 +4,20 @@ public protocol PointsServiceProtocol: Sendable {
     func upsert(
         collection: String,
         points: [Point],
+        wait: Bool,
+        updateMode: UpdateMode
+    ) async throws
+
+    func createVectorName(
+        collection: String,
+        name: String,
+        spec: NamedVectorSpec,
+        wait: Bool
+    ) async throws
+
+    func deleteVectorName(
+        collection: String,
+        name: String,
         wait: Bool
     ) async throws
 
@@ -88,8 +102,14 @@ public protocol PointsServiceProtocol: Sendable {
         collection: String,
         fieldName: String,
         fieldType: FieldType,
-        wait: Bool,
-        isTenant: Bool
+        wait: Bool
+    ) async throws
+
+    func createFieldIndex(
+        collection: String,
+        fieldName: String,
+        schema: FieldIndexSchema,
+        wait: Bool
     ) async throws
 
     func deleteFieldIndex(
@@ -97,23 +117,39 @@ public protocol PointsServiceProtocol: Sendable {
         fieldName: String,
         wait: Bool
     ) async throws
-}
 
-extension PointsServiceProtocol {
-    public func createFieldIndex(
+    func query(
         collection: String,
-        fieldName: String,
-        fieldType: FieldType,
-        wait: Bool
-    ) async throws {
-        try await createFieldIndex(
-            collection: collection,
-            fieldName: fieldName,
-            fieldType: fieldType,
-            wait: wait,
-            isTenant: false
-        )
-    }
+        query: QueryInput?,
+        prefetch: [PrefetchQuery],
+        using: String?,
+        filter: Filter?,
+        limit: UInt64,
+        offset: UInt64?,
+        scoreThreshold: Float?,
+        withPayload: Bool,
+        withVectors: Bool,
+        idf: IdfParams?
+    ) async throws -> [ScoredPoint]
+
+    func queryBatch(
+        collection: String,
+        queries: [QueryRequest]
+    ) async throws -> [[ScoredPoint]]
+
+    func queryGroups(
+        collection: String,
+        query: QueryInput?,
+        groupBy: String,
+        limit: UInt64,
+        groupSize: UInt64,
+        prefetch: [PrefetchQuery],
+        using: String?,
+        filter: Filter?,
+        scoreThreshold: Float?,
+        withPayload: Bool,
+        idf: IdfParams?
+    ) async throws -> [PointGroup]
 }
 
 public enum FieldType: Sendable {
@@ -130,4 +166,6 @@ public enum FieldType: Sendable {
     case bool
 
     case datetime
+
+    case uuid
 }
