@@ -12,6 +12,19 @@ struct DatasetCloudOperations {
 
 @MainActor
 enum DatasetCloudRunner {
+    static func recordVerifiedCollection(name: String, estimate: DatasetCloudEstimate, backend: String, model: String, defaults: UserDefaults) throws {
+        try DatasetBenchmarkSafety.validateCollection(name, production: "")
+        guard !CollectionPlanStore.names(defaults: defaults).contains(name) else {
+            throw DatasetBenchmarkError.invalid("A saved plan already exists for this collection name; it will not be overwritten.")
+        }
+        var saved = CollectionPlan.preset(.smallFastLocal, name: name, vectorSize: estimate.dimensions, embeddingBackend: backend, embeddingModel: model)
+        saved.target = .qdrantCloud
+        saved.onDisk = true
+        saved.expectedChunks = estimate.points
+        saved.payloadIndexes = []
+        CollectionPlanStore.save(saved, defaults: defaults)
+    }
+
     static func prepare(source: DatasetCloudSource, field: String, chunkBytes: Int, backend: String, model: String, budget: DatasetCloudBudget, preembedded: Bool = false, operations: DatasetCloudOperations) async throws -> DatasetCloudPlan {
         try budget.validate()
         guard ["ollama", "openai", "fastembed"].contains(backend), !model.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {

@@ -162,6 +162,7 @@ struct DatasetCloudIngestView: View {
         }, verify: { name, estimate in
             try await cloud.verify(name: name, estimate: estimate)
             if let profile { try DatasetCloudCollectionIdentity.register(collection: name, profile: profile, defaults: appState.settings.defaults) }
+            try DatasetCloudRunner.recordVerifiedCollection(name: name, estimate: estimate, backend: settings[0], model: settings[1], defaults: appState.settings.defaults)
         }, write: { name, points in try await cloud.write(name: name, points: points) }, preembeddedQuery: { profile, text in
             try await DatasetCloudPreembeddedQuery.embed(profile: profile, endpoint: settings[3], text: text)
         })
@@ -204,14 +205,6 @@ struct DatasetCloudIngestView: View {
             output.message = RunHistory.redact(output.message, secrets: settings)
             result = output
             status = "\(output.message)\n\(output.acknowledgedPoints) / \(output.plannedPoints) acknowledged. " + (output.creationAttempted ? "Inspect \(output.collection); failed requests may have written additional points." : "No collection creation was attempted.")
-            if output.completed {
-                var saved = CollectionPlan.preset(.smallFastLocal, name: output.collection, vectorSize: plan.estimate.dimensions, embeddingBackend: plan.backend, embeddingModel: plan.model)
-                saved.target = .qdrantCloud
-                saved.onDisk = true
-                saved.expectedChunks = plan.estimate.points
-                saved.payloadIndexes = []
-                CollectionPlanStore.save(saved, defaults: appState.settings.defaults)
-            }
             self.plan = nil
         }
         appState.benchmarkTask = task

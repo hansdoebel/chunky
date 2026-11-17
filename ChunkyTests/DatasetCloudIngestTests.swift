@@ -224,6 +224,28 @@ struct DatasetCloudIngestTests {
         let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
         let points = try #require(object["points"] as? [[String: Any]])
         #expect(points.count == 1 && points[0]["id"] as? String == point.id)
+        let oversized = ChunkPoint(id: UUID().uuidString, vector: [1, 0], text: String(repeating: "x", count: 16 * 1024 * 1024), source: "fixture")
+        do { try await client.write(name: name, points: [oversized]); Issue.record("Expected encoded byte limit") } catch { }
+        #expect(await fixture.calls.count == 3)
+    }
+
+    @Test func verifiedCPUPlanSurvivesPartialUploadAndNeverOverwritesSavedPlans() async throws {
+        let suite = "dataset-partial-" + UUID().uuidString
+        let defaults = try #require(UserDefaults(suiteName: suite))
+        defer { defaults.removePersistentDomain(forName: suite) }
+        let vector = [Float(1)] + Array(repeating: Float(0), count: FastEmbedService.dimensions - 1)
+        var writes = 0
+        let operations = DatasetCloudOperations(embed: { texts, _ in texts.map { _ in vector } }, capacity: { budget }, create: { _, _ in }, verify: { name, estimate in
+            try DatasetCloudRunner.recordVerifiedCollection(name: name, estimate: estimate, backend: "fastembed", model: FastEmbedService.model, defaults: defaults)
+        }, write: { _, _ in writes += 1; if writes == 2 { throw DatasetBenchmarkError.invalid("Quota") } })
+        let plan = try await DatasetCloudRunner.prepare(source: source(), field: "text", chunkBytes: 512, backend: "fastembed", model: FastEmbedService.model, budget: budget, operations: operations)
+        let result = await DatasetCloudRunner.run(plan: plan, operations: operations) { _ in }
+        #expect(!result.completed && result.acknowledgedPoints == 16)
+        try FastEmbedCollectionIdentity.validate(collection: result.collection, backend: "fastembed", model: FastEmbedService.model, defaults: defaults)
+        let saved = try #require(CollectionPlanStore.load(name: result.collection, defaults: defaults))
+        #expect(saved.target == .qdrantCloud && saved.onDisk && saved.payloadIndexes.isEmpty)
+        #expect(throws: DatasetBenchmarkError.self) { try DatasetCloudRunner.recordVerifiedCollection(name: result.collection, estimate: plan.estimate, backend: "ollama", model: "other", defaults: defaults) }
+        #expect(CollectionPlanStore.load(name: result.collection, defaults: defaults) == saved)
     }
 }
 
