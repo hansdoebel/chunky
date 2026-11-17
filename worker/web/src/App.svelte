@@ -9,6 +9,7 @@
 
   import { onDestroy } from 'svelte';
   import Collections from './Collections.svelte';
+  import ModelReadiness from './ModelReadiness.svelte';
   import JobInsights from './JobInsights.svelte';
   import { APIError, WorkerAPI, buildJobSettings, type Job, type JobOptions, type WorkerConfig, type JobEvent } from './lib/api';
 
@@ -339,6 +340,7 @@
           </div>
           <div class="settings-footer"><p>Model choices do not alter existing collections.</p><Button variant="ghost" class="primary" onclick={() => tab = 'queue'}>Back to queue <span aria-hidden="true">→</span></Button></div>
         </Card.Root>
+        {#if api}{@const catalogClient = api}<ModelReadiness load={(signal) => catalogClient.modelCatalog(signal)} onAuthFailure={(problem) => collectionFailure(problem, catalogClient)} />{/if}
       {:else}
         <div class="queue-layout">
           <div class="queue-main">
