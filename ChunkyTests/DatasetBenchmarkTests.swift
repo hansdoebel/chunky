@@ -119,7 +119,16 @@ struct DatasetBenchmarkTests {
         }
     }
 
-    @Test func snapshotFieldMappingRejectsMissingOversizedOrChangedRows() throws {
+    @Test func cancelledBackgroundInspectionDoesNotReadFiles() async {
+        let task = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            return try await DatasetBenchmarkLoader.inspect(URL(fileURLWithPath: "/missing-snapshot-fixture"))
+        }
+        do { _ = try await task.value; Issue.record("Expected cancellation before file access") }
+        catch { #expect(error is CancellationError) }
+    }
+
+    @Test func snapshotFieldMappingRejectsMissingOversizedOrChangedRows() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
         defer { try? FileManager.default.removeItem(at: directory) }
@@ -129,8 +138,9 @@ struct DatasetBenchmarkTests {
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(manifest).write(to: directory.appendingPathComponent("manifest.json"))
         try data.write(to: directory.appendingPathComponent("rows.jsonl"))
-        let snapshot = try DatasetSnapshot.load(from: directory)
-        #expect(try DatasetBenchmarkCorpus.fields(in: snapshot) == ["text"])
+        let (snapshot, fields) = try await DatasetBenchmarkLoader.inspect(directory)
+        #expect(fields == ["text"])
+        #expect(try await DatasetBenchmarkLoader.corpus(snapshot: snapshot, field: "text", limit: 1).texts == ["first"])
         #expect(try DatasetBenchmarkCorpus.load(snapshot: snapshot, field: "text", limit: 1).texts == ["first"])
         #expect(throws: DatasetBenchmarkError.self) { try DatasetBenchmarkCorpus.load(snapshot: snapshot, field: "id", limit: 2) }
         #expect(throws: DatasetBenchmarkError.self) { try DatasetBenchmarkCorpus.load(snapshot: snapshot, field: "text", limit: 1001) }

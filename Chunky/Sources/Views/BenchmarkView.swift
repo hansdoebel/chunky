@@ -149,6 +149,7 @@ struct BenchmarkScreen: View {
             },
             onRun: { start(runtimes: runtimes) }
         )
+        .disabled(appState.isProcessing)
         .sheet(isPresented: $showingDatasetBenchmark) {
             DatasetBenchmarkScreen().environmentObject(appState)
         }
@@ -163,7 +164,6 @@ struct BenchmarkScreen: View {
                 status = error.localizedDescription
             }
         }
-        .disabled(appState.isProcessing)
         .onAppear {
             guard !preparedRuntimes else { return }
             selectedRuntimes = Set(runtimes.map(\.id))

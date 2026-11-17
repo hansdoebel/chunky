@@ -97,31 +97,42 @@ struct DatasetBenchmarkScreen: View {
         }
         .frame(width: 720, height: 760)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { result in
-            do {
-                let url = try result.get()
-                let scoped = url.startAccessingSecurityScopedResource()
-                do {
-                    let loaded = try DatasetSnapshot.load(from: url)
-                    let choices = try DatasetBenchmarkCorpus.fields(in: loaded)
-                    accessURL?.stopAccessingSecurityScopedResource()
-                    accessURL = scoped ? url : nil
-                    snapshot = loaded
-                    fields = choices
-                    field = ""
-                    rowLimit = min(100, loaded.manifest.rowCount)
-                    report = nil
-                    status = "Choose a text field. Dataset hash and revision metadata were validated."
-                } catch {
-                    if scoped { url.stopAccessingSecurityScopedResource() }
-                    throw error
-                }
-            } catch { status = error.localizedDescription }
+            do { importSnapshot(try result.get()) }
+            catch { status = error.localizedDescription }
         }
         .interactiveDismissDisabled(task != nil)
         .onDisappear {
             task?.cancel()
             accessURL?.stopAccessingSecurityScopedResource()
             accessURL = nil
+        }
+    }
+
+    private func importSnapshot(_ url: URL) {
+        guard task == nil else { return }
+        let scoped = url.startAccessingSecurityScopedResource()
+        status = "Checking snapshot and text fields…"
+        task = Task { @MainActor in
+            var transferredAccess = false
+            defer {
+                if scoped && !transferredAccess { url.stopAccessingSecurityScopedResource() }
+                task = nil
+            }
+            do {
+                let (loaded, choices) = try await DatasetBenchmarkLoader.inspect(url)
+                try Task.checkCancellation()
+                accessURL?.stopAccessingSecurityScopedResource()
+                accessURL = scoped ? url : nil
+                transferredAccess = true
+                snapshot = loaded
+                fields = choices
+                field = ""
+                rowLimit = min(100, loaded.manifest.rowCount)
+                report = nil
+                status = "Choose a text field. Dataset hash and revision metadata were validated."
+            } catch {
+                status = error is CancellationError ? "Cancelled snapshot loading." : error.localizedDescription
+            }
         }
     }
 
@@ -135,55 +146,61 @@ struct DatasetBenchmarkScreen: View {
             status = "Wait for the current run to finish and select a dataset."
             return
         }
-        do {
-            let corpus = try DatasetBenchmarkCorpus.load(snapshot: snapshot, field: field, limit: rowLimit)
-            let settings = appState.settings
-            let backend = settings.embeddingBackend
-            let model = settings.embeddingModel
-            let ollamaURL = settings.ollamaURL
-            let apiURL = settings.embeddingAPIURL
-            let qdrantURL = settings.qdrantURL
-            let key = settings.qdrantAPIKey
-            let timeout = settings.qdrantTimeout
-            let production = settings.defaultCollection
-            let defaults = settings.defaults
-            let collection = seed ? DatasetBenchmarkSafety.collectionName() : nil
-            let provider = LocalEmbeddingService(backend: backend, ollamaURL: ollamaURL, apiURL: apiURL)
-            let database = QdrantService()
-            let operations = DatasetBenchmarkOperations(embed: { texts, query in
-                if query {
-                    return [try await LiveRetrievalEmbedding().embed(text: texts[0], backend: backend, model: model, ollamaURL: ollamaURL, apiURL: apiURL)]
-                }
-                return try await provider.embedBatch(texts: texts, model: model)
-            }, create: { name, dimensions in
-                try await database.configure(url: qdrantURL, apiKey: key.isEmpty ? nil : key)
-                try await database.connect(timeout: timeout)
-                try await database.createDatasetTestCollection(name: name, vectorSize: dimensions, productionCollection: production)
-            }, verify: { name, dimensions in
-                let info = try await database.getCollectionInfo(name)
-                guard info.vectorSize == dimensions, info.vectorName == nil else {
-                    throw DatasetBenchmarkError.invalid("The new collection has incompatible vector dimensions or names. Refusing to upload.")
-                }
-                let plan = CollectionPlan.preset(.smallFastLocal, name: name, vectorSize: dimensions, embeddingBackend: backend, embeddingModel: model)
-                CollectionPlanStore.save(plan, defaults: defaults)
-            }, write: { name, points in
-                try await database.upsertPoints(collectionName: name, points: points, batchSize: 32)
-            })
-            appState.isProcessing = true
-            report = nil
-            task = Task { @MainActor in
-                do {
-                    report = try await DatasetBenchmarkRunner.run(corpus: corpus, backend: backend, model: model, collection: collection, production: production, operations: operations) { status = $0 }
-                    status = "Completed. Original collection and model settings are unchanged."
-                } catch {
-                    let reason = error is CancellationError ? "Cancelled." : RunHistory.redact(error.localizedDescription, secrets: [key, qdrantURL, apiURL, ollamaURL])
-                    status = reason + (collection.map { " Inspect \($0) if it was created; partial test data is preserved." } ?? " No Qdrant collection was requested.")
-                }
-                await database.disconnect()
-                appState.isProcessing = false
-                task = nil
+        let selectedField = field
+        let selectedLimit = rowLimit
+        let settings = appState.settings
+        let backend = settings.embeddingBackend
+        let model = settings.embeddingModel
+        let ollamaURL = settings.ollamaURL
+        let apiURL = settings.embeddingAPIURL
+        let qdrantURL = settings.qdrantURL
+        let key = settings.qdrantAPIKey
+        let timeout = settings.qdrantTimeout
+        let production = settings.defaultCollection
+        let defaults = settings.defaults
+        let collection = seed ? DatasetBenchmarkSafety.collectionName() : nil
+        let provider = LocalEmbeddingService(backend: backend, ollamaURL: ollamaURL, apiURL: apiURL)
+        let database = QdrantService()
+        let operations = DatasetBenchmarkOperations(embed: { texts, query in
+            if query {
+                return [try await LiveRetrievalEmbedding().embed(text: texts[0], backend: backend, model: model, ollamaURL: ollamaURL, apiURL: apiURL)]
             }
-        } catch { status = error.localizedDescription }
+            return try await provider.embedBatch(texts: texts, model: model)
+        }, create: { name, dimensions in
+            try await database.configure(url: qdrantURL, apiKey: key.isEmpty ? nil : key)
+            try await database.connect(timeout: timeout)
+            try await database.createDatasetTestCollection(name: name, vectorSize: dimensions, productionCollection: production)
+        }, verify: { name, dimensions in
+            let info = try await database.getCollectionInfo(name)
+            guard info.vectorSize == dimensions, info.vectorName == nil else {
+                throw DatasetBenchmarkError.invalid("The new collection has incompatible vector dimensions or names. Refusing to upload.")
+            }
+            let plan = CollectionPlan.preset(.smallFastLocal, name: name, vectorSize: dimensions, embeddingBackend: backend, embeddingModel: model)
+            CollectionPlanStore.save(plan, defaults: defaults)
+        }, write: { name, points in
+            try await database.upsertPoints(collectionName: name, points: points, batchSize: 32)
+        })
+        appState.isProcessing = true
+        appState.resetCancellation()
+        report = nil
+        task = Task { @MainActor in
+            do {
+                status = "Checking selected dataset rows…"
+                let corpus = try await DatasetBenchmarkLoader.corpus(snapshot: snapshot, field: selectedField, limit: selectedLimit)
+                try Task.checkCancellation()
+                report = try await DatasetBenchmarkRunner.run(corpus: corpus, backend: backend, model: model, collection: collection, production: production, operations: operations) { status = $0 }
+                status = "Completed. Original collection and model settings are unchanged."
+            } catch {
+                let reason = error is CancellationError ? "Cancelled." : RunHistory.redact(error.localizedDescription, secrets: [key, qdrantURL, apiURL, ollamaURL])
+                status = reason + (collection.map { " Inspect \($0) if it was created; partial test data is preserved." } ?? " No Qdrant collection was requested.")
+            }
+            await database.disconnect()
+            appState.isProcessing = false
+            appState.resetCancellation()
+            appState.benchmarkTask = nil
+            task = nil
+        }
+        appState.benchmarkTask = task
     }
 
     private func save() {

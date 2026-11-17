@@ -1,7 +1,7 @@
 import CryptoKit
 import Foundation
 
-struct DatasetBenchmarkCorpus {
+nonisolated struct DatasetBenchmarkCorpus: Sendable {
     var datasetID: String
     var revision: String
     var config: String
@@ -48,6 +48,7 @@ struct DatasetBenchmarkCorpus {
             throw DatasetBenchmarkError.invalid("The snapshot changed while reading. Import it again.")
         }
         return try data.split(separator: 10).map { line in
+            try Task.checkCancellation()
             guard let row = try JSONSerialization.jsonObject(with: Data(line)) as? [String: Any] else {
                 throw DatasetBenchmarkError.invalid("Dataset rows must be JSON objects.")
             }
@@ -55,7 +56,7 @@ struct DatasetBenchmarkCorpus {
         }
     }
 
-    func point(index: Int, vector: [Float], backend: String, model: String) -> ChunkPoint {
+    @MainActor func point(index: Int, vector: [Float], backend: String, model: String) -> ChunkPoint {
         let hex = SHA256.hash(data: Data("\(sha256)|\(textField)|\(index)".utf8)).prefix(16).map { String(format: "%02x", $0) }.joined()
         let bytes = Array(hex)
         let id = [0..<8, 8..<12, 12..<16, 16..<20, 20..<32].map { String(bytes[$0]) }.joined(separator: "-")
@@ -88,7 +89,7 @@ struct DatasetBenchmarkReport: Codable, Equatable {
     var rowsPerSecond: Double { embeddingSeconds > 0 ? Double(rows) / embeddingSeconds : 0 }
 }
 
-enum DatasetBenchmarkError: LocalizedError {
+nonisolated enum DatasetBenchmarkError: LocalizedError {
     case invalid(String)
     var errorDescription: String? {
         switch self { case .invalid(let message): return message }
