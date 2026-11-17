@@ -2,7 +2,7 @@
 
 A Svelte application served by the worker at `/`. All API requests use the same origin. The access token and processing preferences stay in memory until sign out or reload. A configured worker bearer token is required.
 
-Use Bun 1.4.4 and Node 24.22.1 (for tool compatibility):
+Use Bun 1.4.4 and Node 26.13.1 (for tool compatibility):
 
 ```sh
 bun install --frozen-lockfile

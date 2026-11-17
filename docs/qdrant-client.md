@@ -14,8 +14,10 @@ The app's five direct consumers are QdrantService, QdrantModels, DocumentProcess
 
 Hybrid BM25 requests, embedding identity metadata, collection health and snapshots also have app-owned HTTP paths. Those remain app-owned and must be covered when validating a client update. No client sync should create, reconfigure or overwrite a user's collection.
 
-Synchronization refuses modified, untracked, and ignored files under managed paths before replacing anything. The compatibility patch also fixes upstream mock reset tracking until that fix is adopted upstream ([PER-204](https://linear.app/hansdoebel/issue/PER-204)). Run guard regressions with `python3 -m unittest discover -s tools/vendor -p "test_*.py"`.
+Synchronization refuses modified, untracked, and ignored files under managed paths before replacing anything. Run guard regressions with `python3 -m unittest discover -s tools/vendor -p "test_*.py"`.
 
-Strict-mode limits require explicit `StrictModeConfig(enabled: true, ...)`. The nil default preserves server defaults and explicit false disables enforcement. This upstream fix is tracked in [PER-211](https://linear.app/hansdoebel/issue/PER-211); both transports preserve omitted/false/true values.
+Strict-mode limits require explicit `StrictModeConfig(enabled: true, ...)`. The nil default preserves server defaults and explicit false disables enforcement. The upstream fix ([PER-211](https://linear.app/hansdoebel/issue/PER-211)) is included in the pinned snapshot; both transports preserve omitted/false/true values.
 
-Options-based collection creation preserves the same typed `QdrantError` contract as the legacy overload; upstream adoption is tracked in [PER-214](https://linear.app/hansdoebel/issue/PER-214).
+Options-based gRPC collection creation preserves the same typed `QdrantError` contract as the legacy overload; REST creation retains its `RESTError` contract, and the upstream fix ([PER-214](https://linear.app/hansdoebel/issue/PER-214)) is included in the pinned snapshot.
+
+The pinned snapshot includes standalone PR #12 (`8a5e3076d52dc48646be7dd70214f46e2800a2f5`), including the mock reset fix ([PER-204](https://linear.app/hansdoebel/issue/PER-204)) and compatible gRPC NIO transport 2.13.0. Upstream now owns strict-mode, typed creation errors and mock-reset regressions; the local patch retains only Chunky compatibility adapters and its hybrid ingest regression.

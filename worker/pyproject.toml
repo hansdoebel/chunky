@@ -9,13 +9,13 @@ description = "FastAPI worker that runs Docling, chunking, and optional embeddin
 readme = "README.md"
 requires-python = ">=3.11"
 dependencies = [
-  "fastapi==0.163.0",
+  "fastapi==0.163.1",
   "uvicorn[standard]==0.54.0",
   "httpx==0.28.1",
-  "python-multipart==0.0.33",
+  "python-multipart==0.0.34",
   "pydantic==2.14.3",
   "qdrant-client==1.20.0",
-  "pypdf==6.4.2",
+  "pypdf==7.1.0",
 ]
 
 [project.optional-dependencies]
@@ -25,7 +25,7 @@ dev = [
 ]
 docling = [
   "docling==2.150.1",
-  "docling-core==2.107.0",
+  "docling-core==2.107.1",
   "docling-ibm-models==4.0.4",
   "transformers==5.23.0",
   "torch==2.15.0",

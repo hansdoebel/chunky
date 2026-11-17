@@ -21,7 +21,7 @@ A paper library is a name plus a stable `library_id` on each point. The payload 
 - Xcode 27.2 on the `xcode-27` runner. The SDK is macOS 27. The deployment target is macOS 27.0.
 - Swift 6.4. The app target sets `SWIFT_VERSION` to 5.0 and `SWIFT_DEFAULT_ACTOR_ISOLATION` to `MainActor`. Do not change that language mode as a drive-by.
 - Python 3.12 for the worker and for `Chunky/Resources/Scripts`.
-- Bun 1.4.4 for frontend package installation and scripts; use `worker/web/bun.lock` with `bun install --frozen-lockfile`. Node.js 24.22.1 remains pinned for the frontend tools that require Node.
+- Bun 1.4.4 for frontend package installation and scripts; use `worker/web/bun.lock` with `bun install --frozen-lockfile`. Node.js 26.13.1 remains pinned for the frontend tools that require Node.
 - Qdrant `v1.20.2` when a local server is needed. Unit tests do not start it.
 
 ## Commands
@@ -78,3 +78,5 @@ From a Linux checkout, `python3 -m pytest -q worker` is the suite that can run h
 - `.github/workflows/web-ui.yml` checks the frontend, builds worker assets and their wheel package, runs mocked browser component tests on the macOS runner, and uploads `/tmp/chunky-web-*.png`. A Linux build job validates only the pinned frontend container stage, without starting the ROCm runtime or services. API requests remain protected by the existing bearer-token policy; the public login/static shell contains no job data or credentials.
 
 Squash-merge when that CI is green and review comments are addressed.
+
+`.github/workflows/macos-script-dependencies.yml` installs the pinned Mac Python dependencies and imports their runtimes with Hugging Face offline mode when those pins change. It does not download models or run inference.

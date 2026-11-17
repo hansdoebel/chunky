@@ -1,9 +1,9 @@
 # Mac document scripts (make setup-venv). mlx-vlm is Apple-only.
-# Versions verified on PyPI 2026-11-15.
+# Versions verified on PyPI 2026-11-17.
 docling==2.150.1
-docling-core==2.107.0
+docling-core==2.107.1
 docling-ibm-models==4.0.4
 transformers==5.23.0
 torch==2.15.0
-mlx-vlm==0.7.12
+mlx-vlm==0.8.0
 fastembed==0.9.1
