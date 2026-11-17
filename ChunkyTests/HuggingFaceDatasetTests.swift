@@ -246,10 +246,26 @@ struct HuggingFaceDatasetTests {
                 _ = try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 1, folder: root)
                 Issue.record("Unsafe download must fail")
             } catch DatasetError.insufficientSpace { #expect(noSpace) }
-              catch DatasetError.limitExceeded { #expect(!noSpace) }
+              catch DatasetError.sampleBudgetTooSmall { #expect(!noSpace) }
             #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
             if noSpace { #expect(http.offsets.isEmpty) }
         }
+    }
+
+    @Test func oversizedSingleResponseReportsActualStreamLimit() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let http = DatasetFixtureHTTP()
+        http.maximumPageRows = 0
+        let service = HuggingFaceDatasetService(http: http, availableCapacity: { _ in Int64.max })
+        do {
+            _ = try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 100 * 1024 * 1024, folder: root)
+            Issue.record("An oversized single response must fail")
+        } catch DatasetError.responseLimit {
+            #expect(DatasetError.responseLimit.localizedDescription.contains("5 MiB"))
+        }
+        #expect(http.requestedLengths.last == 1)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
     }
 
     @Test func streamCancellationAfterPageCleansStaging() async throws {

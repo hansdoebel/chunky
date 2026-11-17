@@ -27,14 +27,14 @@ nonisolated final class URLSessionDatasetHTTP: DatasetHTTP {
         let (bytes, response) = try await session.bytes(for: request)
         defer { bytes.task.cancel() }
         guard let http = response as? HTTPURLResponse, http.statusCode == 200 else { throw DatasetError.unavailable }
-        guard response.expectedContentLength <= maximumBytes else { throw DatasetError.limitExceeded }
+        guard response.expectedContentLength <= maximumBytes else { throw DatasetError.responseLimit }
         var data = Data()
         for try await byte in bytes {
             if data.count.isMultiple(of: 16 * 1024) {
                 try Task.checkCancellation()
                 await Task.yield()
             }
-            guard data.count < maximumBytes else { throw DatasetError.limitExceeded }
+            guard data.count < maximumBytes else { throw DatasetError.responseLimit }
             data.append(byte)
         }
         return DatasetHTTPResponse(data: data, revision: http.value(forHTTPHeaderField: "X-Revision"))
@@ -113,7 +113,7 @@ nonisolated struct HuggingFaceDatasetService: Sendable {
     @concurrent func downloadStream(dataset: HuggingFaceDataset, split: DatasetSplit, byteBudget: Int, maximumRows: Int = DatasetStreamSnapshot.maximumRows, folder: URL, progress: @MainActor @Sendable (Int, Int) -> Void = { _, _ in }) async throws -> DatasetStreamDownload {
         guard byteBudget > 0, byteBudget <= DatasetStreamSnapshot.maximumBytes,
               maximumRows > 0, maximumRows <= DatasetStreamSnapshot.maximumRows,
-              folder.isFileURL, !split.config.isEmpty, !split.split.isEmpty else { throw DatasetError.limitExceeded }
+              folder.isFileURL, !split.config.isEmpty, !split.split.isEmpty else { throw DatasetError.streamLimit }
         try Task.checkCancellation()
         let access = folder.startAccessingSecurityScopedResource()
         defer { if access { folder.stopAccessingSecurityScopedResource() } }
@@ -143,7 +143,8 @@ nonisolated struct HuggingFaceDatasetService: Sendable {
                 do {
                     object = try await viewer(path: "/rows", dataset: dataset, query: ["config": split.config, "split": split.split, "offset": String(count), "length": String(length)])
                     break
-                } catch DatasetError.limitExceeded where length > 1 {
+                } catch let error as DatasetError where error == .responseLimit || error == .limitExceeded {
+                    guard length > 1 else { throw DatasetError.responseLimit }
                     length = max(1, length / 2)
                     pageRows = length
                     try Task.checkCancellation()
@@ -159,10 +160,10 @@ nonisolated struct HuggingFaceDatasetService: Sendable {
                 guard Self.nonnegativeInteger(row["row_idx"]) == count, let value = row["row"] as? [String: Any],
                       let truncated = row["truncated_cells"] as? [Any], truncated.isEmpty else { throw DatasetError.invalidResponse }
                 var line = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
-                guard line.count <= DatasetStreamSnapshot.maximumLineBytes else { throw DatasetError.limitExceeded }
+                guard line.count <= DatasetStreamSnapshot.maximumLineBytes else { throw DatasetError.streamRowLimit }
                 line.append(10)
                 if savedBytes + line.count > byteBudget {
-                    guard count > 0 else { throw DatasetError.limitExceeded }
+                    guard count > 0 else { throw DatasetError.sampleBudgetTooSmall }
                     stop = .byteBudget
                     break downloadLoop
                 }

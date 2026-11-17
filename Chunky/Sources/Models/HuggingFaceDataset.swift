@@ -105,7 +105,7 @@ nonisolated struct DatasetSnapshot: Sendable {
             guard values.isRegularFile == true, values.isSymbolicLink != true, let size = values.fileSize else {
                 throw DatasetError.invalidSnapshot
             }
-            guard size <= limit else { throw DatasetError.benchmarkLimit }
+            guard size <= limit else { throw url == rowsURL ? DatasetError.benchmarkLimit : DatasetError.invalidSnapshot }
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
@@ -158,8 +158,8 @@ nonisolated struct DatasetSnapshot: Sendable {
     static func validRevision(_ value: String) -> Bool { value.count == 40 && value.allSatisfy(\.isHexDigit) }
 }
 
-nonisolated enum DatasetError: LocalizedError {
-    case invalidDataset, unavailable, revisionChanged, invalidResponse, limitExceeded, invalidSnapshot, insufficientSpace, benchmarkLimit
+nonisolated enum DatasetError: LocalizedError, Equatable {
+    case invalidDataset, unavailable, revisionChanged, invalidResponse, limitExceeded, invalidSnapshot, insufficientSpace, benchmarkLimit, responseLimit, streamLimit, streamRowLimit, sampleBudgetTooSmall
 
     var errorDescription: String? {
         switch self {
@@ -168,6 +168,10 @@ nonisolated enum DatasetError: LocalizedError {
         case .revisionChanged: return "Dataset revision changed or could not be verified. Search again before downloading; no snapshot was saved."
         case .invalidResponse: return "The dataset server returned an incomplete or invalid response. No snapshot was saved."
         case .limitExceeded: return "Snapshot exceeds the limit of 10,000 rows or 50 MiB. Choose fewer rows."
+        case .responseLimit: return "A dataset response exceeds 5 MiB. Streaming downloads retry smaller pages; if one row still exceeds this limit, choose another dataset or split."
+        case .streamLimit: return "Streaming samples support up to 1 GiB and 1,000,000 rows. Choose a supported sample size."
+        case .streamRowLimit: return "A complete dataset row exceeds the 5 MiB row limit. Choose another dataset or split; rows are never truncated."
+        case .sampleBudgetTooSmall: return "The first complete row exceeds the selected sample budget. Choose a larger sample size."
         case .benchmarkLimit: return "This snapshot exceeds the benchmark limit of 50 MiB or 10,000 rows. Use Cloud ingest for larger snapshots."
         case .insufficientSpace: return "The destination needs the selected byte budget plus 64 MiB free space. Free space could not be confirmed or is insufficient."
         case .invalidSnapshot: return "This is not a valid, complete Chunky dataset snapshot."
