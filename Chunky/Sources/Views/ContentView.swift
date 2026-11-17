@@ -137,7 +137,7 @@ private struct SidebarContent: View {
 
             Section {
                 HStack(spacing: 8) {
-                    StatusDot(isActive: !appState.settings.ollamaURL.isEmpty, size: 8)
+                    Image(systemName: "cpu").foregroundStyle(.secondary)
                     Text(EmbeddingBackendKind(rawValue: appState.settings.embeddingBackend)?.displayName ?? "Embedding")
                         .font(.system(size: 14))
                     Spacer()
@@ -151,7 +151,7 @@ private struct SidebarContent: View {
                 }
 
                 HStack(spacing: 8) {
-                    StatusDot(isActive: appState.settings.doclingModel != "standard", size: 8)
+                    Image(systemName: "doc.text.viewfinder").foregroundStyle(.secondary)
                     Text("VLM")
                         .font(.system(size: 14))
                     Spacer()
@@ -162,7 +162,7 @@ private struct SidebarContent: View {
                 }
 
                 HStack(spacing: 8) {
-                    StatusDot(isActive: isQdrantConfigured, size: 8)
+                    Image(systemName: "externaldrive").foregroundStyle(.secondary)
                     Text("Qdrant")
                         .font(.system(size: 14))
                     Spacer()
@@ -171,7 +171,7 @@ private struct SidebarContent: View {
                         .font(.system(size: 14))
                 }
             } header: {
-                Text("Services")
+                Text("Configuration")
                     .font(.caption2)
                     .foregroundStyle(.tertiary)
             }

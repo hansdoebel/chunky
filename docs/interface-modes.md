@@ -1,0 +1,23 @@
+# Simple and Advanced
+
+Chunky starts in Simple mode on both new and existing installations. The switch is at the top of Preferences and the main sidebar. It changes presentation only: saved models, dimensions, worker profiles, credentials, collection names and processing options remain active.
+
+Simple Preferences starts with an output choice. **Save files** shows the file format and destination folder. **Add to a searchable library** shows the saved collection and embedding model, compatibility warnings, and service checks. Named buttons open the relevant Advanced page when a connection or model needs configuration. Switching back preserves the selected page and ongoing local database operations.
+
+Advanced exposes all six Preferences pages and specialist navigation tools. If a specialist tool is already open when switching to Simple, its navigation item remains available until you leave it.
+
+## Connections and errors
+
+A status is the result of the last check, not a promise that a service is still reachable. Changing an endpoint invalidates its result. Qdrant checks use a separate temporary client and verify collection access, without disconnecting processing jobs or selecting another collection. Ollama checks list available models without changing the saved model or its dimensions. Model selection still probes dimensions for that selected model.
+
+Endpoint, model, credential and dimension fields keep edits pending until **Apply**, **Save and test**, or Return. Invalid input leaves the previous saved value intact and explains how to correct it. Worker profile fields save together with **Save** or Return; **Use** also validates before applying the profile. Database credentials and endpoint changes are locked during document processing.
+
+Connection errors are selectable and offer **Copy details**. Copies include the operation and redact known credentials, bearer tokens and URL credentials/query parameters. Configuration summaries in the sidebar use neutral icons: a configured address is not a successful health check.
+
+Remote HTTP services use **Test connection** or **Check reachability**, because there is no persistent connection for the user to disconnect. Testing Qdrant similarly does not control the app's automatically managed gRPC connection. Dedicated local Colima/Qdrant processes have genuine Start and Stop controls in Advanced → Qdrant; see [local Qdrant](local-qdrant.md).
+
+## Design references
+
+[VLC Preferences](https://docs.videolan.me/vlc-user/desktop/3.0/en/basic/settings/preferences.html) separates common controls from detailed configuration. [OBS's overview](https://obsproject.com/kb/obs-studio-overview) similarly starts with Simple output settings and directs users to Advanced for detailed control. Chunky follows that progressive disclosure pattern while retaining one saved configuration across both modes.
+
+The owner waived additional screenshots for this iteration. Behavioral tests, the native macOS build, independent review and CI remain required; no screenshot result is claimed.

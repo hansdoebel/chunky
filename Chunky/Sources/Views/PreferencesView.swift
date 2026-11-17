@@ -30,6 +30,13 @@ private struct PreferencesContent: View {
     @State private var availableModels: [OllamaModel] = []
     @State private var isLoadingModels = false
     @State private var ollamaStatus: ConnectionStatus = .unknown
+    @State private var ollamaMessage = ""
+    @State private var ollamaGeneration = 0
+    @State private var ollamaProbeURL = ""
+    @State private var ollamaProbeBackend = ""
+    @State private var qdrantProbeURL = ""
+    @State private var qdrantProbeKey = ""
+    @State private var qdrantGeneration = 0
     @State private var qdrantStatus: ConnectionStatus = .unknown
     @State private var selectedTab: Int
     @State private var qdrantAPIKeyInput: String = ""
@@ -78,15 +85,21 @@ private struct PreferencesContent: View {
                 Text(advanced
                     ? "All settings are visible. Switching to Simple keeps your configuration."
                     : "Everyday settings. Saved advanced settings still apply; switch to Advanced to edit them.")
-                    .font(.caption)
+                    .font(.callout)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .padding()
             Divider()
-            preferencesTabs
+            ZStack {
+                preferencesTabs
+                    .opacity(advanced ? 1 : 0)
+                    .allowsHitTesting(advanced)
+                    .accessibilityHidden(!advanced)
+                if !advanced { simpleSetup }
+            }
         }
-        .frame(width: 540, height: 760)
+        .frame(width: 660, height: 760)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             qdrantAPIKeyInput = appState.settings.qdrantAPIKey
@@ -94,6 +107,10 @@ private struct PreferencesContent: View {
             qdrantCloudURLInput = appState.settings.qdrantCloudURL
             chatAPIKeyInput = appState.settings.chatAPIKey
         }
+        .onChange(of: settings.ollamaURL) { _, new in if new != ollamaProbeURL { invalidateOllamaCheck() } }
+        .onChange(of: settings.embeddingBackend) { _, new in if new != ollamaProbeBackend { invalidateOllamaCheck() } }
+        .onChange(of: settings.qdrantURL) { _, new in if new != qdrantProbeURL { invalidateQdrantCheck() } }
+        .onChange(of: settings.qdrantAPIKey) { _, new in if new != qdrantProbeKey { invalidateQdrantCheck() } }
         .onDisappear {
             appState.settings.save()
         }
@@ -105,6 +122,108 @@ private struct PreferencesContent: View {
             )
             .environmentObject(appState)
         }
+    }
+
+    private var simpleSetup: some View {
+        Form {
+            Section("What would you like to do?") {
+                Picker("Output", selection: $appState.processingMode) {
+                    Text("Save files").tag(ProcessingMode.chunkOnly)
+                    Text("Add to a searchable library").tag(ProcessingMode.full)
+                }
+                .onChange(of: appState.processingMode) { _, mode in
+                    if mode == .full {
+                        settings.exportFormat = ExportFormat.none.rawValue
+                    } else if settings.exportFormat == ExportFormat.none.rawValue {
+                        settings.exportFormat = ExportFormat.json.rawValue
+                    }
+                }
+                LabeledContent("Process on", value: settings.processingHost == .localMac ? "This Mac" : "Remote worker")
+                Button("Document and worker settings…") { openSettings(1) }
+            }
+            if appState.processingMode == .chunkOnly {
+                Section("Save files") {
+                    Picker("File format", selection: $settings.exportFormat) {
+                        ForEach(exportFormatOptions, id: \.rawValue) { format in
+                            Text(format.displayName).tag(format.rawValue)
+                        }
+                    }
+                    LabeledContent("Folder") {
+                        Button(exportFolderDisplayName, action: selectExportFolder)
+                    }
+                    Text("Start with one short document. Embedding models and a vector database are not needed to save files.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            } else {
+                Section("Searchable library") {
+                    LabeledContent("Collection", value: settings.defaultCollection)
+                    LabeledContent("Embedding model", value: settings.embeddingModel)
+                    if let problem = settings.embeddingConfigurationProblem {
+                        PreferenceMessage(context: "Check model compatibility", message: problem, secrets: diagnosticSecrets)
+                    }
+                    Button("Database and collection settings…") { openSettings(2) }
+                    Button("Embedding model settings…") { openSettings(0) }
+                    Text("Use a collection created for this model. Changing interface mode never changes or recreates a collection.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+                Section("Service checks") {
+                    HStack {
+                        connectionStatusLabel(qdrantStatus)
+                        Spacer()
+                        Button("Test database") { Task { await testQdrantConnection() } }
+                            .disabled(qdrantStatus == .checking)
+                    }
+                    if let error = appState.qdrantConnectionError {
+                        PreferenceMessage(context: "Database check", message: error, secrets: diagnosticSecrets)
+                    }
+                    if settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue {
+                        HStack {
+                            connectionStatusLabel(ollamaStatus)
+                            Spacer()
+                            Button("Test Ollama") { Task { await loadModels() } }
+                                .disabled(isLoadingModels)
+                        }
+                        if !ollamaMessage.isEmpty {
+                            PreferenceMessage(context: "Ollama check", message: ollamaMessage, secrets: diagnosticSecrets, isError: ollamaStatus == .failed)
+                        }
+                    }
+                    Text("Statuses describe the last check, not a permanent connection. Configure custom endpoints in Advanced.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            Section("More options") {
+                Button("Chat settings…") { openSettings(4) }
+                Button("App information and dependencies…") { openSettings(5) }
+                Link("Installation and first-run help", destination: URL(string: "https://github.com/hansdoebel/chunky/blob/main/docs/macbook-first-run.md")!)
+                Text("Your saved advanced settings remain active. Switch to Advanced whenever you need to inspect or change them.")
+                    .font(.callout).foregroundStyle(.secondary)
+            }
+        }
+        .formStyle(.grouped)
+        .padding()
+    }
+
+    private func openSettings(_ tab: Int) {
+        selectedTab = tab
+        settings.interfaceMode = .advanced
+    }
+
+    private var diagnosticSecrets: [String] {
+        [settings.qdrantAPIKey, settings.workerToken, settings.chatAPIKey, qdrantAPIKeyInput, workerTokenInput, chatAPIKeyInput]
+    }
+
+    private func connectionStatusLabel(_ status: ConnectionStatus) -> some View {
+        let label: String
+        let color: Color
+        switch status {
+        case .unknown: label = "Not checked"; color = .secondary
+        case .checking: label = "Checking…"; color = .orange
+        case .connected: label = "Last check passed"; color = .green
+        case .failed: label = "Check failed"; color = .red
+        }
+        return Label(label, systemImage: status == .connected ? "checkmark.circle.fill" : "circle.fill")
+            .foregroundStyle(color)
+            .font(.body)
     }
 
     private var preferencesTabs: some View {
@@ -209,14 +328,11 @@ private struct PreferencesContent: View {
                 LabeledContent("Processing host", value: appState.settings.processingHost.rawValue)
                 LabeledContent("Embedding host", value: appState.settings.embeddingHostDescription)
                 if appState.settings.embeddingBackend == EmbeddingBackendKind.openai.rawValue {
-                    TextField("Embeddings URL", text: $appState.settings.embeddingAPIURL)
-                    TextField("Model ID", text: $appState.settings.embeddingModel)
-                    LabeledContent("Vector dimensions") {
-                        TextField("Dimensions", value: $appState.settings.embeddingDimensions, format: .number.grouping(.never))
-                            .frame(width: 80)
-                    }
+                    ValidatedPreferenceField(title: "Embeddings URL", value: $settings.embeddingAPIURL, kind: .endpoint)
+                    ValidatedPreferenceField(title: "Model ID", value: $settings.embeddingModel)
+                    dimensionField
                     Text("OpenAI-compatible /v1/embeddings. Local Mac and Devbox jobs use the configured endpoint.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -231,30 +347,12 @@ private struct PreferencesContent: View {
             }
             if appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue {
                 Section {
-                    HStack {
-                        TextField(
-                            "Server URL", text: $appState.settings.ollamaURL,
-                            prompt: Text("http://localhost:11434")
-                        )
-                        .textFieldStyle(.roundedBorder)
-
-                        Button(action: { Task { await checkOllama() } }) {
-                            switch ollamaStatus {
-                            case .unknown:
-                                Image(systemName: "circle")
-                                    .foregroundColor(.secondary)
-                            case .checking:
-                                ProgressView()
-                                    .scaleEffect(0.7)
-                            case .connected:
-                                Image(systemName: "checkmark.circle.fill")
-                                    .foregroundColor(.green)
-                            case .failed:
-                                Image(systemName: "xmark.circle.fill")
-                                    .foregroundColor(.red)
-                            }
-                        }
-                        .buttonStyle(.plain)
+                    ValidatedPreferenceField(title: "Server URL", value: $settings.ollamaURL, kind: .endpoint, actionTitle: "Save and test") {
+                        Task { await loadModels() }
+                    }
+                    connectionStatusLabel(ollamaStatus)
+                    if !ollamaMessage.isEmpty {
+                        PreferenceMessage(context: "Ollama check", message: ollamaMessage, secrets: diagnosticSecrets, isError: ollamaStatus == .failed)
                     }
                 } header: {
                     Text("Ollama Server")
@@ -273,7 +371,7 @@ private struct PreferencesContent: View {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundColor(.orange)
                             Text("No models found. Start Ollama and pull an embedding model.")
-                                .font(.caption)
+                                .font(.callout)
                                 .foregroundColor(.secondary)
                         }
                     } else {
@@ -294,17 +392,7 @@ private struct PreferencesContent: View {
                         }
                     }
 
-                    LabeledContent("Vector Dimensions") {
-                        TextField(
-                            "",
-                            value: $appState.settings.embeddingDimensions,
-                            format: .number.grouping(.never)
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .multilineTextAlignment(.trailing)
-                        .monospacedDigit()
-                        .frame(width: 80)
-                    }
+                    dimensionField
                 } header: {
                     Text("Embedding Model")
                 }
@@ -431,8 +519,12 @@ private struct PreferencesContent: View {
                         onCheck: { Task { await testDevboxConnection() } }
                     )
                     .onAppear { loadWorkerEndpoints() }
+                    if !devboxStatusMessage.isEmpty {
+                        PreferenceMessage(context: "Worker connection", message: devboxStatusMessage, secrets: diagnosticSecrets,
+                                          isError: devboxStatus != .connected)
+                    }
                     Text("Plain HTTP to a private LAN address is allowed by NSAllowsLocalNetworking. MagicDNS HTTP uses the ts.net exception. The token is stored in the Keychain.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
 
@@ -458,7 +550,7 @@ private struct PreferencesContent: View {
                 if let selected = DoclingModel(rawValue: appState.settings.doclingModel),
                    selected != .standard {
                     Text(selected.description)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 }
 
@@ -472,7 +564,7 @@ private struct PreferencesContent: View {
                     if let selected = LayoutModel(rawValue: appState.settings.layoutModel),
                        selected != .standard {
                         Text(selected.description)
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -487,14 +579,14 @@ private struct PreferencesContent: View {
                     StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...16)
                     if appState.settings.processingHost == .localMac {
                         Text("TableFormer stays on the CPU. Keep table batches small on this machine.")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
                     StepperRow(label: "OCR batch", value: $appState.settings.ocrBatchSize, range: 0...64)
                     StepperRow(label: "Layout batch", value: $appState.settings.layoutBatchSize, range: 0...64)
                     StepperRow(label: "Table batch", value: $appState.settings.tableBatchSize, range: 0...16)
                     Text("Zero uses the host default. A worker host uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
 
                     Picker("Accelerator", selection: $appState.settings.doclingAccelerator) {
@@ -534,14 +626,7 @@ private struct PreferencesContent: View {
 
                     Toggle("Merge Peers", isOn: $appState.settings.chunkMergePeers)
 
-                    HStack {
-                        Text("Tokenizer")
-                        Spacer()
-                        TextField(text: $appState.settings.chunkTokenizer, prompt: Text("auto")) {}
-                            .textFieldStyle(.roundedBorder)
-                            .frame(maxWidth: 200)
-                            .multilineTextAlignment(.trailing)
-                    }
+                    ValidatedPreferenceField(title: "Tokenizer", value: $settings.chunkTokenizer, allowEmpty: true)
                 } header: {
                     Text("Processing")
                 }
@@ -580,14 +665,9 @@ private struct PreferencesContent: View {
                                 Text(preset.displayName).tag(preset.rawValue)
                             }
                         }
-                        TextField(
-                            "VLM server URL",
-                            text: $appState.settings.vlmServerURL,
-                            prompt: Text("http://127.0.0.1:8001")
-                        )
-                        .textFieldStyle(.roundedBorder)
+                        ValidatedPreferenceField(title: "VLM server URL", value: $settings.vlmServerURL, kind: .endpoint, allowEmpty: true)
                         Text("Used by the API preset. This is not the embedding Ollama URL.")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundColor(.secondary)
                     }
                     Toggle("Picture Classification", isOn: $appState.settings.doPictureClassification)
@@ -773,24 +853,16 @@ private struct PreferencesContent: View {
                         }
                     }
                     Text("Quality turns on picture description and classification.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                     Picker("Worker ingest", selection: $appState.settings.devboxIngestTarget) {
                         ForEach(DevboxIngestTarget.allCases) { target in
                             Text(target.rawValue).tag(target)
                         }
                     }
-                    TextField(
-                        "Qdrant Cloud URL",
-                        text: $qdrantCloudURLInput,
-                        prompt: Text("https://example.cloud.qdrant.io")
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    .onChange(of: qdrantCloudURLInput) { _, newValue in
-                        appState.settings.qdrantCloudURL = newValue
-                    }
+                    ValidatedPreferenceField(title: "Qdrant Cloud URL", value: $settings.qdrantCloudURL, kind: .endpoint, allowEmpty: true)
                     Text("Used when Processing host is Devbox and ingest is Qdrant Cloud. The API key below is sent with the job and is not stored on the worker. Local Mac keeps using Server URL.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundColor(.secondary)
                 } header: {
                     Text("Worker ingest target")
@@ -798,45 +870,24 @@ private struct PreferencesContent: View {
             }
 
             Section {
-                LabeledContent("Server URL") {
-                    HStack {
-                        TextField(
-                            "", text: $appState.settings.qdrantURL,
-                            prompt: Text("https://xxx.cloud.qdrant.io")
-                        )
-                        .textFieldStyle(.roundedBorder)
-                        .frame(width: 280)
-                        .onSubmit {
-                            Task { await testQdrantConnection() }
-                        }
-
-                        connectionIndicator
-                    }
+                ValidatedPreferenceField(title: "Server URL", value: qdrantURLBinding, kind: .endpoint, actionTitle: "Save and test") {
+                    Task { await testQdrantConnection() }
                 }
-
-                LabeledContent("API Key") {
-                    HStack {
-                        SecureField("", text: $qdrantAPIKeyInput, prompt: Text("Optional"))
-                            .textFieldStyle(.roundedBorder)
-                            .frame(width: 280)
-                            .onChange(of: qdrantAPIKeyInput) { _, newValue in
-                                appState.settings.qdrantAPIKey = newValue
-                            }
-                            .onSubmit {
-                                Task { await testQdrantConnection() }
-                            }
-
-                        if !qdrantAPIKeyInput.isEmpty {
-                            Image(systemName: "key.fill")
-                                .foregroundColor(.green)
-                                .help("Stored in Keychain")
-                        } else {
-                            Image(systemName: "key")
-                                .foregroundColor(.secondary)
-                        }
-                    }
+                .disabled(appState.isProcessing)
+                ValidatedPreferenceField(title: "API key", value: qdrantKeyBinding, kind: .secret, allowEmpty: true)
+                    .disabled(appState.isProcessing)
+                Text("Apply the API key first, then save and test the server URL. Credentials stay in the Keychain.")
+                    .font(.callout).foregroundStyle(.secondary)
+                if appState.isProcessing {
+                    Text("Database connection settings are locked while documents are processing.")
+                        .font(.callout).foregroundStyle(.secondary)
                 }
-
+                HStack {
+                    connectionStatusLabel(qdrantStatus)
+                    Spacer()
+                    Button("Test connection") { Task { await testQdrantConnection() } }
+                        .disabled(qdrantStatus == .checking)
+                }
                 Button("New collection") { showNewCollection = true }
                 Picker("Collection", selection: $appState.settings.defaultCollection) {
                     ForEach(appState.availableCollections, id: \.self) { collection in
@@ -847,9 +898,7 @@ private struct PreferencesContent: View {
                 Text("Connection")
             } footer: {
                 if let error = appState.qdrantConnectionError {
-                    Text(error)
-                        .foregroundColor(.red)
-                        .font(.caption)
+                    PreferenceMessage(context: "Qdrant connection failed", message: error, secrets: diagnosticSecrets)
                 }
             }
 
@@ -891,26 +940,36 @@ private struct PreferencesContent: View {
         }
     }
 
-    @ViewBuilder
-    private var connectionIndicator: some View {
-        switch qdrantStatus {
-        case .unknown:
-            Image(systemName: "circle.fill")
-                .foregroundColor(.gray)
-                .help("Not tested")
-        case .checking:
-            Image(systemName: "circle.fill")
-                .foregroundColor(.orange)
-                .help("Testing connection...")
-        case .connected:
-            Image(systemName: "circle.fill")
-                .foregroundColor(.green)
-                .help("Connected")
-        case .failed:
-            Image(systemName: "circle.fill")
-                .foregroundColor(.red)
-                .help("Connection failed")
-        }
+    private var dimensionField: some View {
+        ValidatedPreferenceField(title: "Vector dimensions", value: Binding(
+            get: { String(settings.embeddingDimensions) },
+            set: { if let value = Int($0) { settings.embeddingDimensions = value } }
+        ), kind: .integer(1...65_536))
+    }
+
+    private var qdrantURLBinding: Binding<String> {
+        Binding(get: { settings.qdrantURL }, set: { value in
+            guard value != settings.qdrantURL else { return }
+            settings.qdrantURL = value
+            appState.qdrantService = nil
+            invalidateQdrantCheck()
+        })
+    }
+
+    private var qdrantKeyBinding: Binding<String> {
+        Binding(get: { settings.qdrantAPIKey }, set: { value in
+            guard value != settings.qdrantAPIKey else { return }
+            settings.qdrantAPIKey = value
+            qdrantAPIKeyInput = value
+            appState.qdrantService = nil
+            invalidateQdrantCheck()
+        })
+    }
+
+    private func invalidateQdrantCheck() {
+        qdrantGeneration += 1
+        qdrantStatus = .unknown
+        appState.qdrantConnectionError = nil
     }
 
     private var embeddingModels: [OllamaModel] {
@@ -923,37 +982,50 @@ private struct PreferencesContent: View {
         }
     }
 
+    private func invalidateOllamaCheck() {
+        ollamaGeneration += 1
+        ollamaStatus = .unknown
+        ollamaMessage = ""
+        availableModels = []
+        isLoadingModels = false
+    }
+
     private func loadModels() async {
-        guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
+        guard settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
+        let url = settings.ollamaURL
+        ollamaProbeURL = url
+        ollamaProbeBackend = settings.embeddingBackend
+        ollamaGeneration += 1
+        let generation = ollamaGeneration
         isLoadingModels = true
         ollamaStatus = .checking
+        ollamaMessage = ""
         do {
-            let service = try OllamaService(baseURL: appState.settings.ollamaURL)
+            let service = try OllamaService(baseURL: url)
             let models = try await service.listModels()
-            guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else {
-                isLoadingModels = false
-                return
-            }
+            guard generation == ollamaGeneration, url == settings.ollamaURL,
+                  settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
             availableModels = models
             ollamaStatus = .connected
-
-            await applyProbedDimensions(for: appState.settings.embeddingModel)
-
         } catch {
+            guard generation == ollamaGeneration, url == settings.ollamaURL,
+                  settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
             availableModels = []
             ollamaStatus = .failed
+            ollamaMessage = error.localizedDescription
         }
         isLoadingModels = false
     }
 
     private func applyProbedDimensions(for model: String) async {
-        guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
+        guard settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue else { return }
+        let url = settings.ollamaURL
         do {
-            let service = try OllamaService(baseURL: appState.settings.ollamaURL)
+            let service = try OllamaService(baseURL: url)
             let dimensions = try await service.probeDimension(model: model)
-            guard appState.settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue,
-                  appState.settings.embeddingModel == model else { return }
-            appState.settings.embeddingDimensions = dimensions
+            guard settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue,
+                  settings.ollamaURL == url, settings.embeddingModel == model else { return }
+            settings.embeddingDimensions = dimensions
         } catch {
             return
         }
@@ -996,7 +1068,29 @@ private struct PreferencesContent: View {
         devboxStatusMessage = ""
     }
 
-    private func saveWorkerEndpoint() {
+    private func validatedWorkerDraft() -> Bool {
+        do {
+            let url = try PreferenceInput.endpoint(workerEndpointURL)
+            let name = try PreferenceInput.identifier(workerEndpointName, label: "Profile name", allowEmpty: true)
+            let token = try PreferenceInput.identifier(workerTokenInput, label: "Worker token", allowEmpty: true)
+            guard !token.contains(where: \.isWhitespace) else {
+                devboxStatusMessage = "Worker token must not contain whitespace."
+                return false
+            }
+            workerEndpointURL = url
+            workerEndpointName = name
+            workerTokenInput = token
+            devboxStatusMessage = ""
+            return true
+        } catch {
+            devboxStatusMessage = error.localizedDescription
+            return false
+        }
+    }
+
+    @discardableResult
+    private func saveWorkerEndpoint() -> Bool {
+        guard validatedWorkerDraft() else { return false }
         var endpoints = workerEndpoints
         if let id = selectedWorkerEndpointID, let index = endpoints.firstIndex(where: { $0.id == id }) {
             endpoints[index].name = workerEndpointName.isEmpty ? endpoints[index].name : workerEndpointName
@@ -1010,10 +1104,11 @@ private struct PreferencesContent: View {
         }
         appState.settings.replaceWorkerEndpoints(endpoints)
         workerEndpoints = endpoints
+        return true
     }
 
     private func useSelectedWorkerEndpoint() {
-        saveWorkerEndpoint()
+        guard saveWorkerEndpoint() else { return }
         guard let id = selectedWorkerEndpointID, let endpoint = workerEndpoints.first(where: { $0.id == id }) else { return }
         appState.settings.useWorkerEndpoint(endpoint)
         activeWorkerEndpointID = endpoint.id
@@ -1021,6 +1116,7 @@ private struct PreferencesContent: View {
     }
 
     private func testDevboxConnection() async {
+        guard validatedWorkerDraft() else { return }
         let url = workerEndpointURL
         let token = workerTokenInput
         workerProbeGeneration += 1
@@ -1042,39 +1138,35 @@ private struct PreferencesContent: View {
     }
 
     private func checkOllama() async {
-        ollamaStatus = .checking
-        do {
-            let service = try OllamaService(baseURL: appState.settings.ollamaURL)
-            _ = try await service.listModels()
-            ollamaStatus = .connected
-        } catch {
-            ollamaStatus = .failed
-        }
+        await loadModels()
     }
 
     private func testQdrantConnection() async {
-        guard !appState.settings.qdrantURL.isEmpty else {
-            qdrantStatus = .unknown
-            appState.qdrantConnectionError = nil
-            return
-        }
-
+        let url = settings.qdrantURL
+        let key = settings.qdrantAPIKey
+        guard !url.isEmpty else { invalidateQdrantCheck(); return }
+        qdrantProbeURL = url
+        qdrantProbeKey = key
+        qdrantGeneration += 1
+        let generation = qdrantGeneration
         qdrantStatus = .checking
         appState.qdrantConnectionError = nil
-
-        appState.qdrantService = nil
-
+        let probe = QdrantService()
         do {
-            try await appState.ensureQdrantConnection()
-            await appState.fetchCollections()
+            try await probe.configure(url: url, apiKey: key.isEmpty ? nil : key)
+            try await probe.connect()
+            let collections = try await probe.listCollections()
+            await probe.disconnect()
+            guard generation == qdrantGeneration, settings.qdrantURL == url,
+                  settings.qdrantAPIKey == key else { return }
+            appState.availableCollections = Array(Set(collections + [settings.defaultCollection])).sorted()
             qdrantStatus = .connected
-        } catch is CancellationError {
-
-            print("Qdrant connection cancelled")
         } catch {
+            await probe.disconnect()
+            guard generation == qdrantGeneration, settings.qdrantURL == url,
+                  settings.qdrantAPIKey == key else { return }
             qdrantStatus = .failed
             appState.qdrantConnectionError = error.localizedDescription
-            print("Qdrant connection failed: \(error)")
         }
     }
 
@@ -1090,10 +1182,10 @@ private struct PreferencesContent: View {
                             .font(.title2)
                             .fontWeight(.semibold)
                         Text("Version \(appVersion)")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                         Text("Document chunking and vector embedding tool")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
@@ -1116,7 +1208,7 @@ private struct PreferencesContent: View {
 
                             if let latest = latestDoclingVersion, latest != doclingVersion {
                                 Text("\(latest) available")
-                                    .font(.caption)
+                                    .font(.callout)
                                     .foregroundStyle(.orange)
                             }
                         }
@@ -1128,7 +1220,7 @@ private struct PreferencesContent: View {
                         ProgressView()
                             .scaleEffect(0.7)
                         Text(doclingUpdateStatus ?? "Updating...")
-                            .font(.caption)
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -1149,7 +1241,7 @@ private struct PreferencesContent: View {
 
                 if let status = doclingUpdateStatus, !isUpdatingDocling {
                     Text(status)
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(status.contains("success") ? .green : .secondary)
                 }
             } header: {

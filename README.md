@@ -71,9 +71,9 @@ make clean         # clean this checkout's build artifacts
 make open-xcode    # open in Xcode
 ```
 
-Chunky defaults to **Simple** mode for everyday controls. The sidebar and Preferences offer a persistent **Simple / Advanced** switch. Advanced reveals specialist tools and tuning; saved settings stay active in either mode. See [interface modes](docs/macbook-first-run.md#choose-the-interface-mode).
+Chunky defaults to **Simple** mode for everyday controls. The sidebar and Preferences offer a persistent **Simple / Advanced** switch. Advanced reveals specialist tools and tuning; saved settings stay active in either mode. See [interface modes](docs/interface-modes.md).
 
-Start only the services needed for the chosen workflow. For app-managed local Qdrant, use **Preferences → Qdrant → Start Qdrant** after installing `colima` and `docker`; see [local Qdrant](docs/local-qdrant.md). The CLI alternative is:
+Start only the services needed for the chosen workflow. For app-managed local Qdrant, use **Advanced → Preferences → Qdrant → Start Qdrant** after installing `colima` and `docker`; see [local Qdrant](docs/local-qdrant.md). The CLI alternative is:
 
 ```
 make qdrant        # detached Qdrant v1.20.2, loopback ports, volume chunky-qdrant

@@ -30,7 +30,7 @@ struct ChatSettingsPane: View {
                         .foregroundStyle(.orange)
                         .textSelection(.enabled)
                     Text("Chat is using the OpenAI-compatible endpoint below until pi is ready.")
-                        .font(.caption)
+                        .font(.callout)
                         .foregroundStyle(.secondary)
                 }
             } else if route.checking {
@@ -57,8 +57,8 @@ struct ChatSettingsPane: View {
             }
 
             Section {
-                TextField("pi path", text: $piPath, prompt: Text("Leave empty to search PATH"))
-                    .textFieldStyle(.roundedBorder)
+                ValidatedPreferenceField(title: "pi path", value: $piPath, allowEmpty: true)
+                Text("Leave empty to search PATH.").font(.callout).foregroundStyle(.secondary)
 
                 statusRow
 
@@ -72,8 +72,7 @@ struct ChatSettingsPane: View {
                         }
                     }
                 } else if route.kind == .pi {
-                    TextField("Model", text: $piModel, prompt: Text("provider/model"))
-                        .textFieldStyle(.roundedBorder)
+                    ValidatedPreferenceField(title: "Model", value: $piModel, allowEmpty: true)
                 }
 
                 HStack {
@@ -83,10 +82,7 @@ struct ChatSettingsPane: View {
                 }
 
                 if !statusMessage.isEmpty {
-                    Text(statusMessage)
-                        .font(.caption)
-                        .foregroundStyle(.secondary)
-                        .textSelection(.enabled)
+                    PreferenceMessage(context: "Chat setup", message: statusMessage, secrets: [apiKey], isError: report.readiness != .ready)
                 }
             } header: {
                 Text("pi")
@@ -95,12 +91,9 @@ struct ChatSettingsPane: View {
             }
 
             Section {
-                TextField("Endpoint", text: $chatAPIURL, prompt: Text("http://127.0.0.1:11434/v1"))
-                    .textFieldStyle(.roundedBorder)
-                TextField("Model", text: $chatModel, prompt: Text("qwen3"))
-                    .textFieldStyle(.roundedBorder)
-                SecureField("API key", text: $apiKey, prompt: Text("Optional, stored in the Keychain"))
-                    .textFieldStyle(.roundedBorder)
+                ValidatedPreferenceField(title: "Endpoint", value: $chatAPIURL, kind: .endpoint)
+                ValidatedPreferenceField(title: "Model", value: $chatModel)
+                ValidatedPreferenceField(title: "API key", value: $apiKey, kind: .secret, allowEmpty: true)
             } header: {
                 Text("OpenAI-compatible fallback")
             } footer: {
@@ -125,7 +118,7 @@ struct ChatSettingsPane: View {
                 .foregroundStyle(.green)
                 if let path = report.executablePath {
                     Text(path)
-                        .font(.caption.monospaced())
+                        .font(.callout.monospaced())
                         .foregroundStyle(.secondary)
                         .textSelection(.enabled)
                 }
