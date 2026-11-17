@@ -110,6 +110,33 @@ struct FastEmbedTests {
         }
     }
 
+    @Test func cloudStrictInputFlagRequiresDaemonAcknowledgementAndPreservesLegacyRequests() async throws {
+        let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let script = directory.appendingPathComponent("runtime.py")
+        let source = """
+        import sys,json
+        for line in sys.stdin:
+            request=json.loads(line)
+            strict=request.get('reject_truncation',False)
+            result={'model':request['model'],'dimensions':512,'vectors':[[2.0 if strict else 1.0]*512]}
+            if request['texts'][0]!='old-helper':
+                result['untruncated']=strict
+            print(json.dumps(result),flush=True)
+        """
+        try source.write(to: script, atomically: true, encoding: .utf8)
+        let service = try FastEmbedService(pythonPath: pythonPath(), scriptPath: script.path)
+        defer { service.cancel() }
+        let strict = try await service.embed(texts: ["paper"], model: FastEmbedService.model, query: true, rejectTruncation: true)
+        let legacy = try await service.embed(texts: ["paper"], model: FastEmbedService.model)
+        #expect(strict[0][0] == 2 && legacy[0][0] == 1)
+        do {
+            _ = try await service.embed(texts: ["old-helper"], model: FastEmbedService.model, rejectTruncation: true)
+            Issue.record("Expected old helper to fail closed")
+        } catch { #expect(error.localizedDescription.contains("did not confirm complete input")) }
+    }
+
     @Test func cancellationSurfacesAsCancellationAndProcessRestarts() async throws {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
