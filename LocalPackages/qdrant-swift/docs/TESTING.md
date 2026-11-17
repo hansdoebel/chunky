@@ -104,7 +104,7 @@ Contents of `docker-compose.test.yml`:
 version: '3.8'
 services:
   qdrant:
-    image: qdrant/qdrant:v1.20.1
+    image: qdrant/qdrant:v1.20.2
     ports:
       - "6333:6333"
       - "6334:6334"
@@ -370,7 +370,7 @@ env:
 
 services:
   qdrant:
-    image: qdrant/qdrant:v1.20.1
+    image: qdrant/qdrant:v1.20.2
     ports:
       - 6333:6333
       - 6334:6334

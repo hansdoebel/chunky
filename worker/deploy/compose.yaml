@@ -75,7 +75,7 @@ services:
       - "8192"
       - --enable-chunked-prefill
   qdrant:
-    image: qdrant/qdrant:v1.20.1
+    image: qdrant/qdrant:v1.20.2
     profiles: [qdrant]
     restart: unless-stopped
     network_mode: service:worker
