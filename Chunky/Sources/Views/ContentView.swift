@@ -129,7 +129,8 @@ private struct SidebarContent: View {
                 .accessibilityAddTraits(appState.viewMode == mode ? .isSelected : [])
             }
             if settings.interfaceMode == .simple && appState.viewMode.isAdvanced {
-                Text("Your open advanced tool stays available until you leave it.")
+                Text("This advanced tool stays open until you leave it.")
+                    .fixedSize(horizontal: false, vertical: true)
                     .font(.caption)
                     .foregroundStyle(.secondary)
             }

@@ -10,6 +10,7 @@ struct InterfaceModePicker: View {
             }
         }
         .pickerStyle(.segmented)
+        .labelsHidden()
         .help("Simple shows everyday controls. Advanced shows all tools. Saved settings remain active in both modes.")
         .accessibilityIdentifier("interface-mode")
     }
