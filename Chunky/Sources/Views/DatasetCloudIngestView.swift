@@ -53,8 +53,12 @@ struct DatasetCloudIngestPanel: View {
             Picker("Cloud plan (choose explicitly)", selection: $tier) {
                 ForEach(DatasetCloudTier.allCases) { Text($0.rawValue).tag($0) }
             }.disabled(running)
-            TextField("Available RAM on least-free node (GB)", text: $ramGB).disabled(running)
-            TextField("Available disk on least-free node (GB)", text: $diskGB).disabled(running)
+            LabeledContent("Available RAM on least-free node (GB)") {
+                TextField("GB", text: $ramGB).disabled(running)
+            }
+            LabeledContent("Available disk on least-free node (GB)") {
+                TextField("GB", text: $diskGB).disabled(running)
+            }
             Text("Use current available capacity from the Cloud Console, not total cluster size. GB = 1,000,000,000 bytes. Free: at most 1 GB RAM / 4 GB disk. Paid capacity depends on your provisioned resources.").font(.caption).foregroundStyle(.secondary)
             Button("Prepare import plan", action: onPrepare).disabled(running || dataset.isEmpty || (!preembedded && field.isEmpty))
             if let estimate {
