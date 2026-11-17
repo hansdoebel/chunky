@@ -267,7 +267,7 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
     var malformedTruncation = false
     var invalidSearchCount: Int?
 
-    func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
+    @MainActor func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
         let revision = HuggingFaceDatasetTests.revision
         if url.path == "/api/datasets" || url.path.hasPrefix("/api/datasets/") {
             let item: [String: Any] = ["id": "fixture/corpus", "sha": revision, "downloads": 10, "tags": ["license:cc-by-4.0"], "gated": false]
@@ -300,7 +300,7 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
 @MainActor
 private final class DeferredDatasetHTTP: DatasetHTTP {
     var continuation: CheckedContinuation<DatasetHTTPResponse, Error>?
-    func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
+    @MainActor func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
         try await withCheckedThrowingContinuation { continuation = $0 }
     }
 }
