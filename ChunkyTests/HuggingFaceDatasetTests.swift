@@ -163,7 +163,7 @@ struct HuggingFaceDatasetTests {
         defer { defaults.removePersistentDomain(forName: name) }
         let store = DatasetFolderStore(defaults: defaults)
         try store.setFolder(root)
-        #expect(try DatasetFolderStore(defaults: defaults).folder().standardizedFileURL == root.standardizedFileURL)
+        #expect(try DatasetFolderStore(defaults: defaults).folder().resolvingSymlinksInPath() == root.resolvingSymlinksInPath())
         let file = root.appendingPathComponent("keep.txt")
         try Data("keep".utf8).write(to: file)
         store.reset()
