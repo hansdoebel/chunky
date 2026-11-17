@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for recommend operations.
 internal final class RecommendService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class RecommendService: Sendable {
         self.base = base
     }
 
+    /// Finds points similar to the given positive examples and dissimilar to negative examples.
     func recommend(
         collection: String,
         positive: [PointID],
@@ -37,13 +39,9 @@ internal final class RecommendService: Sendable {
             grpcRequest.scoreThreshold = scoreThreshold
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
-        var vectorsSelector = Qdrant_WithVectorsSelector()
-        vectorsSelector.enable = withVectors
-        grpcRequest.withVectors = vectorsSelector
+        grpcRequest.withVectors = .enabled(withVectors)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -55,6 +53,7 @@ internal final class RecommendService: Sendable {
         }
     }
 
+    /// Performs multiple recommend requests in a single batch.
     func recommendBatch(
         collection: String,
         requests: [RecommendRequest]
@@ -74,9 +73,7 @@ internal final class RecommendService: Sendable {
                 recommendPoints.filter = filter.grpc
             }
 
-            var payloadSelector = Qdrant_WithPayloadSelector()
-            payloadSelector.enable = req.withPayload
-            recommendPoints.withPayload = payloadSelector
+            recommendPoints.withPayload = .enabled(req.withPayload)
 
             return recommendPoints
         }
@@ -94,6 +91,7 @@ internal final class RecommendService: Sendable {
         }
     }
 
+    /// Finds groups of points similar to positive examples.
     func recommendGroups(
         collection: String,
         positive: [PointID],
@@ -123,9 +121,7 @@ internal final class RecommendService: Sendable {
             grpcRequest.scoreThreshold = scoreThreshold
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 

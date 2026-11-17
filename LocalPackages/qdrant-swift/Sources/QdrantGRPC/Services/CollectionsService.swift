@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Service for managing Qdrant collections.
 public final class CollectionsService: Sendable {
     private let grpcClient: GRPCClient<HTTP2ClientTransport.Posix>
     private let apiKey: String?
@@ -21,6 +22,8 @@ public final class CollectionsService: Sendable {
         return metadata
     }
 
+    /// Lists all collections.
+    /// - Returns: An array of collection descriptions.
     public func list() async throws -> [CollectionDescription] {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
         let request = ClientRequest(message: Qdrant_ListCollectionsRequest(), metadata: metadata)
@@ -33,6 +36,9 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Gets detailed information about a collection.
+    /// - Parameter name: The name of the collection.
+    /// - Returns: Information about the collection.
     public func get(name: String) async throws -> CollectionInfo {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -54,6 +60,9 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Checks if a collection exists.
+    /// - Parameter name: The name of the collection.
+    /// - Returns: True if the collection exists.
     public func exists(name: String) async throws -> Bool {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -71,6 +80,12 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Creates a new collection with a single vector configuration.
+    /// - Parameters:
+    ///   - name: The name of the collection.
+    ///   - vectorSize: The dimension of vectors.
+    ///   - distance: The distance metric to use.
+    ///   - onDiskPayload: Whether to store payload on disk.
     public func create(
         name: String,
         vectorSize: UInt64,
@@ -112,6 +127,49 @@ public final class CollectionsService: Sendable {
     ) async throws {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
+        let grpcRequest = Self.legacyCreateRequest(name: name, vectors: vectors, sparseVectors: sparseVectors, onDiskPayload: onDiskPayload, quantizationConfig: quantizationConfig)
+
+        let request = ClientRequest(message: grpcRequest, metadata: metadata)
+
+        do {
+            let response: Qdrant_CollectionOperationResponse = try await client.create(
+                request: request)
+            if !response.result {
+                throw QdrantError.unexpectedResponse("Collection creation failed")
+            }
+        } catch let error as QdrantError {
+            throw error
+        } catch {
+            throw QdrantError.from(error)
+        }
+    }
+
+    public func create(name: String, options: CollectionOptions) async throws {
+        let client = Qdrant_Collections.Client(wrapping: grpcClient)
+        var grpcRequest = options.grpc
+        grpcRequest.collectionName = name
+        let request = ClientRequest(message: grpcRequest, metadata: metadata)
+        do {
+            let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
+            if !response.result {
+                throw QdrantError.unexpectedResponse("Collection creation failed")
+            }
+        } catch let error as QdrantError {
+            throw error
+        } catch {
+            throw QdrantError.from(error)
+        }
+    }
+
+    /// Updates collection parameters.
+    /// - Parameters:
+    ///   - name: The name of the collection.
+    ///   - replicationFactor: Number of replicas for each shard.
+    ///   - writeConsistencyFactor: How many replicas should apply for success.
+    ///   - onDiskPayload: Whether to store payload on disk.
+    ///   - indexingThreshold: Minimum number of vectors to trigger indexing.
+
+    static func legacyCreateRequest(name: String, vectors: VectorsConfig, sparseVectors: [String: SparseVectorParams]?, onDiskPayload: Bool?, quantizationConfig: QuantizationConfig?) -> Qdrant_CreateCollection {
         var grpcRequest = Qdrant_CreateCollection()
         grpcRequest.collectionName = name
         grpcRequest.vectorsConfig = vectors.grpc
@@ -136,19 +194,7 @@ public final class CollectionsService: Sendable {
             grpcRequest.quantizationConfig = quantizationConfig.grpc
         }
 
-        let request = ClientRequest(message: grpcRequest, metadata: metadata)
-
-        do {
-            let response: Qdrant_CollectionOperationResponse = try await client.create(
-                request: request)
-            if !response.result {
-                throw QdrantError.unexpectedResponse("Collection creation failed")
-            }
-        } catch let error as QdrantError {
-            throw error
-        } catch {
-            throw QdrantError.from(error)
-        }
+        return grpcRequest
     }
 
     public func update(
@@ -163,6 +209,7 @@ public final class CollectionsService: Sendable {
         var grpcRequest = Qdrant_UpdateCollection()
         grpcRequest.collectionName = name
 
+        // Set collection params if any provided
         if replicationFactor != nil || writeConsistencyFactor != nil || onDiskPayload != nil {
             var params = Qdrant_CollectionParamsDiff()
             if let replicationFactor = replicationFactor {
@@ -177,6 +224,7 @@ public final class CollectionsService: Sendable {
             grpcRequest.params = params
         }
 
+        // Set optimizer config if indexing threshold provided
         if let indexingThreshold = indexingThreshold {
             var optimizers = Qdrant_OptimizersConfigDiff()
             optimizers.indexingThreshold = indexingThreshold
@@ -198,6 +246,8 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Deletes a collection.
+    /// - Parameter name: The name of the collection to delete.
     public func delete(name: String) async throws {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -219,6 +269,10 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Creates an alias for a collection.
+    /// - Parameters:
+    ///   - alias: The alias name.
+    ///   - collection: The collection name.
     public func createAlias(alias: String, collection: String) async throws {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -247,6 +301,10 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Renames an alias.
+    /// - Parameters:
+    ///   - oldAlias: The current alias name.
+    ///   - newAlias: The new alias name.
     public func renameAlias(oldAlias: String, newAlias: String) async throws {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -275,6 +333,8 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Deletes an alias.
+    /// - Parameter alias: The alias name to delete.
     public func deleteAlias(alias: String) async throws {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -302,6 +362,9 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Lists all aliases for a collection.
+    /// - Parameter collection: The collection name.
+    /// - Returns: An array of alias descriptions.
     public func listAliases(collection: String) async throws -> [AliasDescription] {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -319,6 +382,8 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Lists all aliases across all collections.
+    /// - Returns: An array of alias descriptions.
     public func listAllAliases() async throws -> [AliasDescription] {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -334,6 +399,9 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Gets cluster information for a collection.
+    /// - Parameter name: The name of the collection.
+    /// - Returns: Cluster information for the collection.
     public func collectionClusterInfo(name: String) async throws -> CollectionClusterInfo {
         let client = Qdrant_Collections.Client(wrapping: grpcClient)
 
@@ -351,6 +419,13 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Creates a shard key for a collection.
+    /// - Parameters:
+    ///   - collection: The name of the collection.
+    ///   - shardKey: The shard key to create.
+    ///   - shardsNumber: Number of shards to create per shard key.
+    ///   - replicationFactor: Number of replicas for each shard.
+    ///   - placement: List of peer IDs allowed to create shards (empty means all peers).
     public func createShardKey(
         collection: String,
         shardKey: ShardKey,
@@ -392,6 +467,10 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Deletes a shard key from a collection.
+    /// - Parameters:
+    ///   - collection: The name of the collection.
+    ///   - shardKey: The shard key to delete.
     public func deleteShardKey(
         collection: String,
         shardKey: ShardKey
@@ -420,6 +499,10 @@ public final class CollectionsService: Sendable {
         }
     }
 
+    /// Updates collection cluster setup by performing a cluster operation.
+    /// - Parameters:
+    ///   - collection: The name of the collection.
+    ///   - operation: The cluster operation to perform.
     public func updateCollectionClusterSetup(
         collection: String,
         operation: ClusterOperation
@@ -507,16 +590,21 @@ public final class CollectionsService: Sendable {
     }
 }
 
+/// Information about a collection's cluster state.
 public struct CollectionClusterInfo: Sendable {
-
+    /// ID of this peer.
     public let peerId: UInt64
 
+    /// Total number of shards.
     public let shardCount: UInt64
 
+    /// Local shards on this node.
     public let localShards: [LocalShardInfo]
 
+    /// Remote shards on other nodes.
     public let remoteShards: [RemoteShardInfo]
 
+    /// Active shard transfers.
     public let shardTransfers: [ShardTransferInfo]
 
     internal init(grpc: Qdrant_CollectionClusterInfoResponse) {
@@ -528,14 +616,18 @@ public struct CollectionClusterInfo: Sendable {
     }
 }
 
+/// Information about a local shard.
 public struct LocalShardInfo: Sendable {
-
+    /// Shard ID.
     public let shardId: UInt32
 
+    /// Number of points in the shard.
     public let pointsCount: UInt64
 
+    /// Shard state.
     public let state: ReplicaState
 
+    /// User-defined shard key.
     public let shardKey: ShardKey?
 
     internal init(grpc: Qdrant_LocalShardInfo) {
@@ -546,14 +638,18 @@ public struct LocalShardInfo: Sendable {
     }
 }
 
+/// Information about a remote shard.
 public struct RemoteShardInfo: Sendable {
-
+    /// Shard ID.
     public let shardId: UInt32
 
+    /// Remote peer ID.
     public let peerId: UInt64
 
+    /// Shard state.
     public let state: ReplicaState
 
+    /// User-defined shard key.
     public let shardKey: ShardKey?
 
     internal init(grpc: Qdrant_RemoteShardInfo) {
@@ -564,14 +660,18 @@ public struct RemoteShardInfo: Sendable {
     }
 }
 
+/// Information about a shard transfer operation.
 public struct ShardTransferInfo: Sendable {
-
+    /// Shard ID being transferred.
     public let shardId: UInt32
 
+    /// Source peer ID.
     public let from: UInt64
 
+    /// Destination peer ID.
     public let to: UInt64
 
+    /// Whether this is a sync operation.
     public let sync: Bool
 
     internal init(grpc: Qdrant_ShardTransferInfo) {
@@ -582,6 +682,7 @@ public struct ShardTransferInfo: Sendable {
     }
 }
 
+/// State of a replica.
 public enum ReplicaState: Sendable {
     case active
     case dead
@@ -608,10 +709,12 @@ public enum ReplicaState: Sendable {
     }
 }
 
+/// A shard key for custom sharding.
 public enum ShardKey: Sendable {
-
+    /// String shard key.
     case keyword(String)
 
+    /// Numeric shard key.
     case number(UInt64)
 
     internal var grpc: Qdrant_ShardKey {
@@ -637,32 +740,43 @@ public enum ShardKey: Sendable {
     }
 }
 
+/// Operations for updating collection cluster setup.
 public enum ClusterOperation: Sendable {
-
+    /// Move shard from one peer to another.
     case moveShard(from: UInt64, to: UInt64, shardId: UInt32, method: ShardTransferMethod?)
 
+    /// Replicate shard from one peer to another.
     case replicateShard(from: UInt64, to: UInt64, shardId: UInt32, method: ShardTransferMethod?)
 
+    /// Abort shard transfer operation.
     case abortTransfer(from: UInt64, to: UInt64, shardId: UInt32)
 
+    /// Drop replica from peer.
     case dropReplica(peerId: UInt64, shardId: UInt32)
 
+    /// Create a new shard key.
     case createShardKey(
         key: ShardKey, shardsNumber: UInt32?, replicationFactor: UInt32?, placement: [UInt64])
 
+    /// Delete a shard key.
     case deleteShardKey(key: ShardKey)
 
+    /// Restart a failed shard transfer.
     case restartTransfer(from: UInt64, to: UInt64, shardId: UInt32, method: ShardTransferMethod?)
 }
 
+/// Method for shard transfer operations.
 public enum ShardTransferMethod: Sendable {
-
+    /// Stream records during transfer.
     case streamRecords
 
+    /// Use snapshot for transfer.
     case snapshot
 
+    /// Use write-ahead log delta for transfer.
     case walDelta
 
+    /// Use resharding for transfer.
     case reshardingStreamRecords
 
     internal var grpc: Qdrant_ShardTransferMethod {
@@ -675,14 +789,6 @@ public enum ShardTransferMethod: Sendable {
             return .walDelta
         case .reshardingStreamRecords:
             return .reshardingStreamRecords
-        }
-    }
-}
-
-extension SparseVectorModifier {
-    internal var grpc: Qdrant_Modifier {
-        switch self {
-        case .idf: return .idf
         }
     }
 }

@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for CRUD operations on points.
 internal final class PointsCRUDService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,10 +12,12 @@ internal final class PointsCRUDService: Sendable {
         self.base = base
     }
 
+    /// Inserts or updates points in a collection.
     func upsert(
         collection: String,
         points: [Point],
-        wait: Bool
+        wait: Bool,
+        updateMode: UpdateMode
     ) async throws {
         let client = Qdrant_Points.Client(wrapping: base.grpcClient)
 
@@ -22,16 +25,13 @@ internal final class PointsCRUDService: Sendable {
         grpcRequest.collectionName = collection
         grpcRequest.points = points.map { $0.grpc }
         grpcRequest.wait = wait
+        grpcRequest.updateMode = updateMode.grpc
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
         do {
             let response: Qdrant_PointsOperationResponse = try await client.upsert(request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Upsert failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Upsert")
         } catch let error as QdrantError {
             throw error
         } catch {
@@ -39,6 +39,56 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
+    func createVectorName(
+        collection: String,
+        name: String,
+        spec: NamedVectorSpec,
+        wait: Bool
+    ) async throws {
+        let client = Qdrant_Points.Client(wrapping: base.grpcClient)
+        var grpcRequest = Qdrant_CreateVectorNameRequest()
+        grpcRequest.collectionName = collection
+        grpcRequest.vectorName = name
+        grpcRequest.wait = wait
+        if let dense = spec.dense {
+            grpcRequest.denseConfig = dense
+        }
+        if let sparse = spec.sparse {
+            grpcRequest.sparseConfig = sparse
+        }
+        let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
+        do {
+            let response = try await client.createVectorName(request: request)
+            try response.ensureApplied("Create vector name")
+        } catch let error as QdrantError {
+            throw error
+        } catch {
+            throw QdrantError.from(error)
+        }
+    }
+
+    func deleteVectorName(
+        collection: String,
+        name: String,
+        wait: Bool
+    ) async throws {
+        let client = Qdrant_Points.Client(wrapping: base.grpcClient)
+        var grpcRequest = Qdrant_DeleteVectorNameRequest()
+        grpcRequest.collectionName = collection
+        grpcRequest.vectorName = name
+        grpcRequest.wait = wait
+        let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
+        do {
+            let response = try await client.deleteVectorName(request: request)
+            try response.ensureApplied("Delete vector name")
+        } catch let error as QdrantError {
+            throw error
+        } catch {
+            throw QdrantError.from(error)
+        }
+    }
+
+    /// Retrieves points by their IDs.
     func get(
         collection: String,
         ids: [PointID],
@@ -51,13 +101,9 @@ internal final class PointsCRUDService: Sendable {
         grpcRequest.collectionName = collection
         grpcRequest.ids = ids.map { $0.grpc }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
-        var vectorsSelector = Qdrant_WithVectorsSelector()
-        vectorsSelector.enable = withVectors
-        grpcRequest.withVectors = vectorsSelector
+        grpcRequest.withVectors = .enabled(withVectors)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -69,6 +115,7 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
+    /// Deletes points by their IDs.
     func delete(
         collection: String,
         ids: [PointID],
@@ -90,11 +137,7 @@ internal final class PointsCRUDService: Sendable {
 
         do {
             let response: Qdrant_PointsOperationResponse = try await client.delete(request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Delete failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Delete")
         } catch let error as QdrantError {
             throw error
         } catch {
@@ -102,6 +145,7 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
+    /// Deletes points matching a filter.
     func delete(
         collection: String,
         filter: Filter,
@@ -121,11 +165,7 @@ internal final class PointsCRUDService: Sendable {
 
         do {
             let response: Qdrant_PointsOperationResponse = try await client.delete(request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Delete failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Delete")
         } catch let error as QdrantError {
             throw error
         } catch {
@@ -133,6 +173,7 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
+    /// Scrolls through points in a collection.
     func scroll(
         collection: String,
         filter: Filter?,
@@ -155,13 +196,9 @@ internal final class PointsCRUDService: Sendable {
             grpcRequest.offset = offset.grpc
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
-        var vectorsSelector = Qdrant_WithVectorsSelector()
-        vectorsSelector.enable = withVectors
-        grpcRequest.withVectors = vectorsSelector
+        grpcRequest.withVectors = .enabled(withVectors)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -176,6 +213,7 @@ internal final class PointsCRUDService: Sendable {
         }
     }
 
+    /// Counts the number of points in a collection.
     func count(
         collection: String,
         filter: Filter?,

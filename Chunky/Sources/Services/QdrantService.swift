@@ -347,14 +347,14 @@ class QdrantService: ObservableObject {
         }
 
         let densePrefetch = PrefetchQuery(
-            query: .nearest(denseVector),
+            query: .nearest(.dense(denseVector)),
             using: "dense",
             filter: filter,
             limit: UInt64(limit)
         )
 
         let sparsePrefetch = PrefetchQuery(
-            query: .nearestSparse(sparseVector),
+            query: .nearest(.sparse(indices: sparseVector.indices, values: sparseVector.values)),
             using: "sparse",
             filter: filter,
             limit: UInt64(limit)

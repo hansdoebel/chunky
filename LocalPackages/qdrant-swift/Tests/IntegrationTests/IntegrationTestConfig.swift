@@ -1,16 +1,23 @@
 import Foundation
 
+/// Configuration for integration tests loaded from environment or .env file.
 struct IntegrationTestConfig {
     let url: String
     let apiKey: String?
     let testCollection: String
 
+    /// Whether this is a local Docker instance (no TLS, no API key required).
     var isLocal: Bool {
         url.contains("localhost") || url.contains("127.0.0.1")
     }
 
+    /// Loads configuration from environment variables or .env file.
+    ///
+    /// For local Docker testing, only QDRANT_URL is required.
+    /// QDRANT_API_KEY is optional for local instances.
+    /// QDRANT_TEST_COLLECTION defaults to "test-collection" if not set.
     static func load() throws -> IntegrationTestConfig {
-
+        // Try environment variables first
         if let url = ProcessInfo.processInfo.environment["QDRANT_URL"] {
             let apiKey = ProcessInfo.processInfo.environment["QDRANT_API_KEY"]
             let collection =
@@ -22,6 +29,7 @@ struct IntegrationTestConfig {
             )
         }
 
+        // Fall back to .env file
         let envPath = findEnvFile()
         guard let envPath = envPath else {
             throw ConfigError.envFileNotFound
@@ -58,10 +66,11 @@ struct IntegrationTestConfig {
     }
 
     private static func findEnvFile() -> String? {
-
+        // Look for .env file in common locations
         let fileManager = FileManager.default
         let currentDir = fileManager.currentDirectoryPath
 
+        // Try project root (relative to test bundle)
         let possiblePaths = [
             "\(currentDir)/.env",
             "\(currentDir)/../.env",

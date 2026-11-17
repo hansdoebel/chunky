@@ -1,0 +1,844 @@
+diff --git a/Sources/QdrantCore/Models/CollectionOptions.swift b/Sources/QdrantCore/Models/CollectionOptions.swift
+index 9608cd4..7e4c6d5 100644
+--- a/Sources/QdrantCore/Models/CollectionOptions.swift
++++ b/Sources/QdrantCore/Models/CollectionOptions.swift
+@@ -58,6 +58,7 @@ public struct IdTrackerParams: Sendable {
+ }
+ 
+ public struct StrictModeConfig: Sendable {
++    public var enabled: Bool?
+     public var requireTenantFilter: Bool?
+ 
+     public var searchMaxBatchsize: UInt64?
+@@ -66,10 +67,12 @@ public struct StrictModeConfig: Sendable {
+     public var maxResidentMemoryPercent: UInt32?
+ 
+     public init(
++        enabled: Bool? = nil,
+         requireTenantFilter: Bool? = nil,
+         searchMaxBatchsize: UInt64? = nil,
+         maxResidentMemoryPercent: UInt32? = nil
+     ) {
++        self.enabled = enabled
+         self.requireTenantFilter = requireTenantFilter
+         self.searchMaxBatchsize = searchMaxBatchsize
+         self.maxResidentMemoryPercent = maxResidentMemoryPercent
+diff --git a/Sources/QdrantCore/Models/QuantizationConfig.swift b/Sources/QdrantCore/Models/QuantizationConfig.swift
+new file mode 100644
+index 0000000..fa33fc3
+--- /dev/null
++++ b/Sources/QdrantCore/Models/QuantizationConfig.swift
+@@ -0,0 +1,11 @@
++import Foundation
++
++public enum QuantizationConfig: Sendable {
++    case scalar(quantile: Float?, alwaysRam: Bool?)
++    case binary(alwaysRam: Bool?)
++    case product(compression: ProductCompression, alwaysRam: Bool?)
++}
++
++public enum ProductCompression: Sendable {
++    case x4, x8, x16, x32, x64
++}
+diff --git a/Sources/QdrantCore/Models/VectorData.swift b/Sources/QdrantCore/Models/VectorData.swift
+index 671e37c..2b5e14e 100644
+--- a/Sources/QdrantCore/Models/VectorData.swift
++++ b/Sources/QdrantCore/Models/VectorData.swift
+@@ -1,10 +1,22 @@
+ import Foundation
+ 
++public struct SparseVector: Sendable, Codable, Hashable {
++    public let indices: [UInt32]
++    public let values: [Float]
++
++    public init(indices: [UInt32], values: [Float]) {
++        self.indices = indices
++        self.values = values
++    }
++}
++
+ public enum VectorData: Sendable {
+     case dense([Float])
+ 
+     case named([String: [Float]])
+ 
++    case namedWithSparse(dense: [String: [Float]], sparse: [String: SparseVector])
++
+     public static func from(_ data: [Float]) -> VectorData {
+         .dense(data)
+     }
+@@ -22,6 +34,16 @@ extension VectorData: Codable {
+             self = .dense(array)
+         } else if let dict = try? container.decode([String: [Float]].self) {
+             self = .named(dict)
++        } else if let mixed = try? container.decode([String: NamedVectorValue].self) {
++            var dense: [String: [Float]] = [:]
++            var sparse: [String: SparseVector] = [:]
++            for (name, value) in mixed {
++                switch value {
++                case .dense(let values): dense[name] = values
++                case .sparse(let values): sparse[name] = values
++                }
++            }
++            self = .namedWithSparse(dense: dense, sparse: sparse)
+         } else {
+             throw DecodingError.typeMismatch(
+                 VectorData.self,
+@@ -37,6 +59,32 @@ extension VectorData: Codable {
+         switch self {
+         case .dense(let array): try container.encode(array)
+         case .named(let dict): try container.encode(dict)
++        case .namedWithSparse(let dense, let sparse):
++            var values = dense.mapValues { NamedVectorValue.dense($0) }
++            for (name, vector) in sparse { values[name] = .sparse(vector) }
++            try container.encode(values)
++        }
++    }
++}
++
++private enum NamedVectorValue: Codable {
++    case dense([Float])
++    case sparse(SparseVector)
++
++    init(from decoder: Decoder) throws {
++        let container = try decoder.singleValueContainer()
++        if let values = try? container.decode([Float].self) {
++            self = .dense(values)
++        } else {
++            self = .sparse(try container.decode(SparseVector.self))
++        }
++    }
++
++    func encode(to encoder: Encoder) throws {
++        var container = encoder.singleValueContainer()
++        switch self {
++        case .dense(let values): try container.encode(values)
++        case .sparse(let values): try container.encode(values)
+         }
+     }
+ }
+diff --git a/Sources/QdrantCore/Protocols/CollectionsServiceProtocol.swift b/Sources/QdrantCore/Protocols/CollectionsServiceProtocol.swift
+index 664fbb3..673082a 100644
+--- a/Sources/QdrantCore/Protocols/CollectionsServiceProtocol.swift
++++ b/Sources/QdrantCore/Protocols/CollectionsServiceProtocol.swift
+@@ -19,6 +19,10 @@ public struct CollectionInfo: Sendable {
+ 
+     public let segmentsCount: UInt64?
+ 
++    public let vectorSize: UInt64?
++
++    public let vectorName: String?
++
+     public let createdAt: Date?
+ 
+     public let updateQueue: UpdateQueueInfo?
+@@ -29,6 +33,8 @@ public struct CollectionInfo: Sendable {
+         indexedVectorsCount: UInt64? = nil,
+         pointsCount: UInt64? = nil,
+         segmentsCount: UInt64? = nil,
++        vectorSize: UInt64? = nil,
++        vectorName: String? = nil,
+         createdAt: Date? = nil,
+         updateQueue: UpdateQueueInfo? = nil
+     ) {
+@@ -37,6 +43,8 @@ public struct CollectionInfo: Sendable {
+         self.indexedVectorsCount = indexedVectorsCount
+         self.pointsCount = pointsCount
+         self.segmentsCount = segmentsCount
++        self.vectorSize = vectorSize
++        self.vectorName = vectorName
+         self.createdAt = createdAt
+         self.updateQueue = updateQueue
+     }
+@@ -146,3 +154,15 @@ public protocol CollectionsServiceProtocol: Sendable {
+ 
+     func listAllAliases() async throws -> [AliasDescription]
+ }
++
++public struct SparseVectorParams: Sendable {
++    public let modifier: SparseVectorModifier?
++
++    public init(modifier: SparseVectorModifier? = nil) {
++        self.modifier = modifier
++    }
++}
++
++public enum SparseVectorModifier: Sendable {
++    case idf
++}
+diff --git a/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift b/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift
+index 0e1cb88..83342a6 100644
+--- a/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift
++++ b/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift
+@@ -24,6 +24,8 @@ extension CollectionInfo {
+             indexedVectorsCount: grpc.hasIndexedVectorsCount ? grpc.indexedVectorsCount : nil,
+             pointsCount: grpc.hasPointsCount ? grpc.pointsCount : nil,
+             segmentsCount: grpc.segmentsCount,
++            vectorSize: Self.denseVectorSize(from: grpc),
++            vectorName: Self.denseVectorName(from: grpc),
+             createdAt: grpc.hasCreatedAt ? Date(grpc.createdAt) : nil,
+             updateQueue: grpc.hasUpdateQueue
+                 ? UpdateQueueInfo(
+@@ -109,6 +111,7 @@ extension Quantization {
+ extension StrictModeConfig {
+     var grpc: Qdrant_StrictModeConfig {
+         var message = Qdrant_StrictModeConfig()
++        if let enabled { message.enabled = enabled }
+         if let requireTenantFilter { message.requireTenantFilter = requireTenantFilter }
+         if let searchMaxBatchsize { message.searchMaxBatchsize = searchMaxBatchsize }
+         if let maxResidentMemoryPercent { message.maxResidentMemoryPercent = maxResidentMemoryPercent }
+@@ -173,3 +176,42 @@ extension AliasDescription {
+         self.init(aliasName: grpc.aliasName, collectionName: grpc.collectionName)
+     }
+ }
++
++extension CollectionInfo {
++    static func denseVectorName(from grpc: Qdrant_CollectionInfo) -> String? {
++        guard grpc.hasConfig, grpc.config.hasParams, grpc.config.params.hasVectorsConfig else {
++            return nil
++        }
++        switch grpc.config.params.vectorsConfig.config {
++        case .params:
++            return nil
++        case .paramsMap(let map):
++            if map.map["dense"] != nil {
++                return "dense"
++            }
++            if map.map.count == 1 {
++                return map.map.keys.first
++            }
++            return nil
++        case nil:
++            return nil
++        }
++    }
++
++    static func denseVectorSize(from grpc: Qdrant_CollectionInfo) -> UInt64? {
++        guard grpc.hasConfig, grpc.config.hasParams, grpc.config.params.hasVectorsConfig else {
++            return nil
++        }
++        switch grpc.config.params.vectorsConfig.config {
++        case .params(let params):
++            return params.size
++        case .paramsMap(let map):
++            if let dense = map.map["dense"] {
++                return dense.size
++            }
++            return map.map.count == 1 ? map.map.values.first?.size : nil
++        case nil:
++            return nil
++        }
++    }
++}
+diff --git a/Sources/QdrantGRPC/ProtoExtensions/LegacyQuantization.swift b/Sources/QdrantGRPC/ProtoExtensions/LegacyQuantization.swift
+new file mode 100644
+index 0000000..4a1e046
+--- /dev/null
++++ b/Sources/QdrantGRPC/ProtoExtensions/LegacyQuantization.swift
+@@ -0,0 +1,39 @@
++import Foundation
++import QdrantCore
++import QdrantProto
++
++extension QuantizationConfig {
++    internal var grpc: Qdrant_QuantizationConfig {
++        var config = Qdrant_QuantizationConfig()
++        switch self {
++        case .scalar(let quantile, let alwaysRam):
++            var scalar = Qdrant_ScalarQuantization()
++            scalar.type = .int8
++            if let quantile { scalar.quantile = quantile }
++            if let alwaysRam { scalar.alwaysRam = alwaysRam }
++            config.scalar = scalar
++        case .binary(let alwaysRam):
++            var binary = Qdrant_BinaryQuantization()
++            if let alwaysRam { binary.alwaysRam = alwaysRam }
++            config.binary = binary
++        case .product(let compression, let alwaysRam):
++            var product = Qdrant_ProductQuantization()
++            product.compression = compression.grpc
++            if let alwaysRam { product.alwaysRam = alwaysRam }
++            config.product = product
++        }
++        return config
++    }
++}
++
++extension ProductCompression {
++    internal var grpc: Qdrant_CompressionRatio {
++        switch self {
++        case .x4: .x4
++        case .x8: .x8
++        case .x16: .x16
++        case .x32: .x32
++        case .x64: .x64
++        }
++    }
++}
+diff --git a/Sources/QdrantGRPC/ProtoExtensions/LegacySparse.swift b/Sources/QdrantGRPC/ProtoExtensions/LegacySparse.swift
+new file mode 100644
+index 0000000..4373190
+--- /dev/null
++++ b/Sources/QdrantGRPC/ProtoExtensions/LegacySparse.swift
+@@ -0,0 +1,10 @@
++import QdrantCore
++import QdrantProto
++
++extension SparseVectorModifier {
++    var grpc: Qdrant_Modifier {
++        switch self {
++        case .idf: .idf
++        }
++    }
++}
+diff --git a/Sources/QdrantGRPC/ProtoExtensions/Point.swift b/Sources/QdrantGRPC/ProtoExtensions/Point.swift
+index b9157e1..848b0a1 100644
+--- a/Sources/QdrantGRPC/ProtoExtensions/Point.swift
++++ b/Sources/QdrantGRPC/ProtoExtensions/Point.swift
+@@ -43,6 +43,24 @@ extension VectorData {
+                 namedVectors.vectors[name] = vector
+             }
+             vectors.vectors = namedVectors
++        case .namedWithSparse(let denseData, let sparseData):
++            var namedVectors = Qdrant_NamedVectors()
++            for (name, data) in denseData {
++                var denseVector = Qdrant_DenseVector()
++                denseVector.data = data
++                var vector = Qdrant_Vector()
++                vector.dense = denseVector
++                namedVectors.vectors[name] = vector
++            }
++            for (name, sparse) in sparseData {
++                var sparseVector = Qdrant_SparseVector()
++                sparseVector.indices = sparse.indices
++                sparseVector.values = sparse.values
++                var vector = Qdrant_Vector()
++                vector.sparse = sparseVector
++                namedVectors.vectors[name] = vector
++            }
++            vectors.vectors = namedVectors
+         }
+         return vectors
+     }
+diff --git a/Sources/QdrantGRPC/Services/CollectionsService.swift b/Sources/QdrantGRPC/Services/CollectionsService.swift
+index 8ce6a0f..a340370 100644
+--- a/Sources/QdrantGRPC/Services/CollectionsService.swift
++++ b/Sources/QdrantGRPC/Services/CollectionsService.swift
+@@ -90,61 +90,44 @@ public final class CollectionsService: Sendable {
+         name: String,
+         vectorSize: UInt64,
+         distance: Distance,
+-        onDiskPayload: Bool? = nil
++        onDiskPayload: Bool? = nil,
++        quantizationConfig: QuantizationConfig? = nil
+     ) async throws {
+         let config = VectorConfig(size: vectorSize, distance: distance)
+-        try await create(name: name, vectors: .single(config), onDiskPayload: onDiskPayload)
++        try await create(name: name, vectors: .single(config), onDiskPayload: onDiskPayload, quantizationConfig: quantizationConfig)
+     }
+ 
+-    /// Creates a new collection with a single vector configuration (Int size convenience).
+-    /// - Parameters:
+-    ///   - name: The name of the collection.
+-    ///   - vectorSize: The dimension of vectors.
+-    ///   - distance: The distance metric to use.
+-    ///   - onDiskPayload: Whether to store payload on disk.
+     public func create(
+         name: String,
+         vectorSize: Int,
+         distance: Distance,
+-        onDiskPayload: Bool? = nil
++        onDiskPayload: Bool? = nil,
++        quantizationConfig: QuantizationConfig? = nil
+     ) async throws {
+         try await create(
+             name: name, vectorSize: UInt64(vectorSize), distance: distance,
+-            onDiskPayload: onDiskPayload)
++            onDiskPayload: onDiskPayload, quantizationConfig: quantizationConfig)
+     }
+ 
+-    /// Creates a new collection with multiple named vector configurations.
+-    /// - Parameters:
+-    ///   - name: The name of the collection.
+-    ///   - vectors: Dictionary mapping vector names to their configurations.
+-    ///   - onDiskPayload: Whether to store payload on disk.
+     public func create(
+         name: String,
+         vectors: [String: VectorConfig],
+-        onDiskPayload: Bool? = nil
++        onDiskPayload: Bool? = nil,
++        quantizationConfig: QuantizationConfig? = nil
+     ) async throws {
+-        try await create(name: name, vectors: .named(vectors), onDiskPayload: onDiskPayload)
++        try await create(name: name, vectors: .named(vectors), onDiskPayload: onDiskPayload, quantizationConfig: quantizationConfig)
+     }
+ 
+-    /// Creates a new collection.
+-    /// - Parameters:
+-    ///   - name: The name of the collection.
+-    ///   - vectors: The vector configuration.
+-    ///   - onDiskPayload: Whether to store payload on disk.
+     public func create(
+         name: String,
+         vectors: VectorsConfig,
+-        onDiskPayload: Bool? = nil
++        sparseVectors: [String: SparseVectorParams]? = nil,
++        onDiskPayload: Bool? = nil,
++        quantizationConfig: QuantizationConfig? = nil
+     ) async throws {
+         let client = Qdrant_Collections.Client(wrapping: grpcClient)
+ 
+-        var grpcRequest = Qdrant_CreateCollection()
+-        grpcRequest.collectionName = name
+-        grpcRequest.vectorsConfig = vectors.grpc
+-
+-        if let onDiskPayload = onDiskPayload {
+-            grpcRequest.onDiskPayload = onDiskPayload
+-        }
++        let grpcRequest = Self.legacyCreateRequest(name: name, vectors: vectors, sparseVectors: sparseVectors, onDiskPayload: onDiskPayload, quantizationConfig: quantizationConfig)
+ 
+         let request = ClientRequest(message: grpcRequest, metadata: metadata)
+ 
+@@ -166,9 +149,15 @@ public final class CollectionsService: Sendable {
+         var grpcRequest = options.grpc
+         grpcRequest.collectionName = name
+         let request = ClientRequest(message: grpcRequest, metadata: metadata)
+-        let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
+-        if !response.result {
+-            throw QdrantError.unexpectedResponse("Collection creation failed")
++        do {
++            let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
++            if !response.result {
++                throw QdrantError.unexpectedResponse("Collection creation failed")
++            }
++        } catch let error as QdrantError {
++            throw error
++        } catch {
++            throw QdrantError.from(error)
+         }
+     }
+ 
+@@ -179,6 +168,35 @@ public final class CollectionsService: Sendable {
+     ///   - writeConsistencyFactor: How many replicas should apply for success.
+     ///   - onDiskPayload: Whether to store payload on disk.
+     ///   - indexingThreshold: Minimum number of vectors to trigger indexing.
++
++    static func legacyCreateRequest(name: String, vectors: VectorsConfig, sparseVectors: [String: SparseVectorParams]?, onDiskPayload: Bool?, quantizationConfig: QuantizationConfig?) -> Qdrant_CreateCollection {
++        var grpcRequest = Qdrant_CreateCollection()
++        grpcRequest.collectionName = name
++        grpcRequest.vectorsConfig = vectors.grpc
++
++        if let sparseVectors = sparseVectors {
++            var sparseConfig = Qdrant_SparseVectorConfig()
++            for (name, params) in sparseVectors {
++                var grpcParams = Qdrant_SparseVectorParams()
++                if let modifier = params.modifier {
++                    grpcParams.modifier = modifier.grpc
++                }
++                sparseConfig.map[name] = grpcParams
++            }
++            grpcRequest.sparseVectorsConfig = sparseConfig
++        }
++
++        if let onDiskPayload = onDiskPayload {
++            grpcRequest.onDiskPayload = onDiskPayload
++        }
++
++        if let quantizationConfig = quantizationConfig {
++            grpcRequest.quantizationConfig = quantizationConfig.grpc
++        }
++
++        return grpcRequest
++    }
++
+     public func update(
+         name: String,
+         replicationFactor: UInt32? = nil,
+diff --git a/Sources/QdrantGRPC/Services/Points/Internal/IndexService.swift b/Sources/QdrantGRPC/Services/Points/Internal/IndexService.swift
+index 76f930a..573a1f5 100644
+--- a/Sources/QdrantGRPC/Services/Points/Internal/IndexService.swift
++++ b/Sources/QdrantGRPC/Services/Points/Internal/IndexService.swift
+@@ -17,15 +17,12 @@ internal final class IndexService: Sendable {
+         collection: String,
+         fieldName: String,
+         fieldType: FieldType,
+-        wait: Bool
++        wait: Bool,
++        isTenant: Bool = false
+     ) async throws {
+         let client = Qdrant_Points.Client(wrapping: base.grpcClient)
+ 
+-        var grpcRequest = Qdrant_CreateFieldIndexCollection()
+-        grpcRequest.collectionName = collection
+-        grpcRequest.fieldName = fieldName
+-        grpcRequest.fieldType = fieldType.grpc
+-        grpcRequest.wait = wait
++        let grpcRequest = Self.legacyIndexRequest(collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: isTenant)
+ 
+         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
+ 
+@@ -69,6 +66,22 @@ internal final class IndexService: Sendable {
+     }
+ 
+     /// Deletes an index on a payload field.
++
++    static func legacyIndexRequest(collection: String, fieldName: String, fieldType: FieldType, wait: Bool, isTenant: Bool) -> Qdrant_CreateFieldIndexCollection {
++        var grpcRequest = Qdrant_CreateFieldIndexCollection()
++        grpcRequest.collectionName = collection
++        grpcRequest.fieldName = fieldName
++        grpcRequest.fieldType = fieldType.grpc
++        if isTenant, fieldType == .keyword {
++            var params = Qdrant_KeywordIndexParams()
++            params.isTenant = true
++            grpcRequest.fieldIndexParams.keywordIndexParams = params
++        }
++        grpcRequest.wait = wait
++
++        return grpcRequest
++    }
++
+     func deleteFieldIndex(
+         collection: String,
+         fieldName: String,
+diff --git a/Sources/QdrantGRPC/Services/Points/PointsService.swift b/Sources/QdrantGRPC/Services/Points/PointsService.swift
+index ab3b45d..81e672c 100644
+--- a/Sources/QdrantGRPC/Services/Points/PointsService.swift
++++ b/Sources/QdrantGRPC/Services/Points/PointsService.swift
+@@ -436,9 +436,19 @@ public final class PointsService: PointsServiceProtocol, Sendable {
+         fieldName: String,
+         fieldType: FieldType,
+         wait: Bool = true
++    ) async throws {
++        try await createFieldIndex(collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: false)
++    }
++
++    public func createFieldIndex(
++        collection: String,
++        fieldName: String,
++        fieldType: FieldType,
++        wait: Bool = true,
++        isTenant: Bool
+     ) async throws {
+         try await index.createFieldIndex(
+-            collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait)
++            collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: isTenant)
+     }
+ 
+     public func createFieldIndex(
+diff --git a/Sources/QdrantRest/Services/CollectionsService.swift b/Sources/QdrantRest/Services/CollectionsService.swift
+index a789def..286e92b 100644
+--- a/Sources/QdrantRest/Services/CollectionsService.swift
++++ b/Sources/QdrantRest/Services/CollectionsService.swift
+@@ -296,6 +296,7 @@ extension IdTrackerParams: Encodable {
+ 
+ extension StrictModeConfig: Encodable {
+     enum CodingKeys: String, CodingKey {
++        case enabled
+         case requireTenantFilter = "require_tenant_filter"
+         case searchMaxBatchsize = "search_max_batchsize"
+         case maxResidentMemoryPercent = "max_resident_memory_percent"
+@@ -303,6 +304,7 @@ extension StrictModeConfig: Encodable {
+ 
+     public func encode(to encoder: Encoder) throws {
+         var container = encoder.container(keyedBy: CodingKeys.self)
++        try container.encodeIfPresent(enabled, forKey: .enabled)
+         try container.encodeIfPresent(requireTenantFilter, forKey: .requireTenantFilter)
+         try container.encodeIfPresent(searchMaxBatchsize, forKey: .searchMaxBatchsize)
+         try container.encodeIfPresent(maxResidentMemoryPercent, forKey: .maxResidentMemoryPercent)
+diff --git a/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift b/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift
+new file mode 100644
+index 0000000..cefa37f
+--- /dev/null
++++ b/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift
+@@ -0,0 +1,91 @@
++import Foundation
++import Testing
++import QdrantCore
++import QdrantGRPC
++
++@Suite("Chunky client compatibility integration", .serialized)
++struct ChunkyCompatibilityIntegrationTests {
++    @Test func duplicateOptionsCreationPreservesTypedError() async throws {
++        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
++        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
++        defer { client.close() }
++        let name = "chunky-duplicate-" + UUID().uuidString.lowercased()
++        let options = CollectionOptions(vectors: .single(VectorConfig(size: 3, distance: .cosine)))
++        try await client.collections.create(name: name, options: options)
++        do {
++            do {
++                try await client.collections.create(name: name, options: options)
++                Issue.record("Duplicate creation should fail")
++            } catch QdrantError.collectionAlreadyExists(let message) {
++                #expect(message.contains(name))
++            }
++            #expect(try await client.collections.exists(name: name))
++        } catch {
++            try? await client.collections.delete(name: name)
++            throw error
++        }
++        try await client.collections.delete(name: name)
++    }
++
++    @Test func strictModeEnforcesBatchLimitOnlyWhenEnabled() async throws {
++        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
++        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
++        defer { client.close() }
++        for enabled in [false, true] {
++            let name = "chunky-strict-" + UUID().uuidString.lowercased()
++            let options = CollectionOptions(vectors: .single(VectorConfig(size: 3, distance: .cosine)), strictMode: StrictModeConfig(enabled: enabled, searchMaxBatchsize: 1))
++            try await client.collections.create(name: name, options: options)
++            do {
++                let query = QueryRequest(query: .nearest(.dense([1, 0, 0])))
++                let allowed = try await client.points.queryBatch(collection: name, queries: [query])
++                #expect(allowed.count == 1)
++                if enabled {
++                    do {
++                        _ = try await client.points.queryBatch(collection: name, queries: [query, query])
++                        Issue.record("Enabled strict mode accepted an oversized batch")
++                    } catch {
++                        #expect(error.localizedDescription.lowercased().contains("batch"))
++                    }
++                } else {
++                    let allowedBatch = try await client.points.queryBatch(collection: name, queries: [query, query])
++                    #expect(allowedBatch.count == 2)
++                }
++            } catch {
++                try? await client.collections.delete(name: name)
++                throw error
++            }
++            try await client.collections.delete(name: name)
++        }
++    }
++
++    @Test func hybridIngestMetadataFilteringAndSnapshot() async throws {
++        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
++        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
++        defer { client.close() }
++        let name = "chunky-compat-" + UUID().uuidString.lowercased()
++        try await client.collections.create(name: name, vectors: .named(["dense": VectorConfig(size: 3, distance: .cosine)]), sparseVectors: ["sparse": SparseVectorParams(modifier: .idf)], onDiskPayload: true, quantizationConfig: .scalar(quantile: nil, alwaysRam: false))
++        do {
++            let info = try await client.collections.get(name: name)
++            #expect(info.vectorSize == 3)
++            #expect(info.vectorName == "dense")
++            try await client.points.createFieldIndex(collection: name, fieldName: "library_id", fieldType: .keyword, isTenant: true)
++            let point = Point(id: .integer(1), vector: .namedWithSparse(dense: ["dense": [1, 0, 0]], sparse: ["sparse": SparseVector(indices: [7], values: [1])]), payload: ["library_id": .string("fixture")])
++            try await client.points.upsert(collection: name, points: [point], wait: true)
++            let filter = Filter(must: [.field(key: "library_id", match: .keyword("fixture"))])
++            let dense = try await client.points.search(collection: name, vector: [Float(1), 0, 0], filter: filter, vectorName: "dense")
++            #expect(dense.count == 1)
++            let hybrid = try await client.points.query(collection: name, query: .fusion(.rrf), prefetch: [PrefetchQuery(query: .nearest(.dense([1, 0, 0])), using: "dense", filter: filter, limit: 10), PrefetchQuery(query: .nearest(.sparse(indices: [7], values: [1])), using: "sparse", filter: filter, limit: 10)], limit: 10)
++            #expect(hybrid.count == 1)
++            let excluded = try await client.points.search(collection: name, vector: [Float(1), 0, 0], filter: Filter(must: [.field(key: "library_id", match: .keyword("other"))]), vectorName: "dense")
++            #expect(excluded.isEmpty)
++            let snapshot = try await client.snapshots.create(collection: name)
++            let snapshots = try await client.snapshots.list(collection: name)
++            #expect(snapshots.contains { $0.name == snapshot.name })
++            try await client.snapshots.delete(collection: name, snapshot: snapshot.name)
++        } catch {
++            try? await client.collections.delete(name: name)
++            throw error
++        }
++        try await client.collections.delete(name: name)
++    }
++}
+diff --git a/Tests/Mocks/MockCollectionsService.swift b/Tests/Mocks/MockCollectionsService.swift
+index ac28fde..615c762 100644
+--- a/Tests/Mocks/MockCollectionsService.swift
++++ b/Tests/Mocks/MockCollectionsService.swift
+@@ -50,6 +50,7 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
+     // MARK: - Reset
+ 
+     public func reset() {
++        optionCreates = []
+         listCallCount = 0
+         getCallCount = 0
+         getCalls = []
+diff --git a/Tests/Mocks/MockPointsService.swift b/Tests/Mocks/MockPointsService.swift
+index 7a0b89b..bd9840e 100644
+--- a/Tests/Mocks/MockPointsService.swift
++++ b/Tests/Mocks/MockPointsService.swift
+@@ -103,6 +103,9 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
+     // MARK: - Reset
+ 
+     public func reset() {
++        lastUpdateMode = nil
++        vectorNameCalls = []
++        createFieldSchemaCalls = []
+         upsertCallCount = 0
+         upsertCalls = []
+         getCallCount = 0
+diff --git a/Tests/QdrantGRPCTests/ChunkyCompatibilityTests.swift b/Tests/QdrantGRPCTests/ChunkyCompatibilityTests.swift
+new file mode 100644
+index 0000000..3a3252a
+--- /dev/null
++++ b/Tests/QdrantGRPCTests/ChunkyCompatibilityTests.swift
+@@ -0,0 +1,85 @@
++import Foundation
++import Testing
++import QdrantCore
++import QdrantProto
++@testable import QdrantGRPC
++
++@Suite("Chunky compatibility")
++struct ChunkyCompatibilityTests {
++    @Test func hybridUpsertPreservesDenseAndSparseVectors() throws {
++        let values = VectorData.namedWithSparse(dense: ["dense": [0.1, 0.2]], sparse: ["sparse": SparseVector(indices: [4, 12], values: [0.5, 1])])
++        #expect(values.grpc.vectors.vectors["dense"]?.dense.data == [0.1, 0.2])
++        #expect(values.grpc.vectors.vectors["sparse"]?.sparse.indices == [4, 12])
++        let encoded = try JSONEncoder().encode(values)
++        let object = try #require(JSONSerialization.jsonObject(with: encoded) as? [String: Any])
++        let sparse = try #require(object["sparse"] as? [String: Any])
++        #expect(sparse["indices"] as? [Int] == [4, 12])
++        let decoded = try JSONDecoder().decode(VectorData.self, from: encoded)
++        #expect(decoded.grpc.vectors.vectors["sparse"]?.sparse.values == [0.5, 1])
++    }
++
++    @Test func namedDenseIdentitySurvivesMetadataMapping() {
++        var raw = Qdrant_CollectionInfo()
++        var dense = Qdrant_VectorParams()
++        dense.size = 1024
++        var other = Qdrant_VectorParams()
++        other.size = 384
++        var map = Qdrant_VectorParamsMap()
++        map.map = ["dense": dense, "other": other]
++        raw.config.params.vectorsConfig.paramsMap = map
++        let info = QdrantCore.CollectionInfo(name: "fixture", grpc: raw)
++        #expect(info.vectorSize == 1024)
++        #expect(info.vectorName == "dense")
++        map.map = ["custom": other]
++        raw.config.params.vectorsConfig.paramsMap = map
++        let custom = QdrantCore.CollectionInfo(name: "fixture", grpc: raw)
++        #expect(custom.vectorName == "custom")
++        #expect(custom.vectorSize == 384)
++    }
++
++    @Test func tenantIndexIsPreserved() {
++        let request = IndexService.legacyIndexRequest(collection: "fixture", fieldName: "library_id", fieldType: .keyword, wait: false, isTenant: true)
++        #expect(request.fieldIndexParams.keywordIndexParams.isTenant)
++        #expect(!request.wait)
++        let ordinary = IndexService.legacyIndexRequest(collection: "fixture", fieldName: "source", fieldType: .keyword, wait: false, isTenant: false)
++        #expect(!ordinary.hasFieldIndexParams)
++    }
++
++    @Test func ambiguousNamedVectorsDoNotInventIdentity() {
++        var raw = Qdrant_CollectionInfo()
++        var params = Qdrant_VectorParams()
++        params.size = 384
++        var map = Qdrant_VectorParamsMap()
++        map.map = ["first": params, "second": params]
++        raw.config.params.vectorsConfig.paramsMap = map
++        let info = QdrantCore.CollectionInfo(name: "fixture", grpc: raw)
++        #expect(info.vectorSize == nil)
++        #expect(info.vectorName == nil)
++    }
++
++    @Test func unnamedAndMissingIdentityStayDistinct() {
++        var raw = Qdrant_CollectionInfo()
++        #expect(QdrantCore.CollectionInfo(name: "fixture", grpc: raw).vectorSize == nil)
++        raw.config.params.vectorsConfig.params.size = 768
++        let info = QdrantCore.CollectionInfo(name: "fixture", grpc: raw)
++        #expect(info.vectorSize == 768)
++        #expect(info.vectorName == nil)
++    }
++
++    @Test func legacyHybridCreationPreservesSparseAndQuantizationOptions() {
++        let request = CollectionsService.legacyCreateRequest(name: "fixture", vectors: .named(["dense": VectorConfig(size: 1024, distance: .cosine, onDisk: true)]), sparseVectors: ["sparse": SparseVectorParams(modifier: .idf)], onDiskPayload: true, quantizationConfig: .scalar(quantile: 0.99, alwaysRam: false))
++        #expect(request.collectionName == "fixture")
++        #expect(request.vectorsConfig.paramsMap.map["dense"]?.size == 1024)
++        #expect(request.vectorsConfig.paramsMap.map["dense"]?.onDisk == true)
++        #expect(request.sparseVectorsConfig.map["sparse"]?.modifier == .idf)
++        #expect(request.onDiskPayload)
++        #expect(request.quantizationConfig.scalar.quantile == 0.99)
++        #expect(request.quantizationConfig.scalar.hasAlwaysRam)
++        #expect(!request.quantizationConfig.scalar.alwaysRam)
++    }
++
++    @Test func legacyBinaryAndProductRemainAvailable() {
++        #expect(QuantizationConfig.binary(alwaysRam: true).grpc.binary.alwaysRam)
++        #expect(QuantizationConfig.product(compression: .x16, alwaysRam: nil).grpc.product.compression == .x16)
++    }
++}
+diff --git a/Tests/QdrantGRPCTests/CollectionParityTests.swift b/Tests/QdrantGRPCTests/CollectionParityTests.swift
+index fc6a8c4..990e590 100644
+--- a/Tests/QdrantGRPCTests/CollectionParityTests.swift
++++ b/Tests/QdrantGRPCTests/CollectionParityTests.swift
+@@ -7,6 +7,18 @@ import QdrantProto
+ 
+ @Suite("Collection and point gRPC mapping")
+ struct CollectionParityTests {
++    @Test func strictModeActivationPresence() {
++        let omitted = StrictModeConfig(searchMaxBatchsize: 1).grpc
++        #expect(!omitted.hasEnabled)
++        #expect(omitted.searchMaxBatchsize == 1)
++        for enabled in [false, true] {
++            let value = StrictModeConfig(enabled: enabled, searchMaxBatchsize: 1).grpc
++            #expect(value.hasEnabled)
++            #expect(value.enabled == enabled)
++            #expect(value.searchMaxBatchsize == 1)
++        }
++    }
++
+     @Test("TurboQuant datatype and quantization map onto the proto")
+     func turboQuant() {
+         let config = VectorConfig(size: 128, distance: .cosine, datatype: .turbo16, memory: .cached)
+diff --git a/Tests/QdrantGRPCTests/MockResetTests.swift b/Tests/QdrantGRPCTests/MockResetTests.swift
+new file mode 100644
+index 0000000..92c7e68
+--- /dev/null
++++ b/Tests/QdrantGRPCTests/MockResetTests.swift
+@@ -0,0 +1,32 @@
++import Testing
++import QdrantCore
++import QdrantMocks
++
++@Suite("Mock reuse")
++struct MockResetTests {
++    @Test func resetClearsModernTracking() async throws {
++        let points = MockPointsService()
++        try await points.upsert(collection: "books", points: [], wait: true, updateMode: .insertOnly)
++        try await points.createVectorName(collection: "books", name: "title", spec: .dense(DenseVectorSpec(size: 8, distance: .dot)), wait: true)
++        try await points.createFieldIndex(collection: "books", fieldName: "title", schema: .text(TextIndexOptions(tokenizer: .code)), wait: true)
++        #expect(points.lastUpdateMode == .insertOnly)
++        #expect(points.vectorNameCalls.count == 1)
++        #expect(points.createFieldSchemaCalls.count == 1)
++        points.reset()
++        #expect(points.lastUpdateMode == nil)
++        #expect(points.vectorNameCalls.isEmpty)
++        #expect(points.createFieldSchemaCalls.isEmpty)
++        try await points.deleteVectorName(collection: "other", name: "body", wait: true)
++        #expect(points.vectorNameCalls.count == 1)
++        #expect(points.vectorNameCalls.first?.collection == "other")
++
++        let collections = MockCollectionsService()
++        let options = CollectionOptions(vectors: .single(VectorConfig(size: 8, distance: .dot)))
++        try await collections.create(name: "books", options: options)
++        #expect(collections.optionCreates.count == 1)
++        collections.reset()
++        #expect(collections.optionCreates.isEmpty)
++        try await collections.create(name: "other", options: options)
++        #expect(collections.optionCreates.count == 1)
++    }
++}
+diff --git a/Tests/QdrantRestTests/CollectionParityTests.swift b/Tests/QdrantRestTests/CollectionParityTests.swift
+index c98d978..d94c0b8 100644
+--- a/Tests/QdrantRestTests/CollectionParityTests.swift
++++ b/Tests/QdrantRestTests/CollectionParityTests.swift
+@@ -6,6 +6,17 @@ import Testing
+ 
+ @Suite("Collection and point REST encoding")
+ struct RestCollectionParityTests {
++    @Test func strictModeActivationPresence() throws {
++        let omitted = try JSONSerialization.jsonObject(with: JSONEncoder().encode(StrictModeConfig(searchMaxBatchsize: 1))) as! [String: Any]
++        #expect(omitted["enabled"] == nil)
++        #expect(omitted["search_max_batchsize"] as? Int == 1)
++        for enabled in [false, true] {
++            let value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(StrictModeConfig(enabled: enabled, searchMaxBatchsize: 1))) as! [String: Any]
++            #expect(value["enabled"] as? Bool == enabled)
++            #expect(value["search_max_batchsize"] as? Int == 1)
++        }
++    }
++
+     @Test("Collection options encode TurboQuant, memory placement, and strict mode")
+     func options() throws {
+         let options = CollectionOptions(

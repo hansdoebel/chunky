@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for search operations.
 internal final class SearchService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class SearchService: Sendable {
         self.base = base
     }
 
+    /// Searches for similar vectors.
     func search(
         collection: String,
         vector: [Float],
@@ -45,13 +47,9 @@ internal final class SearchService: Sendable {
             grpcRequest.vectorName = vectorName
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
-        var vectorsSelector = Qdrant_WithVectorsSelector()
-        vectorsSelector.enable = withVectors
-        grpcRequest.withVectors = vectorsSelector
+        grpcRequest.withVectors = .enabled(withVectors)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -63,6 +61,7 @@ internal final class SearchService: Sendable {
         }
     }
 
+    /// Performs multiple searches in a single request.
     func searchBatch(
         collection: String,
         searches: [SearchRequest]
@@ -85,9 +84,7 @@ internal final class SearchService: Sendable {
                 searchPoints.scoreThreshold = scoreThreshold
             }
 
-            var payloadSelector = Qdrant_WithPayloadSelector()
-            payloadSelector.enable = search.withPayload
-            searchPoints.withPayload = payloadSelector
+            searchPoints.withPayload = .enabled(search.withPayload)
 
             return searchPoints
         }
@@ -105,6 +102,7 @@ internal final class SearchService: Sendable {
         }
     }
 
+    /// Searches for groups of similar vectors.
     func searchGroups(
         collection: String,
         vector: [Float],
@@ -127,9 +125,7 @@ internal final class SearchService: Sendable {
             grpcRequest.filter = filter.grpc
         }
 
-        var payloadSelector = Qdrant_WithPayloadSelector()
-        payloadSelector.enable = withPayload
-        grpcRequest.withPayload = payloadSelector
+        grpcRequest.withPayload = .enabled(withPayload)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
@@ -142,6 +138,7 @@ internal final class SearchService: Sendable {
         }
     }
 
+    /// Computes distance matrix between sampled points (pairs format).
     func searchMatrixPairs(
         collection: String,
         filter: Filter?,
@@ -175,6 +172,7 @@ internal final class SearchService: Sendable {
         }
     }
 
+    /// Computes distance matrix between sampled points (offsets format).
     func searchMatrixOffsets(
         collection: String,
         filter: Filter?,

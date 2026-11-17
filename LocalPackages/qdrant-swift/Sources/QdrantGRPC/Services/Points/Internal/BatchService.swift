@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for batch update operations.
 internal final class BatchService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class BatchService: Sendable {
         self.base = base
     }
 
+    /// Performs multiple update operations in a single batch.
     func updateBatch(
         collection: String,
         operations: [PointsUpdateOperation],

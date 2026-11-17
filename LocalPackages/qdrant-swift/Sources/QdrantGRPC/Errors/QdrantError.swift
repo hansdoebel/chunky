@@ -14,7 +14,7 @@ public enum QdrantError: Error, Sendable {
     case permissionDenied(String)
     case internalError(String)
     case unknown(String)
-
+    /// TLS is required for connections to remote (non-localhost) hosts
     case tlsRequiredForRemoteHost(String)
 
     public static func from(_ error: Error) -> QdrantError {
@@ -25,7 +25,7 @@ public enum QdrantError: Error, Sendable {
     }
 
     public static func from(_ error: RPCError) -> QdrantError {
-        let message = error.message ?? "Unknown error"
+        let message = error.message
 
         return switch error.code {
         case .invalidArgument: .invalidArgument(message)

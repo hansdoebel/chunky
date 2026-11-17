@@ -4,6 +4,7 @@ import GRPCNIOTransportHTTP2
 import QdrantCore
 import QdrantProto
 
+/// Internal service for field index and facet operations.
 internal final class IndexService: Sendable {
     private let base: PointsServiceBase
 
@@ -11,6 +12,7 @@ internal final class IndexService: Sendable {
         self.base = base
     }
 
+    /// Creates an index on a payload field.
     func createFieldIndex(
         collection: String,
         fieldName: String,
@@ -20,32 +22,64 @@ internal final class IndexService: Sendable {
     ) async throws {
         let client = Qdrant_Points.Client(wrapping: base.grpcClient)
 
-        var grpcRequest = Qdrant_CreateFieldIndexCollection()
-        grpcRequest.collectionName = collection
-        grpcRequest.fieldName = fieldName
-        grpcRequest.fieldType = fieldType.grpc
-        grpcRequest.wait = wait
-        if isTenant, fieldType == .keyword {
-            var params = Qdrant_KeywordIndexParams()
-            params.isTenant = true
-            grpcRequest.fieldIndexParams.keywordIndexParams = params
-        }
+        let grpcRequest = Self.legacyIndexRequest(collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: isTenant)
 
         let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
 
         do {
             let response: Qdrant_PointsOperationResponse = try await client.createFieldIndex(
                 request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Create field index failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Create field index")
         } catch let error as QdrantError {
             throw error
         } catch {
             throw QdrantError.from(error)
         }
+    }
+
+    func createFieldIndex(
+        collection: String,
+        fieldName: String,
+        schema: FieldIndexSchema,
+        wait: Bool
+    ) async throws {
+        let client = Qdrant_Points.Client(wrapping: base.grpcClient)
+
+        var grpcRequest = Qdrant_CreateFieldIndexCollection()
+        grpcRequest.collectionName = collection
+        grpcRequest.fieldName = fieldName
+        grpcRequest.fieldType = schema.type.grpc
+        grpcRequest.fieldIndexParams = schema.grpc
+        grpcRequest.wait = wait
+
+        let request = ClientRequest(message: grpcRequest, metadata: base.metadata)
+
+        do {
+            let response: Qdrant_PointsOperationResponse = try await client.createFieldIndex(
+                request: request)
+            try response.ensureApplied("Create field index")
+        } catch let error as QdrantError {
+            throw error
+        } catch {
+            throw QdrantError.from(error)
+        }
+    }
+
+    /// Deletes an index on a payload field.
+
+    static func legacyIndexRequest(collection: String, fieldName: String, fieldType: FieldType, wait: Bool, isTenant: Bool) -> Qdrant_CreateFieldIndexCollection {
+        var grpcRequest = Qdrant_CreateFieldIndexCollection()
+        grpcRequest.collectionName = collection
+        grpcRequest.fieldName = fieldName
+        grpcRequest.fieldType = fieldType.grpc
+        if isTenant, fieldType == .keyword {
+            var params = Qdrant_KeywordIndexParams()
+            params.isTenant = true
+            grpcRequest.fieldIndexParams.keywordIndexParams = params
+        }
+        grpcRequest.wait = wait
+
+        return grpcRequest
     }
 
     func deleteFieldIndex(
@@ -65,11 +99,7 @@ internal final class IndexService: Sendable {
         do {
             let response: Qdrant_PointsOperationResponse = try await client.deleteFieldIndex(
                 request: request)
-            guard response.result.status == .completed || response.result.status == .acknowledged
-            else {
-                throw QdrantError.unexpectedResponse(
-                    "Delete field index failed with status: \(response.result.status)")
-            }
+            try response.ensureApplied("Delete field index")
         } catch let error as QdrantError {
             throw error
         } catch {
@@ -77,6 +107,7 @@ internal final class IndexService: Sendable {
         }
     }
 
+    /// Performs faceted search to get value counts.
     func facet(
         collection: String,
         key: String,
