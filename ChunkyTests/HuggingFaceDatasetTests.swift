@@ -207,6 +207,107 @@ struct HuggingFaceDatasetTests {
         #expect(FileManager.default.fileExists(atPath: file.path))
     }
 
+    @Test func streamBudgetStopsAtWholeRowAndKeepsLegacyCompatibility() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let http = DatasetFixtureHTTP()
+        http.payloadSize = 1_000
+        let service = HuggingFaceDatasetService(http: http, availableCapacity: { _ in Int64.max })
+        let saved = try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 2_500, folder: root)
+        #expect(saved.manifest.rowCount == 2)
+        #expect(saved.manifest.stopReason == .byteBudget)
+        #expect(saved.byteCount <= 2_500)
+        #expect(saved.benchmarkCompatible)
+        #expect(try DatasetSnapshot.load(from: saved.directory).manifest.rowCount == 2)
+        #expect(try await DatasetStreamSnapshot.validate(from: saved.directory).manifest.sha256 == saved.manifest.sha256)
+    }
+
+    @Test func streamSourceExhaustionAndAdaptivePagesPreserveAllRows() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let http = DatasetFixtureHTTP()
+        http.totalRows = 31
+        http.maximumPageRows = 25
+        let service = HuggingFaceDatasetService(http: http, availableCapacity: { _ in Int64.max })
+        let saved = try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 1_000_000, folder: root)
+        #expect(http.requestedLengths.prefix(3) == [100, 50, 25])
+        #expect(saved.manifest.rowCount == 31)
+        #expect(saved.manifest.stopReason == .sourceExhausted)
+        #expect(try await DatasetStreamSnapshot.validate(from: saved.directory).manifest.rowCount == 31)
+    }
+
+    @Test func streamDiskPreflightAndOversizedFirstRowLeaveNoPartialFiles() async throws {
+        for noSpace in [false, true] {
+            let root = try temporaryFolder()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let http = DatasetFixtureHTTP()
+            let service = HuggingFaceDatasetService(http: http, availableCapacity: { _ in noSpace ? 0 : Int64.max })
+            do {
+                _ = try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 1, folder: root)
+                Issue.record("Unsafe download must fail")
+            } catch DatasetError.insufficientSpace { #expect(noSpace) }
+              catch DatasetError.sampleBudgetTooSmall { #expect(!noSpace) }
+            #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+            if noSpace { #expect(http.offsets.isEmpty) }
+        }
+    }
+
+    @Test func oversizedSingleResponseReportsActualStreamLimit() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let http = DatasetFixtureHTTP()
+        http.maximumPageRows = 0
+        let service = HuggingFaceDatasetService(http: http, availableCapacity: { _ in Int64.max })
+        do {
+            _ = try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 100 * 1024 * 1024, folder: root)
+            Issue.record("An oversized single response must fail")
+        } catch DatasetError.responseLimit {
+            #expect(DatasetError.responseLimit.localizedDescription.contains("5 MiB"))
+        }
+        #expect(http.requestedLengths.last == 1)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test func streamCancellationAfterPageCleansStaging() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let service = HuggingFaceDatasetService(http: DatasetFixtureHTTP(), availableCapacity: { _ in Int64.max })
+        let box = DatasetStreamTaskBox()
+        let task = Task {
+            try await service.downloadStream(dataset: Self.dataset, split: Self.split, byteBudget: 1_000_000, folder: root) { _, _ in box.task?.cancel() }
+        }
+        box.task = task
+        do { _ = try await task.value; Issue.record("Cancellation must stop stream") }
+        catch is CancellationError { }
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test func sourceSizesAndPreviewAreRevisionCheckedAndTyped() async throws {
+        let http = DatasetFixtureHTTP()
+        let service = HuggingFaceDatasetService(http: http)
+        #expect(try await service.size(for: Self.dataset, split: Self.split) == DatasetSizeInfo(sourceRows: 205, parquetBytes: 500))
+        let estimate = try await service.estimate(for: Self.dataset, split: Self.split)
+        #expect(estimate.previewRows == 20)
+        #expect(estimate.bytes(for: 40) == estimate.previewBytes * 2)
+        for mode in ["partial", "boolean", "negative", "wrongSplit", "revision"] {
+            http.sizeFailure = mode
+            do { _ = try await service.size(for: Self.dataset, split: Self.split); Issue.record("Invalid size must fail") }
+            catch DatasetError.invalidResponse { #expect(mode != "revision") }
+            catch DatasetError.revisionChanged { #expect(mode == "revision") }
+        }
+    }
+
+    @Test func presetsAndRecommendationsDoNotConflateLanguagesOrBudgets() {
+        #expect(DatasetLibraryState.byteLabel(10 * 1024 * 1024) == "10 MiB")
+        #expect(DatasetLibraryState.byteLabel(1024 * 1024 * 1024) == "1 GiB")
+        #expect(DatasetSampleSize.small.byteBudget == 10 * 1024 * 1024)
+        #expect(DatasetSampleSize.medium.byteBudget == 100 * 1024 * 1024)
+        #expect(DatasetSampleSize.large.byteBudget == DatasetStreamSnapshot.maximumBytes)
+        #expect(DatasetSampleSize.legacy.byteBudget == nil)
+        #expect(DatasetRecommendation.wikipedia.map(\.config) == ["text-corpus", "20231101.simple", "20231101.en", "20231101.de", "default"])
+        #expect(Set(DatasetRecommendation.wikipedia.map(\.id)).count == 5)
+    }
+
     @Test func datasetLibraryScreenshotsContainVisibleContent() throws {
         for scheme in [ColorScheme.light, .dark] {
             let state = DatasetLibraryState()
@@ -214,10 +315,12 @@ struct HuggingFaceDatasetTests {
             state.selected = Self.dataset
             state.splits = [Self.split]
             state.splitID = Self.split.id
-            state.status = "Fixture metadata. Choose a split and row limit; no benchmark has been measured."
-            let view = DatasetLibraryPane(state: state).frame(width: 920, height: 820).environment(\.colorScheme, scheme)
+            state.status = "Fixture metadata. No benchmark has been measured. Cloud storage is checked separately during import."
+            state.sizeInfo = DatasetSizeInfo(sourceRows: 205, parquetBytes: 12_345_678)
+            state.sizeStatus = "Fixture sizes, not live dataset measurements."
+            let view = DatasetLibraryPane(state: state).frame(width: 920, height: 1100).environment(\.colorScheme, scheme)
             let host = NSHostingView(rootView: view)
-            host.frame = NSRect(x: 0, y: 0, width: 920, height: 820)
+            host.frame = NSRect(x: 0, y: 0, width: 920, height: 1100)
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
             window.appearance = NSAppearance(named: scheme == .dark ? .darkAqua : .aqua)
             host.appearance = window.appearance
@@ -266,6 +369,9 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
     var missingTruncation = false
     var malformedTruncation = false
     var invalidSearchCount: Int?
+    var maximumPageRows: Int?
+    var requestedLengths: [Int] = []
+    var sizeFailure = ""
 
     @MainActor func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
         let revision = HuggingFaceDatasetTests.revision
@@ -280,9 +386,18 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
         if url.path == "/splits" {
             return DatasetHTTPResponse(data: Data("{\"splits\":[{\"config\":\"corpus\",\"split\":\"train\"}]}".utf8), revision: revision)
         }
+        if url.path == "/size" {
+            var item: [String: Any] = ["dataset": "fixture/corpus", "config": "corpus", "split": "train", "num_rows": 205, "num_bytes_parquet_files": 500]
+            if sizeFailure == "boolean" { item["num_rows"] = true }
+            if sizeFailure == "negative" { item["num_bytes_parquet_files"] = -1 }
+            if sizeFailure == "wrongSplit" { item["split"] = "other" }
+            return DatasetHTTPResponse(data: try JSONSerialization.data(withJSONObject: ["size": ["splits": [item]], "partial": sizeFailure == "partial"]), revision: sizeFailure == "revision" ? nil : revision)
+        }
         let query = Dictionary(uniqueKeysWithValues: URLComponents(url: url, resolvingAgainstBaseURL: false)!.queryItems!.map { ($0.name, $0.value!) })
         let offset = Int(query["offset"]!)!
         let length = Int(query["length"]!)!
+        requestedLengths.append(length)
+        if let maximumPageRows, length > maximumPageRows { throw DatasetError.limitExceeded }
         offsets.append(offset)
         if oversized { return DatasetHTTPResponse(data: Data(repeating: 32, count: maximumBytes + 1), revision: revision) }
         let count = incomplete ? 0 : min(length, totalRows - offset)
@@ -308,4 +423,9 @@ private final class DeferredDatasetHTTP: DatasetHTTP {
 @MainActor
 private final class DatasetTaskBox {
     var task: Task<DatasetSnapshot, Error>?
+}
+
+@MainActor
+private final class DatasetStreamTaskBox {
+    var task: Task<DatasetStreamDownload, Error>?
 }
