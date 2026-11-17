@@ -240,3 +240,9 @@ python3 -m venv .venv
 ```
 
 Or from the repo root: `make test-worker`.
+
+Paper DOI queries use exact stored strings: case and DOI URL prefixes are not normalized. New worker summaries inherit DOI from prepared passages, including imported bibliography overrides and the `metadata_include_doi` setting. Their `summary_metadata_version=1` marks DOI coverage as known even when DOI is unavailable or intentionally disabled. Summary text, embedding identity, vectors and point IDs are unchanged by this metadata addition.
+
+Before a paper DOI query, the worker makes a read-only, one-result lookup for older summaries that lack both DOI and the coverage marker. It keeps the same library and other document filters, excluding the DOI condition itself. When DOI is an OR alternative (`should`), coverage drops that entire OR group rather than requiring its remaining alternatives; mandatory library and document filters still apply. If such a record exists, the API returns HTTP 409 with `summary_doi_coverage_incomplete`, for both summary-only and expanded searches. This prevents a matching passage DOI from being misreported as no matching paper. Older summaries with a stored DOI remain searchable; known DOI-less new summaries do not block queries. A failed coverage lookup fails the request rather than returning a false empty result.
+
+No existing point, payload index, collection configuration or embedding is migrated or backfilled. This also applies to older or Mac-created summaries without the marker. Use passage DOI search or remove the DOI filter to search these collections; no re-ingest is performed automatically. The browser retains its paper DOI guard until it can establish compatible coverage for the selected scope. Passage DOI filtering is unchanged.

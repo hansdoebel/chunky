@@ -82,6 +82,7 @@ def summary_payload(
     authors: Any,
     year: int | None,
     document_id: str | None,
+    doi: str | None = None,
     source_path: str | None = None,
     library_id: str = "default",
 ) -> dict[str, Any]:
@@ -92,6 +93,7 @@ def summary_payload(
         "source": source,
         "record_type": DOCUMENT_RECORD,
         "summary_kind": kind,
+        "summary_metadata_version": 1,
         "content_type": "document",
         "library_id": library,
     }
@@ -107,6 +109,8 @@ def summary_payload(
         payload["year"] = int(year)
     if document_id:
         payload["document_id"] = document_id
+    if doi:
+        payload["doi"] = doi
     if source_path:
         payload["source_path"] = source_path
     return payload
