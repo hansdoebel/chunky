@@ -63,6 +63,8 @@ struct DatasetStreamSnapshotTests {
         let original = try DatasetSnapshot.load(from: directory).manifest
         var legacy = original
         legacy.schemaVersion = 1
+        legacy.requestedRows = 100
+        legacy.totalRows = 205
         let encoder = JSONEncoder()
         encoder.dateEncodingStrategy = .iso8601
         try encoder.encode(legacy).write(to: directory.appendingPathComponent("manifest.json"))
