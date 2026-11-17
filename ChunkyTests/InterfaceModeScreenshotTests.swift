@@ -27,16 +27,22 @@ struct InterfaceModeScreenshotTests {
             let host = NSHostingView(rootView: view)
             let window = makeWindow(host: host, width: 540, height: 760, dark: dark)
             defer { window.orderOut(nil) }
+            let sidebar = SidebarView()
+                .environmentObject(appState)
+                .environment(\.colorScheme, dark ? .dark : .light)
+            let sidebarHost = NSHostingView(rootView: sidebar)
+            let sidebarWindow = makeWindow(host: sidebarHost, width: 280, height: 700, dark: dark)
+            defer { sidebarWindow.orderOut(nil) }
+            var preferenceContent: [Double]?
+            var sidebarContent: [Double]?
             for mode in InterfaceMode.allCases {
                 settings.interfaceMode = mode
-                try capture(host: host, window: window, name: "preferences-\(mode.rawValue)-\(dark ? "dark" : "light")")
-                let sidebar = SidebarView()
-                    .environmentObject(appState)
-                    .environment(\.colorScheme, dark ? .dark : .light)
-                let sidebarHost = NSHostingView(rootView: sidebar)
-                let sidebarWindow = makeWindow(host: sidebarHost, width: 280, height: 700, dark: dark)
-                defer { sidebarWindow.orderOut(nil) }
-                try capture(host: sidebarHost, window: sidebarWindow, name: "sidebar-\(mode.rawValue)-\(dark ? "dark" : "light")")
+                let newPreferenceContent = try capture(host: host, window: window, name: "preferences-\(mode.rawValue)-\(dark ? "dark" : "light")")
+                let newSidebarContent = try capture(host: sidebarHost, window: sidebarWindow, name: "sidebar-\(mode.rawValue)-\(dark ? "dark" : "light")")
+                if let preferenceContent { #expect(newPreferenceContent != preferenceContent) }
+                if let sidebarContent { #expect(newSidebarContent != sidebarContent) }
+                preferenceContent = newPreferenceContent
+                sidebarContent = newSidebarContent
                 #expect(settings.embeddingModel == "example-embedding")
                 #expect(settings.embeddingDimensions == 768)
                 #expect(settings.embeddingAPIURL == "https://example.invalid/v1/embeddings")
@@ -60,7 +66,7 @@ struct InterfaceModeScreenshotTests {
         return window
     }
 
-    private func capture<V: View>(host: NSHostingView<V>, window: NSWindow, name: String) throws {
+    private func capture<V: View>(host: NSHostingView<V>, window: NSWindow, name: String) throws -> [Double] {
         window.layoutIfNeeded()
         host.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
@@ -68,6 +74,7 @@ struct InterfaceModeScreenshotTests {
         let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
         host.cacheDisplay(in: host.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
+        var contentLuminance: [Double] = []
         var lightest = 0.0
         var darkest = 1.0
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: 5) {
@@ -76,9 +83,11 @@ struct InterfaceModeScreenshotTests {
                 let luminance = Double((color.redComponent + color.greenComponent + color.blueComponent) / 3)
                 lightest = max(lightest, luminance)
                 darkest = min(darkest, luminance)
+                if y > bitmap.pixelsHigh / 4 { contentLuminance.append(luminance) }
             }
         }
         #expect(png.count > 5000 && lightest - darkest > 0.2)
         try png.write(to: URL(fileURLWithPath: "/tmp/chunky-interface-\(name).png"))
+        return contentLuminance
     }
 }
