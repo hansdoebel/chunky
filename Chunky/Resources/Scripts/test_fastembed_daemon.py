@@ -1,6 +1,7 @@
 import io
 import unittest
 from unittest.mock import patch
+from types import SimpleNamespace
 
 import fastembed_daemon as daemon
 
@@ -89,6 +90,60 @@ class RuntimeTests(unittest.TestCase):
             daemon.main()
         self.assertEqual(len(stdout.getvalue().splitlines()), 2)
         self.assertIn('"error"', stdout.getvalue())
+
+    def test_strict_input_uses_untruncated_clone_and_rejects_overflow_before_embedding(self):
+        class Tokenizer:
+            def __init__(self):
+                self.truncation = {"max_length": 512}
+                self.padding = True
+
+            def to_str(self):
+                return "fixture-tokenizer"
+
+            def no_truncation(self):
+                self.truncation = None
+
+            def no_padding(self):
+                self.padding = False
+
+            def encode_batch(self, texts, add_special_tokens):
+                self.special = add_special_tokens
+                cap = self.truncation["max_length"] if self.truncation else 10_000
+                return [SimpleNamespace(ids=list(range(min(len(t.split()), cap)))) for t in texts]
+
+        original = Tokenizer()
+        clones = []
+
+        def clone(value):
+            self.assertEqual(value, "fixture-tokenizer")
+            item = Tokenizer()
+            clones.append(item)
+            return item
+
+        runtime = daemon.Runtime(Encoder, tokenizer_factory=clone)
+        encoder = runtime.load()
+        encoder.model = SimpleNamespace(tokenizer=original)
+        with self.assertRaisesRegex(ValueError, "exceeds 512"):
+            runtime.handle(self.request(texts=["word " * 513], reject_truncation=True))
+        self.assertEqual(encoder.calls, [])
+        response = runtime.handle(self.request(texts=["word " * 512], query=True, reject_truncation=True))
+        self.assertTrue(response["untruncated"])
+        self.assertEqual(encoder.calls, ["query"])
+        self.assertEqual(len(clones), 1)
+        self.assertIsNone(clones[0].truncation)
+        self.assertFalse(clones[0].special)
+        self.assertFalse(clones[0].padding)
+        self.assertEqual(original.truncation, {"max_length": 512})
+        self.assertTrue(original.padding)
+        legacy = runtime.handle(self.request(texts=["word " * 513]))
+        self.assertNotIn("untruncated", legacy)
+
+    def test_strict_input_fails_closed_without_known_tokenizer_or_boolean_flag(self):
+        runtime = daemon.Runtime(Encoder)
+        for value in (True, "true", 1):
+            with self.assertRaises(ValueError):
+                runtime.handle(self.request(reject_truncation=value))
+        self.assertEqual(runtime.encoder.calls, [])
 
 
 if __name__ == "__main__":
