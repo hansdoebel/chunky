@@ -82,6 +82,8 @@ struct DatasetCloudEmbeddingProfileTests {
         defer { defaults.removePersistentDomain(forName: suite) }
         defaults.set("invalid", forKey: "chunky.datasetCloud.embeddingProfiles")
         #expect(throws: Error.self) { try DatasetCloudCollectionIdentity.profile(collection: "anything", defaults: defaults) }
+        #expect(throws: Error.self) { try DatasetCloudCollectionIdentity.register(collection: "chunky-dataset-test-" + UUID().uuidString, profile: profile, defaults: defaults) }
+        #expect(defaults.string(forKey: "chunky.datasetCloud.embeddingProfiles") == "invalid")
     }
 
     #if os(macOS)

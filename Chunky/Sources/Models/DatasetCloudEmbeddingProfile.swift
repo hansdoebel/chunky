@@ -97,6 +97,9 @@ enum DatasetCloudCollectionIdentity {
               DatasetCloudEmbeddingProfile.all.contains(profile) else {
             throw DatasetCloudEmbeddingError.invalid("Only a newly created dataset test collection can receive a verified embedding profile.")
         }
+        if defaults.object(forKey: key) != nil, defaults.dictionary(forKey: key) == nil {
+            throw DatasetCloudEmbeddingError.invalid("The saved dataset embedding identity registry is invalid and will not be overwritten.")
+        }
         var records = defaults.dictionary(forKey: key) ?? [:]
         if let previous = records[collection], previous as? String != profile.id {
             throw DatasetCloudEmbeddingError.invalid("The collection already has another embedding identity; it will not be overwritten.")
