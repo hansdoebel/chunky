@@ -2,7 +2,7 @@
 
 .PHONY: build run test test-python test-worker build-web test-web test-all clean open-xcode \
        services qdrant ollama \
-       setup-venv first-launch doctor test-setup
+       setup-venv first-launch doctor test-setup install package-development
 
 doctor:
 	python3 tools/macos_preflight.py
@@ -15,6 +15,12 @@ build: doctor
 
 run: build
 	open "$(CURDIR)/build/DerivedData/Build/Products/Debug/Chunky.app"
+
+install: build
+	python3 tools/macos_distribution.py install --app "$(CURDIR)/build/DerivedData/Build/Products/Debug/Chunky.app"
+
+package-development: build
+	python3 tools/macos_distribution.py package --development --app "$(CURDIR)/build/DerivedData/Build/Products/Debug/Chunky.app" --output "$(CURDIR)/dist/development"
 
 test:
 	xcodebuild test -scheme Chunky -destination 'platform=macOS' -allowProvisioningUpdates
