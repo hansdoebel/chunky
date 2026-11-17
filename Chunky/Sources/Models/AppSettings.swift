@@ -45,6 +45,10 @@ class AppSettings: ObservableObject {
         processingHost == .devbox && devboxIngestTarget == .qdrantCloud
     }
 
+    @Published var appearance: AppAppearance {
+        didSet { defaults.set(appearance.rawValue, forKey: prefix + "appearance") }
+    }
+
     @Published var interfaceMode: InterfaceMode {
         didSet { defaults.set(interfaceMode.rawValue, forKey: prefix + "interfaceMode") }
     }
@@ -449,6 +453,7 @@ class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) {
         self.defaults = defaults
         self.secrets = secrets
+        self.appearance = AppAppearance(rawValue: defaults.string(forKey: prefix + "appearance") ?? "") ?? .system
         self.interfaceMode = InterfaceMode(rawValue: defaults.string(forKey: prefix + "interfaceMode") ?? "") ?? .simple
 
         self.embeddingBackend = defaults.string(forKey: prefix + "embeddingBackend") ?? EmbeddingBackendKind.ollama.rawValue
