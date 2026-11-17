@@ -62,6 +62,28 @@ struct DatasetCloudQdrant {
         try Self.verify(response.body, estimate: estimate)
     }
 
+    func write(name: String, points: [ChunkPoint]) async throws {
+        try DatasetBenchmarkSafety.validateCollection(name, production: "")
+        guard (1...16).contains(points.count) else { throw DatasetBenchmarkError.invalid("Invalid import batch size.") }
+        guard var components = URLComponents(url: try endpoint("collections/\(name)/points"), resolvingAgainstBaseURL: false) else { throw DatasetBenchmarkError.invalid("Invalid Cloud endpoint.") }
+        components.queryItems = [URLQueryItem(name: "wait", value: "true")]
+        guard let url = components.url else { throw DatasetBenchmarkError.invalid("Invalid Cloud endpoint.") }
+        let rows: [[String: Any]] = points.map { point in
+            var payload = point.metadata
+            payload["text"] = point.text
+            payload["source"] = point.source
+            return ["id": point.id, "vector": point.vector, "payload": payload]
+        }
+        let body = try JSONSerialization.data(withJSONObject: ["points": rows])
+        guard body.count <= 16 * 1024 * 1024 else { throw DatasetBenchmarkError.invalid("The encoded upload batch exceeds 16 MiB.") }
+        let response = try await transport.send(method: "PUT", url: url, apiKey: apiKey, body: body)
+        guard (200..<300).contains(response.status),
+              let root = try JSONSerialization.jsonObject(with: response.body) as? [String: Any],
+              let result = root["result"] as? [String: Any], result["status"] as? String == "completed" else {
+            throw DatasetBenchmarkError.invalid("Cloud did not acknowledge the upload as completed (HTTP \(response.status)). The request may have written points; no automatic retry is attempted.")
+        }
+    }
+
     static func verify(_ data: Data, estimate: DatasetCloudEstimate) throws {
         let root = try JSONSerialization.jsonObject(with: data) as? [String: Any]
         let result = root?["result"] as? [String: Any]

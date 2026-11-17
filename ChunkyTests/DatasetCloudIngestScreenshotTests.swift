@@ -6,13 +6,13 @@ import Testing
 @MainActor
 struct DatasetCloudIngestScreenshotTests {
     @Test func cloudIngestRendersNonblankLightAndDark() throws {
-        for dark in [false, true] {
-            let estimate = DatasetCloudEstimate(points: 4200, payloadBytes: 12_000_000, dimensions: 768)
-            let view = DatasetCloudIngestPanel(dataset: "fixture/wiki-de", rows: 1000, snapshotBytes: 10 * 1024 * 1024, target: "fixture.cloud.qdrant.io", provider: "ollama", model: "fixture-model", field: .constant("text"), chunkBytes: .constant(2048), tier: .constant(.free), ramGB: .constant("0.7"), diskGB: .constant("3"), running: false, estimate: estimate, status: "Rendering fixture only; no Cloud import has run.", onSave: nil)
-                .frame(width: 760, height: 1150, alignment: .top)
+        for (dark, preembedded) in [(false, false), (true, false), (false, true), (true, true)] {
+            let estimate = DatasetCloudEstimate(points: 4200, payloadBytes: 12_000_000, dimensions: preembedded ? 1536 : 768)
+            let view = DatasetCloudIngestPanel(dataset: preembedded ? "fixture/pre-embedded" : "fixture/wiki-de", rows: 1000, snapshotBytes: 10 * 1024 * 1024, target: "fixture.cloud.qdrant.io", provider: preembedded ? "openai" : "ollama", model: preembedded ? "text-embedding-3-small" : "fixture-model", field: .constant("text"), preembedded: .constant(preembedded), chunkBytes: .constant(2048), tier: .constant(.free), ramGB: .constant("0.7"), diskGB: .constant("3"), running: false, estimate: estimate, status: "Rendering fixture only; no Cloud import has run.", available: DatasetCloudBudget(tier: .free, ram: 700_000_000, disk: 3_000_000_000), onSave: nil)
+                .frame(width: 760, height: 1230, alignment: .top)
                 .environment(\.colorScheme, dark ? .dark : .light)
             let host = NSHostingView(rootView: view)
-            host.frame = NSRect(x: 0, y: 0, width: 760, height: 1150)
+            host.frame = NSRect(x: 0, y: 0, width: 760, height: 1230)
             let appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             host.appearance = appearance
             let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
@@ -38,7 +38,7 @@ struct DatasetCloudIngestScreenshotTests {
                 }
             }
             #expect(png.count > 5000 && lightest - darkest > 0.2)
-            try png.write(to: URL(fileURLWithPath: "/tmp/chunky-dataset-cloud-ingest-\(dark ? "dark" : "light").png"))
+            try png.write(to: URL(fileURLWithPath: "/tmp/chunky-dataset-cloud-ingest-\(preembedded ? "vectors" : "text")-\(dark ? "dark" : "light").png"))
         }
     }
 }

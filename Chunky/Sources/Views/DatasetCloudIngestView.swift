@@ -10,6 +10,7 @@ struct DatasetCloudIngestPanel: View {
     var provider: String
     var model: String
     @Binding var field: String
+    @Binding var preembedded: Bool
     @Binding var chunkBytes: Int
     @Binding var tier: DatasetCloudTier
     @Binding var ramGB: String
@@ -17,6 +18,7 @@ struct DatasetCloudIngestPanel: View {
     var running: Bool
     var estimate: DatasetCloudEstimate?
     var status: String
+    var available: DatasetCloudBudget? = nil
     var onChoose: () -> Void = {}
     var onPrepare: () -> Void = {}
     var onStart: () -> Void = {}
@@ -32,13 +34,20 @@ struct DatasetCloudIngestPanel: View {
                 Text(dataset).font(.headline)
                 Text("\(rows) source rows · \(ByteCountFormatter.string(fromByteCount: Int64(snapshotBytes), countStyle: .binary)) local JSONL")
             }
-            TextField("Text field", text: $field).disabled(running)
-            Picker("Chunk size", selection: $chunkBytes) {
-                Text("512 UTF-8 bytes").tag(512)
-                Text("2,048 UTF-8 bytes").tag(2048)
-                Text("8,192 UTF-8 bytes").tag(8192)
-            }.disabled(running)
-            Text("Long text is split at UTF-8 boundaries without overlap or truncation. Every chunk records its original row and byte offset. Missing or blank text stops the import.").font(.caption).foregroundStyle(.secondary)
+            Toggle("Use curated pre-embedded vectors", isOn: $preembedded).disabled(running)
+            if preembedded {
+                Text("Requires the pinned Qdrant DBpedia profile: text-embedding-3-small / 1536 dimensions, exact vector column and a compatible query gateway that confirms its model. Original rows are not rechunked or re-embedded.").font(.caption).foregroundStyle(.secondary)
+                LabeledContent("Profile text field", value: "combined_text")
+                Text("Vector field: text-embedding-3-small-1536-embedding").font(.caption.monospaced())
+            } else {
+                TextField("Text field", text: $field).disabled(running)
+                Picker("Chunk size", selection: $chunkBytes) {
+                    Text("512 UTF-8 bytes").tag(512)
+                    Text("2,048 UTF-8 bytes").tag(2048)
+                    Text("8,192 UTF-8 bytes").tag(8192)
+                }.disabled(running)
+                Text("Long text is split at UTF-8 boundaries without overlap or truncation. Every chunk records its original row and byte offset. Missing or blank text stops the import.").font(.caption).foregroundStyle(.secondary)
+            }
             LabeledContent("Embedding provider / model", value: "\(provider) / \(model)")
             LabeledContent("Cloud endpoint", value: target)
             Picker("Cloud plan (choose explicitly)", selection: $tier) {
@@ -47,7 +56,7 @@ struct DatasetCloudIngestPanel: View {
             TextField("Available RAM on least-free node (GB)", text: $ramGB).disabled(running)
             TextField("Available disk on least-free node (GB)", text: $diskGB).disabled(running)
             Text("Use current available capacity from the Cloud Console, not total cluster size. GB = 1,000,000,000 bytes. Free: at most 1 GB RAM / 4 GB disk. Paid capacity depends on your provisioned resources.").font(.caption).foregroundStyle(.secondary)
-            Button("Prepare import plan", action: onPrepare).disabled(running || dataset.isEmpty || field.isEmpty)
+            Button("Prepare import plan", action: onPrepare).disabled(running || dataset.isEmpty || (!preembedded && field.isEmpty))
             if let estimate {
                 Divider()
                 Text("Review before creating a collection").font(.headline)
@@ -55,6 +64,10 @@ struct DatasetCloudIngestPanel: View {
                 LabeledContent("Estimated incremental RAM", value: bytes(estimate.ram))
                 LabeledContent("Estimated persistent disk", value: bytes(estimate.persistentDisk))
                 LabeledContent("Disk budget including temporary reserve", value: bytes(estimate.disk))
+                if let available {
+                    LabeledContent("Available RAM after headroom", value: bytes(available.ram))
+                    LabeledContent("Available disk after headroom", value: bytes(available.disk))
+                }
                 Text("Conservative estimates include float32 originals, JSON payload, graph and ID overhead. Disk reserve doubles estimated storage plus 64 MiB; RAM includes cache and 64 MiB reserve. Live per-node metrics also retain 20% capacity headroom. This is not a guarantee of fit.").font(.caption).foregroundStyle(.secondary)
                 Button("Create new collection and ingest", action: onStart).disabled(running)
             }
@@ -75,6 +88,7 @@ struct DatasetCloudIngestView: View {
     @EnvironmentObject var appState: AppState
     @State private var snapshot: DatasetValidatedSnapshot?
     @State private var field = "text"
+    @State private var preembedded = false
     @State private var chunkBytes = 2048
     @State private var tier = DatasetCloudTier.free
     @State private var ramGB = ""
@@ -88,14 +102,15 @@ struct DatasetCloudIngestView: View {
     @State private var accessURL: URL?
 
     var body: some View {
-        ScrollView {
-            DatasetCloudIngestPanel(dataset: snapshot?.manifest.datasetID ?? "", rows: snapshot?.manifest.rowCount ?? 0, snapshotBytes: snapshot?.byteCount ?? 0, target: URL(string: appState.settings.qdrantCloudURL)?.host ?? "Configure Cloud in Preferences", provider: appState.settings.embeddingBackend, model: appState.settings.embeddingModel, field: $field, chunkBytes: $chunkBytes, tier: $tier, ramGB: $ramGB, diskGB: $diskGB, running: task != nil, estimate: plan?.estimate, status: status, onChoose: { importing = true }, onPrepare: prepare, onStart: start, onCancel: { task?.cancel() }, onSave: result == nil ? nil : save)
+        ScrollView(.vertical, showsIndicators: true) {
+            DatasetCloudIngestPanel(dataset: snapshot?.manifest.datasetID ?? "", rows: snapshot?.manifest.rowCount ?? 0, snapshotBytes: snapshot?.byteCount ?? 0, target: URL(string: appState.settings.qdrantCloudURL)?.host ?? "Configure Cloud in Preferences", provider: appState.settings.embeddingBackend, model: appState.settings.embeddingModel, field: $field, preembedded: $preembedded, chunkBytes: $chunkBytes, tier: $tier, ramGB: $ramGB, diskGB: $diskGB, running: task != nil, estimate: plan?.estimate, status: status, available: plan?.available, onChoose: { importing = true }, onPrepare: prepare, onStart: start, onCancel: { task?.cancel() }, onSave: result == nil ? nil : save)
         }
         .frame(minWidth: 740, minHeight: 760)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { selection in
             do { load(try selection.get()) } catch { status = error.localizedDescription }
         }
         .onChange(of: field) { _, _ in plan = nil }
+        .onChange(of: preembedded) { _, _ in plan = nil }
         .onChange(of: chunkBytes) { _, _ in plan = nil }
         .onChange(of: tier) { _, _ in plan = nil }
         .onChange(of: ramGB) { _, _ in plan = nil }
@@ -129,7 +144,7 @@ struct DatasetCloudIngestView: View {
         return [settings.embeddingBackend, settings.embeddingModel, settings.ollamaURL, settings.embeddingAPIURL, settings.qdrantCloudURL, settings.qdrantAPIKey]
     }
 
-    private func operations(settings: [String], tier: DatasetCloudTier, database: QdrantService) -> DatasetCloudOperations {
+    private func operations(settings: [String], tier: DatasetCloudTier, profile: DatasetCloudEmbeddingProfile? = nil) -> DatasetCloudOperations {
         let provider = LocalEmbeddingService(backend: settings[0], ollamaURL: settings[2], apiURL: settings[3])
         let cloud = DatasetCloudQdrant(baseURL: settings[4], apiKey: settings[5], tier: tier)
         return DatasetCloudOperations(embed: { texts, query in
@@ -140,9 +155,10 @@ struct DatasetCloudIngestView: View {
             try await cloud.create(name: name, estimate: estimate)
         }, verify: { name, estimate in
             try await cloud.verify(name: name, estimate: estimate)
-            try await database.configure(url: settings[4], apiKey: settings[5])
-            try await database.connect()
-        }, write: { name, points in try await database.upsertPoints(collectionName: name, points: points, batchSize: 16) })
+            if let profile { try DatasetCloudCollectionIdentity.register(collection: name, profile: profile, defaults: appState.settings.defaults) }
+        }, write: { name, points in try await cloud.write(name: name, points: points) }, preembeddedQuery: { profile, text in
+            try await DatasetCloudPreembeddedQuery.embed(profile: profile, endpoint: settings[3], text: text)
+        })
     }
 
     private func prepare() {
@@ -151,8 +167,8 @@ struct DatasetCloudIngestView: View {
         let budget = DatasetCloudBudget(tier: tier, ram: (Double(ramGB) ?? 0) * 1e9, disk: (Double(diskGB) ?? 0) * 1e9)
         let selectedField = field
         let selectedChunkBytes = chunkBytes
-        let database = QdrantService()
-        let operations = operations(settings: settings, tier: tier, database: database)
+        let selectedPreembedded = preembedded
+        let operations = operations(settings: settings, tier: tier)
         plan = nil
         result = nil
         status = "Planning every source row and chunk, then checking encoders and Cloud capacity…"
@@ -160,7 +176,7 @@ struct DatasetCloudIngestView: View {
         task = Task { @MainActor in
             defer { finish() }
             do {
-                let prepared = try await DatasetCloudRunner.prepare(source: DatasetCloudSource(snapshot: snapshot), field: selectedField, chunkBytes: selectedChunkBytes, backend: settings[0], model: settings[1], budget: budget, operations: operations)
+                let prepared = try await DatasetCloudRunner.prepare(source: DatasetCloudSource(snapshot: snapshot), field: selectedField, chunkBytes: selectedChunkBytes, backend: settings[0], model: settings[1], budget: budget, preembedded: selectedPreembedded, operations: operations)
                 try Task.checkCancellation()
                 plan = prepared
                 preparedSettings = settings
@@ -174,8 +190,7 @@ struct DatasetCloudIngestView: View {
         guard task == nil, !appState.isProcessing, let plan else { return }
         guard preparedSettings == settingsIdentity else { self.plan = nil; status = "Connection or model settings changed. Prepare a new plan."; return }
         let settings = preparedSettings
-        let database = QdrantService()
-        let operations = operations(settings: settings, tier: plan.budget.tier, database: database)
+        let operations = operations(settings: settings, tier: plan.budget.tier, profile: plan.profile)
         begin()
         task = Task { @MainActor in
             defer { finish() }
@@ -192,7 +207,6 @@ struct DatasetCloudIngestView: View {
                 CollectionPlanStore.save(saved, defaults: appState.settings.defaults)
             }
             self.plan = nil
-            await database.disconnect()
         }
         appState.benchmarkTask = task
     }

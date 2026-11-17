@@ -37,6 +37,13 @@ nonisolated struct DatasetStreamManifest: Codable, Equatable, Sendable {
     }
 }
 
+nonisolated struct DatasetStreamDownload: Sendable {
+    let manifest: DatasetStreamManifest
+    let directory: URL
+    let byteCount: Int
+    var benchmarkCompatible: Bool { byteCount <= DatasetSnapshot.maximumBytes && manifest.rowCount <= DatasetSnapshot.maximumRows }
+}
+
 nonisolated enum DatasetStreamSnapshot {
     static let maximumBytes = 1024 * 1024 * 1024
     static let maximumRows = 1_000_000

@@ -114,6 +114,19 @@ struct DatasetCloudIngestTests {
         }
     }
 
+    @Test func cancelledImportStopsAfterAcknowledgedBatchAndDoesNotReportSuccess() async throws {
+        var writes = 0
+        let operations = DatasetCloudOperations(embed: { texts, _ in texts.map { _ in [Float(1), 0] } }, capacity: { budget }, create: { _, _ in }, verify: { _, _ in }, write: { _, _ in
+            writes += 1
+            withUnsafeCurrentTask { $0?.cancel() }
+        })
+        let plan = try await DatasetCloudRunner.prepare(source: source(), field: "text", chunkBytes: 512, backend: "ollama", model: "fixture", budget: budget, operations: operations)
+        let work = Task { await DatasetCloudRunner.run(plan: plan, operations: operations) { _ in } }
+        let result = await work.value
+        #expect(!result.completed && result.acknowledgedPoints == 16 && writes == 1)
+        #expect(result.message.contains("Cancelled"))
+    }
+
     @Test func leastFreeNodeAndIncompleteMetricsNeverUseClusterSum() throws {
         let samples = PrometheusText.samples(in: """
         container_memory_working_set_bytes{namespace="test",pod="a",container="qdrant"} 100
@@ -143,4 +156,76 @@ struct DatasetCloudIngestTests {
         bad.removeValue(forKey: "strict_mode_config")
         #expect(throws: DatasetBenchmarkError.self) { try DatasetCloudQdrant.verify(JSONSerialization.data(withJSONObject: ["result": ["config": bad]]), estimate: estimate) }
     }
+
+    @Test func curatedVectorsUseDeclaredColumnWithoutDocumentEmbeddingOrChunking() async throws {
+        let profile = DatasetCloudEmbeddingProfile.dbpedia
+        let vector = [Float(1)] + Array(repeating: Float(0), count: profile.dimensions - 1)
+        let original = String(repeating: "Original unmodified input. ", count: 100)
+        let data = try JSONSerialization.data(withJSONObject: ["_id": "fixture-id", profile.textField: original, profile.vectorField: vector, "openai": [1, 2]])
+        let dataset = DatasetCloudSource(datasetID: profile.datasetID, revision: profile.revision, config: profile.config, split: profile.split, sha256: String(repeating: "b", count: 64), rows: 1, visit: { handler in try await handler(0, data) })
+        var probes = 0
+        var uploaded: [ChunkPoint] = []
+        let operations = DatasetCloudOperations(embed: { _, _ in Issue.record("No generic document/query embedding for a curated profile"); return [] }, capacity: { budget }, create: { _, _ in }, verify: { _, _ in }, write: { _, points in uploaded += points }, preembeddedQuery: { requested, _ in
+            #expect(requested == profile)
+            probes += 1
+            return vector
+        })
+        let plan = try await DatasetCloudRunner.prepare(source: dataset, field: "ignored", chunkBytes: 512, backend: profile.backend, model: profile.model, budget: budget, preembedded: true, operations: operations)
+        #expect(plan.field == profile.textField && plan.chunkBytes == 0 && plan.estimate.points == 1)
+        let result = await DatasetCloudRunner.run(plan: plan, operations: operations) { _ in }
+        #expect(result.completed && probes == 2 && uploaded.count == 1)
+        #expect(uploaded[0].text == original && uploaded[0].vector == vector)
+        #expect(uploaded[0].metadata["dataset_embedding_profile"] == profile.id)
+        #expect(result.embeddingProfile == profile.id)
+    }
+
+    @Test func unknownPreembeddedSourceAndWrongConfiguredModelRejectBeforeProbeOrMutation() async throws {
+        let operations = DatasetCloudOperations(embed: { _, _ in Issue.record("Unexpected embedding"); return [] }, capacity: { budget }, create: { _, _ in Issue.record("Unexpected create") }, verify: { _, _ in }, write: { _, _ in }, preembeddedQuery: { _, _ in Issue.record("Unexpected probe"); return [] })
+        for unknown in [false, true] {
+            let profile = DatasetCloudEmbeddingProfile.dbpedia
+            var dataset = try source()
+            if !unknown { dataset.datasetID = profile.datasetID; dataset.revision = profile.revision; dataset.config = profile.config; dataset.split = profile.split }
+            do {
+                _ = try await DatasetCloudRunner.prepare(source: dataset, field: "text", chunkBytes: 512, backend: "openai", model: "another-1536-model", budget: budget, preembedded: true, operations: operations)
+                Issue.record("Expected identity rejection")
+            } catch { }
+        }
+    }
+
+    @Test func restCreationConflictHasNoFallbackAndUploadsRequireCompletedAcknowledgement() async throws {
+        let fixture = DatasetCloudHTTPFixture()
+        let client = DatasetCloudQdrant(baseURL: "https://fixture.invalid:6333", apiKey: "fixture-key", tier: .free, transport: fixture)
+        let name = DatasetBenchmarkSafety.collectionName()
+        let estimate = DatasetCloudEstimate(points: 1, payloadBytes: 1000, dimensions: 2)
+        await fixture.respond(status: 409, body: Data("{}".utf8))
+        do { try await client.create(name: name, estimate: estimate); Issue.record("Expected conflict") } catch { }
+        #expect(await fixture.calls.count == 1)
+        await fixture.respond(status: 200, body: Data("{\"result\":{\"status\":\"acknowledged\"}}".utf8))
+        let point = ChunkPoint(id: UUID().uuidString, vector: [1, 0], text: "fixture", source: "hf://fixture", metadata: ["embedding_model": "fixture"])
+        do { try await client.write(name: name, points: [point]); Issue.record("Expected incomplete acknowledgement") } catch { }
+        await fixture.respond(status: 200, body: Data("{\"result\":{\"status\":\"completed\"}}".utf8))
+        try await client.write(name: name, points: [point])
+        let calls = await fixture.calls
+        #expect(calls.count == 3)
+        #expect(calls[2].url.host == "fixture.invalid" && calls[2].url.port == 6333)
+        #expect(calls[2].url.query == "wait=true" && calls[2].method == "PUT" && calls[2].key == "fixture-key")
+        let body = try #require(calls[2].body)
+        let object = try #require(JSONSerialization.jsonObject(with: body) as? [String: Any])
+        let points = try #require(object["points"] as? [[String: Any]])
+        #expect(points.count == 1 && points[0]["id"] as? String == point.id)
+    }
+}
+
+private actor DatasetCloudHTTPFixture: SnapshotTransport {
+    struct Call: Sendable { var method: String; var url: URL; var key: String; var body: Data? }
+    var calls: [Call] = []
+    var status = 200
+    var response = Data()
+    func respond(status: Int, body: Data) { self.status = status; response = body }
+    func send(method: String, url: URL, apiKey: String, body: Data?) async throws -> (status: Int, body: Data) {
+        calls.append(Call(method: method, url: url, key: apiKey, body: body))
+        return (status, response)
+    }
+    func download(url: URL, apiKey: String, to destination: URL) async throws { throw DatasetBenchmarkError.invalid("Unexpected download") }
+    func upload(url: URL, apiKey: String, file: URL) async throws -> (status: Int, body: Data) { throw DatasetBenchmarkError.invalid("Unexpected upload") }
 }

@@ -20,6 +20,12 @@ The import embeds/uploads at most 16 chunks per batch. It rechecks remaining cap
 
 No live benchmark result or successful Cloud import is implied by the UI screenshots, which use labelled rendering fixtures. Native unit tests use mocked operations. A live Cloud deployment must expose the documented metrics labels and support the verified collection options.
 
+## Curated pre-embedded rows
+
+Enable **Use curated pre-embedded vectors** for the pinned Qdrant DBpedia profile. The source repository, immutable revision, configuration and split must match the built-in profile. The configured provider must be OpenAI-compatible with the exact `text-embedding-3-small` model and 1,536 dimensions. The selected gateway must confirm that model in its response; the app does not add authentication or silently configure the official OpenAI endpoint.
+
+This mode reads only `text-embedding-3-small-1536-embedding` and `combined_text`; the older `openai` column is never substituted. Every row's vector is checked during the complete planning pass and again while ingesting. Unknown profiles, wrong model identity, booleans, missing vectors, zero/nonfinite values or changed dimensions fail closed. Original rows are neither rechunked nor re-embedded. The strict query model probe runs before planning completes and again before collection creation. A verified embedding identity is registered only for the new collection, allowing retrieval to enforce the same model. See the curated-profile documentation for its exact source revision and compatibility constraints.
+
 ## Sources checked 2026-11-17
 
 - [Cloud cluster resources](https://qdrant.tech/documentation/cloud/create-cluster/)

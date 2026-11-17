@@ -57,6 +57,9 @@ nonisolated struct DatasetCloudChunk: Sendable {
     var row: Int
     var offset: Int
     var text: String
+    var vector: [Float]? = nil
+    var sourceID: String? = nil
+    var profileID: String? = nil
 
     static func split(row: Int, data: Data, field: String, maximumBytes: Int) throws -> [Self] {
         guard (512...8192).contains(maximumBytes),
@@ -82,14 +85,17 @@ nonisolated struct DatasetCloudChunk: Sendable {
     }
 
     func payload(source: DatasetCloudSource, field: String, backend: String, model: String, dimensions: Int) -> [String: String] {
-        ["text": text, "source": "hf://\(source.datasetID)/\(source.config)/\(source.split)@\(source.revision)",
+        var value = ["text": text, "source": "hf://\(source.datasetID)/\(source.config)/\(source.split)@\(source.revision)",
          "record_type": "chunk", "chunky_test_data": "true", "dataset_id": source.datasetID,
          "dataset_revision": source.revision, "dataset_sha256": source.sha256,
          "dataset_config": source.config, "dataset_split": source.split,
          "dataset_row": String(row), "dataset_text_field": field,
          "dataset_byte_offset": String(offset), "dataset_byte_length": String(text.utf8.count),
-         "dataset_chunking": "utf8-fixed-bytes-v1", "embedding_backend": backend,
+         "dataset_chunking": profileID == nil ? "utf8-fixed-bytes-v1" : "original-preembedded-row", "embedding_backend": backend,
          "embedding_model": model, "embedding_dim": String(dimensions)]
+        if let sourceID { value["dataset_source_id"] = sourceID }
+        if let profileID { value["dataset_embedding_profile"] = profileID }
+        return value
     }
 
     func id(source: DatasetCloudSource, field: String, maximumBytes: Int) -> String {
@@ -113,6 +119,8 @@ nonisolated struct DatasetCloudPlan: Sendable {
     var model: String
     var estimate: DatasetCloudEstimate
     var budget: DatasetCloudBudget
+    var available: DatasetCloudBudget
+    var profile: DatasetCloudEmbeddingProfile?
 }
 
 nonisolated struct DatasetCloudResult: Codable, Sendable {
@@ -120,6 +128,14 @@ nonisolated struct DatasetCloudResult: Codable, Sendable {
     var revision: String
     var sha256: String
     var collection: String
+    var backend: String
+    var model: String
+    var dimensions: Int
+    var textField: String
+    var chunkBytes: Int
+    var embeddingProfile: String?
+    var estimatedRAMBytes: Double
+    var reservedDiskBytes: Double
     var plannedPoints: Int
     var acknowledgedPoints: Int = 0
     var creationAttempted = false
@@ -132,8 +148,8 @@ actor DatasetCloudPlanner {
     var payloadBytes = 0
     var firstText = ""
 
-    func add(row: Int, data: Data, source: DatasetCloudSource, field: String, chunkBytes: Int, backend: String, model: String) throws {
-        for chunk in try DatasetCloudChunk.split(row: row, data: data, field: field, maximumBytes: chunkBytes) {
+    func add(row: Int, data: Data, source: DatasetCloudSource, field: String, chunkBytes: Int, backend: String, model: String, profile: DatasetCloudEmbeddingProfile?) throws {
+        for chunk in try DatasetCloudChunk.read(row: row, data: data, field: field, maximumBytes: chunkBytes, profile: profile) {
             if firstText.isEmpty { firstText = chunk.text }
             points += 1
             guard points <= 2_000_000 else { throw DatasetBenchmarkError.invalid("This import exceeds two million chunks. Choose a smaller sample or larger chunks.") }
@@ -142,4 +158,14 @@ actor DatasetCloudPlanner {
     }
 
     func summary() -> (Int, Int, String) { (points, payloadBytes, firstText) }
+}
+
+extension DatasetCloudChunk {
+    nonisolated static func read(row: Int, data: Data, field: String, maximumBytes: Int, profile: DatasetCloudEmbeddingProfile?) throws -> [Self] {
+        if let profile {
+            let value = try profile.decodeRow(data)
+            return [Self(row: row, offset: 0, text: value.text, vector: value.vector, sourceID: value.sourceID, profileID: profile.id)]
+        }
+        return try split(row: row, data: data, field: field, maximumBytes: maximumBytes)
+    }
 }
