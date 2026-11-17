@@ -8,7 +8,7 @@ Each download creates a unique directory with `rows.jsonl` and `manifest.json`. 
 
 Downloads take the first requested rows, not a random or representative sample. Limits are 10,000 rows, 50 MiB per saved snapshot and 5 MiB per HTTP response. A page that contains truncated cells is rejected. Cancellation or a failed request leaves no completed snapshot. Existing files are never overwritten. Private/gated datasets and datasets without Dataset Viewer support are unavailable in this version. The app does not execute remote dataset scripts or download media URLs embedded in rows.
 
-Use the saved folder as the source for a dataset benchmark/test-collection workflow. Corpus text, queries and relevance judgments often live in separate configurations or repositories; downloading a corpus does not manufacture relevance labels or produce retrieval-quality results. The dataset library itself never changes embedding settings or Qdrant collections.
+Use the saved folder as the source for the [dataset benchmark and test-collection workflow](dataset-benchmarks.md). Corpus text, queries and relevance judgments often live in separate configurations or repositories; downloading a corpus does not manufacture relevance labels or produce retrieval-quality results. The dataset library itself never changes embedding settings or Qdrant collections.
 
 ## Validation
 

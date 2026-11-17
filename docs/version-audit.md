@@ -23,7 +23,7 @@ Versions below were read from official registries or project release APIs on thi
 | lxml | 6.1.3 | 6.1.3 | [PyPI](https://pypi.org/pypi/lxml/json) |
 | pypdf | 7.1.0 | 7.1.0 | [PyPI](https://pypi.org/pypi/pypdf/json) |
 
-Docling, Transformers and model runtimes need compatible dependency resolution together. Mac MLX inference cannot be validated on a Linux executor. ROCm images intentionally supply their own GPU-enabled PyTorch instead of replacing it with the PyPI CPU/CUDA package. The updated direct pins resolved together for Apple Silicon/macOS27/Python3.12 (130 packages), and the fresh worker environment passed its tests. The conditional macOS dependency job installs and imports the actual Mac runtimes with model downloads disabled. This is compatibility evidence, not an inference pass.
+Docling, Transformers and model runtimes need compatible dependency resolution together. Mac MLX inference cannot be validated on a Linux executor. ROCm images intentionally supply their own GPU-enabled PyTorch instead of replacing it with the PyPI CPU/CUDA package. The updated direct pins resolved together for Apple Silicon/macOS 27/Python 3.12 (130 packages), and the fresh worker environment passed its tests. The conditional macOS dependency job installs and imports the actual Mac runtimes with model downloads disabled. This is compatibility evidence, not an inference pass.
 
 ## Browser toolchain
 
@@ -49,16 +49,16 @@ Docling, Transformers and model runtimes need compatible dependency resolution t
 | vite | 8.3.8 | 8.3.8 | [npm](https://registry.npmjs.org/vite/latest) |
 | vitest | 5.1.0 | 5.1.0 | [npm](https://registry.npmjs.org/vitest/latest) |
 
-Bun 1.4.4 is the latest stable release ([official release](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.4)). Node is updated to 26.13.1 LTS with matching 26.6.6 types; Node27 prereleases are excluded ([official index](https://nodejs.org/dist/index.json)). The exact official Node26.13.1 Bookworm slim image digest is pinned in the Dockerfile. Tailwind-variants4.0.2 passed the complete component suite with the existing shadcn components.
+Bun 1.4.4 is the latest stable release ([official release](https://github.com/oven-sh/bun/releases/tag/bun-v1.4.4)). Node is updated to 26.13.1 LTS with matching 26.6.6 types; Node 27 prereleases are excluded ([official index](https://nodejs.org/dist/index.json)). The exact official Node 26.13.1 Bookworm slim image digest is pinned in the Dockerfile. Tailwind-variants 4.0.2 passed the complete component suite with the existing shadcn components.
 
-TypeScript remains6.0.3, the newest version compatible with the latest Svelte checker. [svelte-check4.7.8 declares](https://registry.npmjs.org/svelte-check/4.7.8) `typescript: ^5.0.0 || ^6.0.0`; TypeScript7.0.2 is outside that supported peer range. This is an explicit compatibility hold, not an unchecked version omission.
+TypeScript remains 6.0.3, the newest version compatible with the latest Svelte checker. [svelte-check 4.7.8 declares](https://registry.npmjs.org/svelte-check/4.7.8) `typescript: ^5.0.0 || ^6.0.0`; TypeScript 7.0.2 is outside that supported peer range. This is an explicit compatibility hold, not an unchecked version omission.
 
 ## Swift and server images
 
 | Component | Current pin | Latest verified | Source |
 | --- | --- | --- | --- |
 | grpc-swift-2 | 2.4.4 | 2.4.4 | [Releases](https://github.com/grpc/grpc-swift-2/releases/latest) |
-| grpc-swift-nio-transport | 2.12.0 | 2.13.0 | [Releases](https://github.com/grpc/grpc-swift-nio-transport/releases/latest) |
+| grpc-swift-nio-transport | 2.13.0 | 2.13.0 | [Releases](https://github.com/grpc/grpc-swift-nio-transport/releases/latest) |
 | grpc-swift-protobuf | 2.5.0 | 2.5.0 | [Releases](https://github.com/grpc/grpc-swift-protobuf/releases/latest) |
 | swift-protobuf | 1.41.0 | 1.41.0 | [Releases](https://github.com/apple/swift-protobuf/releases/latest) |
 | Qdrant server | 1.20.2 | 1.20.2 | [Releases](https://github.com/qdrant/qdrant/releases/latest) |
@@ -71,4 +71,6 @@ Swift client updates must go through the [pinned vendor workflow](qdrant-client.
 
 The native app and vendored package require macOS 27, Xcode 27.2 and Swift 6.4 as specified in [AGENTS.md](../AGENTS.md). Lowering that baseline is a separate compatibility change.
 
-Executed local update checks: fresh Python3.12 worker environment,264 worker tests,35 helper tests; Node26.13.1/Bun1.4.4 frozen install,60 frontend unit tests,51 browser tests, type checks and production build passed. Local Docker web-stage installation encountered the environment's `SELF_SIGNED_CERT_IN_CHAIN` registry error; TLS validation was not disabled. The GitHub container build remains the required validation for that stage. Actual model inference and ROCm GPU serving remain hardware checks.
+Validation of the merged changes passed 281 worker tests, 35 helper tests, 11 setup tests, 61 frontend unit tests and 51 browser tests, plus type checks and production builds. [Dependency-update PR #91](https://github.com/hansdoebel/chunky/pull/91) passed its required CI, including the GitHub container build and conditional Mac dependency imports. A local Docker web-stage attempt had encountered `SELF_SIGNED_CERT_IN_CHAIN`; TLS validation was not disabled, and the subsequent CI result supplies the container-build evidence.
+
+Native feature PRs passed macOS build/unit and nonblank screenshot checks, including the combined dataset library/benchmark [CI run 43998356788](https://github.com/hansdoebel/chunky/actions/runs/43998356788). The vendored client passed 100 unit tests and three isolated live Qdrant 1.20.2 regressions outside CI. These checks do not establish live Colima VM startup, Mac model inference, ROCm GPU serving or measured dataset retrieval quality; those remain operator checks on the intended hardware.
