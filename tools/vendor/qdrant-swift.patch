@@ -1,28 +1,3 @@
-diff --git a/Sources/QdrantCore/Models/CollectionOptions.swift b/Sources/QdrantCore/Models/CollectionOptions.swift
-index 9608cd4..7e4c6d5 100644
---- a/Sources/QdrantCore/Models/CollectionOptions.swift
-+++ b/Sources/QdrantCore/Models/CollectionOptions.swift
-@@ -58,6 +58,7 @@ public struct IdTrackerParams: Sendable {
- }
- 
- public struct StrictModeConfig: Sendable {
-+    public var enabled: Bool?
-     public var requireTenantFilter: Bool?
- 
-     public var searchMaxBatchsize: UInt64?
-@@ -66,10 +67,12 @@ public struct StrictModeConfig: Sendable {
-     public var maxResidentMemoryPercent: UInt32?
- 
-     public init(
-+        enabled: Bool? = nil,
-         requireTenantFilter: Bool? = nil,
-         searchMaxBatchsize: UInt64? = nil,
-         maxResidentMemoryPercent: UInt32? = nil
-     ) {
-+        self.enabled = enabled
-         self.requireTenantFilter = requireTenantFilter
-         self.searchMaxBatchsize = searchMaxBatchsize
-         self.maxResidentMemoryPercent = maxResidentMemoryPercent
 diff --git a/Sources/QdrantCore/Models/QuantizationConfig.swift b/Sources/QdrantCore/Models/QuantizationConfig.swift
 new file mode 100644
 index 0000000..fa33fc3
@@ -167,7 +142,7 @@ index 664fbb3..673082a 100644
 +    case idf
 +}
 diff --git a/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift b/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift
-index 0e1cb88..83342a6 100644
+index 7aee4c5..83342a6 100644
 --- a/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift
 +++ b/Sources/QdrantGRPC/ProtoExtensions/CollectionInfo.swift
 @@ -24,6 +24,8 @@ extension CollectionInfo {
@@ -179,15 +154,7 @@ index 0e1cb88..83342a6 100644
              createdAt: grpc.hasCreatedAt ? Date(grpc.createdAt) : nil,
              updateQueue: grpc.hasUpdateQueue
                  ? UpdateQueueInfo(
-@@ -109,6 +111,7 @@ extension Quantization {
- extension StrictModeConfig {
-     var grpc: Qdrant_StrictModeConfig {
-         var message = Qdrant_StrictModeConfig()
-+        if let enabled { message.enabled = enabled }
-         if let requireTenantFilter { message.requireTenantFilter = requireTenantFilter }
-         if let searchMaxBatchsize { message.searchMaxBatchsize = searchMaxBatchsize }
-         if let maxResidentMemoryPercent { message.maxResidentMemoryPercent = maxResidentMemoryPercent }
-@@ -173,3 +176,42 @@ extension AliasDescription {
+@@ -174,3 +176,42 @@ extension AliasDescription {
          self.init(aliasName: grpc.aliasName, collectionName: grpc.collectionName)
      }
  }
@@ -321,7 +288,7 @@ index b9157e1..848b0a1 100644
          return vectors
      }
 diff --git a/Sources/QdrantGRPC/Services/CollectionsService.swift b/Sources/QdrantGRPC/Services/CollectionsService.swift
-index 8ce6a0f..a340370 100644
+index 1a1d4d2..a340370 100644
 --- a/Sources/QdrantGRPC/Services/CollectionsService.swift
 +++ b/Sources/QdrantGRPC/Services/CollectionsService.swift
 @@ -90,61 +90,44 @@ public final class CollectionsService: Sendable {
@@ -399,26 +366,7 @@ index 8ce6a0f..a340370 100644
  
          let request = ClientRequest(message: grpcRequest, metadata: metadata)
  
-@@ -166,9 +149,15 @@ public final class CollectionsService: Sendable {
-         var grpcRequest = options.grpc
-         grpcRequest.collectionName = name
-         let request = ClientRequest(message: grpcRequest, metadata: metadata)
--        let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
--        if !response.result {
--            throw QdrantError.unexpectedResponse("Collection creation failed")
-+        do {
-+            let response: Qdrant_CollectionOperationResponse = try await client.create(request: request)
-+            if !response.result {
-+                throw QdrantError.unexpectedResponse("Collection creation failed")
-+            }
-+        } catch let error as QdrantError {
-+            throw error
-+        } catch {
-+            throw QdrantError.from(error)
-         }
-     }
- 
-@@ -179,6 +168,35 @@ public final class CollectionsService: Sendable {
+@@ -185,6 +168,35 @@ public final class CollectionsService: Sendable {
      ///   - writeConsistencyFactor: How many replicas should apply for success.
      ///   - onDiskPayload: Whether to store payload on disk.
      ///   - indexingThreshold: Minimum number of vectors to trigger indexing.
@@ -525,32 +473,12 @@ index ab3b45d..81e672c 100644
      }
  
      public func createFieldIndex(
-diff --git a/Sources/QdrantRest/Services/CollectionsService.swift b/Sources/QdrantRest/Services/CollectionsService.swift
-index a789def..286e92b 100644
---- a/Sources/QdrantRest/Services/CollectionsService.swift
-+++ b/Sources/QdrantRest/Services/CollectionsService.swift
-@@ -296,6 +296,7 @@ extension IdTrackerParams: Encodable {
- 
- extension StrictModeConfig: Encodable {
-     enum CodingKeys: String, CodingKey {
-+        case enabled
-         case requireTenantFilter = "require_tenant_filter"
-         case searchMaxBatchsize = "search_max_batchsize"
-         case maxResidentMemoryPercent = "max_resident_memory_percent"
-@@ -303,6 +304,7 @@ extension StrictModeConfig: Encodable {
- 
-     public func encode(to encoder: Encoder) throws {
-         var container = encoder.container(keyedBy: CodingKeys.self)
-+        try container.encodeIfPresent(enabled, forKey: .enabled)
-         try container.encodeIfPresent(requireTenantFilter, forKey: .requireTenantFilter)
-         try container.encodeIfPresent(searchMaxBatchsize, forKey: .searchMaxBatchsize)
-         try container.encodeIfPresent(maxResidentMemoryPercent, forKey: .maxResidentMemoryPercent)
 diff --git a/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift b/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift
 new file mode 100644
-index 0000000..cefa37f
+index 0000000..207a9dd
 --- /dev/null
 +++ b/Tests/IntegrationTests/ChunkyCompatibilityIntegrationTests.swift
-@@ -0,0 +1,91 @@
+@@ -0,0 +1,38 @@
 +import Foundation
 +import Testing
 +import QdrantCore
@@ -558,59 +486,6 @@ index 0000000..cefa37f
 +
 +@Suite("Chunky client compatibility integration", .serialized)
 +struct ChunkyCompatibilityIntegrationTests {
-+    @Test func duplicateOptionsCreationPreservesTypedError() async throws {
-+        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
-+        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
-+        defer { client.close() }
-+        let name = "chunky-duplicate-" + UUID().uuidString.lowercased()
-+        let options = CollectionOptions(vectors: .single(VectorConfig(size: 3, distance: .cosine)))
-+        try await client.collections.create(name: name, options: options)
-+        do {
-+            do {
-+                try await client.collections.create(name: name, options: options)
-+                Issue.record("Duplicate creation should fail")
-+            } catch QdrantError.collectionAlreadyExists(let message) {
-+                #expect(message.contains(name))
-+            }
-+            #expect(try await client.collections.exists(name: name))
-+        } catch {
-+            try? await client.collections.delete(name: name)
-+            throw error
-+        }
-+        try await client.collections.delete(name: name)
-+    }
-+
-+    @Test func strictModeEnforcesBatchLimitOnlyWhenEnabled() async throws {
-+        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
-+        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
-+        defer { client.close() }
-+        for enabled in [false, true] {
-+            let name = "chunky-strict-" + UUID().uuidString.lowercased()
-+            let options = CollectionOptions(vectors: .single(VectorConfig(size: 3, distance: .cosine)), strictMode: StrictModeConfig(enabled: enabled, searchMaxBatchsize: 1))
-+            try await client.collections.create(name: name, options: options)
-+            do {
-+                let query = QueryRequest(query: .nearest(.dense([1, 0, 0])))
-+                let allowed = try await client.points.queryBatch(collection: name, queries: [query])
-+                #expect(allowed.count == 1)
-+                if enabled {
-+                    do {
-+                        _ = try await client.points.queryBatch(collection: name, queries: [query, query])
-+                        Issue.record("Enabled strict mode accepted an oversized batch")
-+                    } catch {
-+                        #expect(error.localizedDescription.lowercased().contains("batch"))
-+                    }
-+                } else {
-+                    let allowedBatch = try await client.points.queryBatch(collection: name, queries: [query, query])
-+                    #expect(allowedBatch.count == 2)
-+                }
-+            } catch {
-+                try? await client.collections.delete(name: name)
-+                throw error
-+            }
-+            try await client.collections.delete(name: name)
-+        }
-+    }
-+
 +    @Test func hybridIngestMetadataFilteringAndSnapshot() async throws {
 +        let port = Int(ProcessInfo.processInfo.environment["QDRANT_GRPC_PORT"] ?? "6334") ?? 6334
 +        let client = try await QdrantGRPCClient(host: "127.0.0.1", port: port, useTLS: false)
@@ -642,32 +517,6 @@ index 0000000..cefa37f
 +        try await client.collections.delete(name: name)
 +    }
 +}
-diff --git a/Tests/Mocks/MockCollectionsService.swift b/Tests/Mocks/MockCollectionsService.swift
-index ac28fde..615c762 100644
---- a/Tests/Mocks/MockCollectionsService.swift
-+++ b/Tests/Mocks/MockCollectionsService.swift
-@@ -50,6 +50,7 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
-     // MARK: - Reset
- 
-     public func reset() {
-+        optionCreates = []
-         listCallCount = 0
-         getCallCount = 0
-         getCalls = []
-diff --git a/Tests/Mocks/MockPointsService.swift b/Tests/Mocks/MockPointsService.swift
-index 7a0b89b..bd9840e 100644
---- a/Tests/Mocks/MockPointsService.swift
-+++ b/Tests/Mocks/MockPointsService.swift
-@@ -103,6 +103,9 @@ public final class MockPointsService: PointsServiceProtocol, @unchecked Sendable
-     // MARK: - Reset
- 
-     public func reset() {
-+        lastUpdateMode = nil
-+        vectorNameCalls = []
-+        createFieldSchemaCalls = []
-         upsertCallCount = 0
-         upsertCalls = []
-         getCallCount = 0
 diff --git a/Tests/QdrantGRPCTests/ChunkyCompatibilityTests.swift b/Tests/QdrantGRPCTests/ChunkyCompatibilityTests.swift
 new file mode 100644
 index 0000000..3a3252a
@@ -759,86 +608,3 @@ index 0000000..3a3252a
 +        #expect(QuantizationConfig.product(compression: .x16, alwaysRam: nil).grpc.product.compression == .x16)
 +    }
 +}
-diff --git a/Tests/QdrantGRPCTests/CollectionParityTests.swift b/Tests/QdrantGRPCTests/CollectionParityTests.swift
-index fc6a8c4..990e590 100644
---- a/Tests/QdrantGRPCTests/CollectionParityTests.swift
-+++ b/Tests/QdrantGRPCTests/CollectionParityTests.swift
-@@ -7,6 +7,18 @@ import QdrantProto
- 
- @Suite("Collection and point gRPC mapping")
- struct CollectionParityTests {
-+    @Test func strictModeActivationPresence() {
-+        let omitted = StrictModeConfig(searchMaxBatchsize: 1).grpc
-+        #expect(!omitted.hasEnabled)
-+        #expect(omitted.searchMaxBatchsize == 1)
-+        for enabled in [false, true] {
-+            let value = StrictModeConfig(enabled: enabled, searchMaxBatchsize: 1).grpc
-+            #expect(value.hasEnabled)
-+            #expect(value.enabled == enabled)
-+            #expect(value.searchMaxBatchsize == 1)
-+        }
-+    }
-+
-     @Test("TurboQuant datatype and quantization map onto the proto")
-     func turboQuant() {
-         let config = VectorConfig(size: 128, distance: .cosine, datatype: .turbo16, memory: .cached)
-diff --git a/Tests/QdrantGRPCTests/MockResetTests.swift b/Tests/QdrantGRPCTests/MockResetTests.swift
-new file mode 100644
-index 0000000..92c7e68
---- /dev/null
-+++ b/Tests/QdrantGRPCTests/MockResetTests.swift
-@@ -0,0 +1,32 @@
-+import Testing
-+import QdrantCore
-+import QdrantMocks
-+
-+@Suite("Mock reuse")
-+struct MockResetTests {
-+    @Test func resetClearsModernTracking() async throws {
-+        let points = MockPointsService()
-+        try await points.upsert(collection: "books", points: [], wait: true, updateMode: .insertOnly)
-+        try await points.createVectorName(collection: "books", name: "title", spec: .dense(DenseVectorSpec(size: 8, distance: .dot)), wait: true)
-+        try await points.createFieldIndex(collection: "books", fieldName: "title", schema: .text(TextIndexOptions(tokenizer: .code)), wait: true)
-+        #expect(points.lastUpdateMode == .insertOnly)
-+        #expect(points.vectorNameCalls.count == 1)
-+        #expect(points.createFieldSchemaCalls.count == 1)
-+        points.reset()
-+        #expect(points.lastUpdateMode == nil)
-+        #expect(points.vectorNameCalls.isEmpty)
-+        #expect(points.createFieldSchemaCalls.isEmpty)
-+        try await points.deleteVectorName(collection: "other", name: "body", wait: true)
-+        #expect(points.vectorNameCalls.count == 1)
-+        #expect(points.vectorNameCalls.first?.collection == "other")
-+
-+        let collections = MockCollectionsService()
-+        let options = CollectionOptions(vectors: .single(VectorConfig(size: 8, distance: .dot)))
-+        try await collections.create(name: "books", options: options)
-+        #expect(collections.optionCreates.count == 1)
-+        collections.reset()
-+        #expect(collections.optionCreates.isEmpty)
-+        try await collections.create(name: "other", options: options)
-+        #expect(collections.optionCreates.count == 1)
-+    }
-+}
-diff --git a/Tests/QdrantRestTests/CollectionParityTests.swift b/Tests/QdrantRestTests/CollectionParityTests.swift
-index c98d978..d94c0b8 100644
---- a/Tests/QdrantRestTests/CollectionParityTests.swift
-+++ b/Tests/QdrantRestTests/CollectionParityTests.swift
-@@ -6,6 +6,17 @@ import Testing
- 
- @Suite("Collection and point REST encoding")
- struct RestCollectionParityTests {
-+    @Test func strictModeActivationPresence() throws {
-+        let omitted = try JSONSerialization.jsonObject(with: JSONEncoder().encode(StrictModeConfig(searchMaxBatchsize: 1))) as! [String: Any]
-+        #expect(omitted["enabled"] == nil)
-+        #expect(omitted["search_max_batchsize"] as? Int == 1)
-+        for enabled in [false, true] {
-+            let value = try JSONSerialization.jsonObject(with: JSONEncoder().encode(StrictModeConfig(enabled: enabled, searchMaxBatchsize: 1))) as! [String: Any]
-+            #expect(value["enabled"] as? Bool == enabled)
-+            #expect(value["search_max_batchsize"] as? Int == 1)
-+        }
-+    }
-+
-     @Test("Collection options encode TurboQuant, memory placement, and strict mode")
-     func options() throws {
-         let options = CollectionOptions(

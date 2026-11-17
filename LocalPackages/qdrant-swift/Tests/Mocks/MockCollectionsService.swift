@@ -50,7 +50,7 @@ public final class MockCollectionsService: CollectionsServiceProtocol, @unchecke
     // MARK: - Reset
 
     public func reset() {
-        optionCreates = []
+        optionCreates.removeAll()
         listCallCount = 0
         getCallCount = 0
         getCalls = []

@@ -145,7 +145,7 @@ The gRPC migration already landed in [PER-55 / PR #5](https://github.com/hansdoe
 | Package | Minimum in manifest | Committed resolution |
 | --- | --- | --- |
 | `grpc-swift-2` | 2.4.4 | 2.4.4 |
-| `grpc-swift-nio-transport` | 2.0.0 | 2.12.0 |
+| `grpc-swift-nio-transport` | 2.0.0 | 2.13.0 |
 | `grpc-swift-protobuf` | 2.0.0 | 2.5.0 |
 | `swift-protobuf` | 1.41.0 | 1.41.0 |
 
