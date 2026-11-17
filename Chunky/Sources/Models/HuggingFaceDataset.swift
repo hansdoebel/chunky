@@ -29,7 +29,8 @@ nonisolated struct DatasetRecommendation: Identifiable, Sendable {
         Self(title: "Mini Wikipedia · English passages", datasetID: "rag-datasets/rag-mini-wikipedia", config: "text-corpus", splitName: "passages"),
         Self(title: "Simple English Wikipedia", datasetID: "wikimedia/wikipedia", config: "20231101.simple", splitName: "train"),
         Self(title: "English Wikipedia", datasetID: "wikimedia/wikipedia", config: "20231101.en", splitName: "train"),
-        Self(title: "German Wikipedia", datasetID: "wikimedia/wikipedia", config: "20231101.de", splitName: "train")
+        Self(title: "German Wikipedia", datasetID: "wikimedia/wikipedia", config: "20231101.de", splitName: "train"),
+        Self(title: "DBpedia · pre-embedded OpenAI small (1536)", datasetID: "Qdrant/dbpedia-entities-openai3-text-embedding-3-small-1536-100K", config: "default", splitName: "train")
     ]
 }
 

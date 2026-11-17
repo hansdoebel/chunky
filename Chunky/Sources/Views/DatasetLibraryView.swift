@@ -133,7 +133,11 @@ final class DatasetLibraryState: ObservableObject {
         streamSnapshot = nil
         if let budget = sampleSize.byteBudget {
             perform {
-                let snapshot = try await self.service.downloadStream(dataset: selected, split: split, byteBudget: budget, folder: destination)
+                let token = self.requestID
+                let snapshot = try await self.service.downloadStream(dataset: selected, split: split, byteBudget: budget, folder: destination) { rows, bytes in
+                    guard token == self.requestID else { return }
+                    self.status = "Downloading \(rows.formatted()) rows · \(Self.byteLabel(bytes)) / \(Self.byteLabel(budget)) JSONL…"
+                }
                 return {
                     self.streamSnapshot = snapshot
                     let route = snapshot.benchmarkCompatible ? "Compatible with Benchmark and Cloud ingest." : "Use Cloud ingest; this exceeds the legacy benchmark's 50 MiB / 10,000-row limit."
@@ -224,14 +228,14 @@ struct DatasetLibraryPane: View {
                 Text("Find public datasets and save a bounded, revision-checked JSONL sample for benchmarking or test collections.")
                     .foregroundStyle(.secondary)
                 VStack(alignment: .leading, spacing: 8) {
-                    Text("Recommended Wikipedia samples").font(.headline)
+                    Text("Recommended dataset samples").font(.headline)
                     LazyVGrid(columns: [GridItem(.flexible(), alignment: .leading), GridItem(.flexible(), alignment: .leading)], alignment: .leading) {
                         ForEach(DatasetRecommendation.wikipedia) { recommendation in
                             Button(recommendation.title) { state.recommend(recommendation) }
                         }
                     }
                     .disabled(state.busy)
-                    Text("Mini corpus or November 2023 articles · review each source’s license and attribution on its dataset card.")
+                    Text("Wikipedia text or pre-embedded DBpedia · review each source’s license and attribution on its dataset card.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
                 HStack {
@@ -263,6 +267,10 @@ struct DatasetLibraryPane: View {
                                 Link("Dataset card", destination: selected.cardURL)
                             }
                             Text("License: \(selected.license ?? "Not reported — review the dataset card")")
+                            if selected.id == "Qdrant/dbpedia-entities-openai3-text-embedding-3-small-1536-100K" {
+                                Text("Pre-embedded source: query with OpenAI text-embedding-3-small at 1536 dimensions through a compatible gateway. Cloud ingest verifies the pinned source and exact vector field; equal dimensions alone are insufficient. License is not declared in the source card.")
+                                    .font(.caption).foregroundStyle(.secondary)
+                            }
                             Text("Revision: \(selected.revision)").font(.caption.monospaced()).textSelection(.enabled)
                             Picker("Configuration / split", selection: Binding(get: { state.splitID }, set: { state.splitID = $0; state.refreshSizes() })) {
                                 ForEach(state.splits) { split in Text(split.id).tag(split.id) }

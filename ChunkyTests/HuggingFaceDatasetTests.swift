@@ -286,8 +286,8 @@ struct HuggingFaceDatasetTests {
         #expect(DatasetSampleSize.medium.byteBudget == 100 * 1024 * 1024)
         #expect(DatasetSampleSize.large.byteBudget == DatasetStreamSnapshot.maximumBytes)
         #expect(DatasetSampleSize.legacy.byteBudget == nil)
-        #expect(DatasetRecommendation.wikipedia.map(\.config) == ["text-corpus", "20231101.simple", "20231101.en", "20231101.de"])
-        #expect(Set(DatasetRecommendation.wikipedia.map(\.id)).count == 4)
+        #expect(DatasetRecommendation.wikipedia.map(\.config) == ["text-corpus", "20231101.simple", "20231101.en", "20231101.de", "default"])
+        #expect(Set(DatasetRecommendation.wikipedia.map(\.id)).count == 5)
     }
 
     @Test func datasetLibraryScreenshotsContainVisibleContent() throws {

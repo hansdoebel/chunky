@@ -72,6 +72,28 @@ struct DatasetStreamSnapshotTests {
         #expect(token.manifest.rowCount == rows.count)
     }
 
+    @Test func oversizedLegacyImportGivesExplicitCloudRoute() throws {
+        let (directory, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let file = try FileHandle(forWritingTo: directory.appendingPathComponent("rows.jsonl"))
+        try file.truncate(atOffset: UInt64(DatasetSnapshot.maximumBytes + 1))
+        try file.close()
+        do { _ = try DatasetSnapshot.load(from: directory); Issue.record("Large snapshot must not enter legacy reader") }
+        catch DatasetError.benchmarkLimit { }
+    }
+
+    @Test func rowReaderRejectsReplacementSymlink() async throws {
+        let (directory, _) = try fixture()
+        defer { try? FileManager.default.removeItem(at: directory) }
+        let token = try await DatasetStreamSnapshot.validate(from: directory)
+        let rows = directory.appendingPathComponent("rows.jsonl")
+        let moved = directory.appendingPathComponent("other.jsonl")
+        try FileManager.default.moveItem(at: rows, to: moved)
+        try FileManager.default.createSymbolicLink(at: rows, withDestinationURL: moved)
+        do { try await token.forEachRow { _, _ in Issue.record("Symlink rows must not be emitted") }; Issue.record("Symlink must fail") }
+        catch DatasetError.invalidSnapshot { }
+    }
+
     private func fixture() throws -> (URL, [Data]) {
         let directory = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString)
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: false)
