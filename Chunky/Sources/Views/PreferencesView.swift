@@ -702,6 +702,7 @@ struct PreferencesView: View {
 
     private var qdrantTab: some View {
         Form {
+            Section { LocalQdrantPane() }
             Section {
                 Picker("Profile", selection: $appState.settings.qdrantProfile) {
                     ForEach(QdrantProfile.allCases) { profile in
