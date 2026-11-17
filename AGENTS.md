@@ -22,7 +22,7 @@ A paper library is a name plus a stable `library_id` on each point. The payload 
 - Swift 6.4. The app target sets `SWIFT_VERSION` to 5.0 and `SWIFT_DEFAULT_ACTOR_ISOLATION` to `MainActor`. Do not change that language mode as a drive-by.
 - Python 3.12 for the worker and for `Chunky/Resources/Scripts`.
 - Bun 1.4.4 for frontend package installation and scripts; use `worker/web/bun.lock` with `bun install --frozen-lockfile`. Node.js 24.22.1 remains pinned for the frontend tools that require Node.
-- Qdrant `v1.20.1` when a local server is needed. Unit tests do not start it.
+- Qdrant `v1.20.2` when a local server is needed. Unit tests do not start it.
 
 ## Commands
 

@@ -22,9 +22,9 @@ patch = Path(__file__).with_name(manifest["patch"])
 if patch.parent != Path(__file__).parent or not patch.is_file():
     raise SystemExit("Invalid compatibility patch")
 if args.update:
-    dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=all", "--", *[str(target / name) for name in paths]], cwd=root)
+    dirty = subprocess.check_output(["git", "status", "--porcelain", "--untracked-files=all", "--ignored", "--", *[str(target / name) for name in paths]], cwd=root)
     if dirty:
-        raise SystemExit("Refusing to overwrite dirty or untracked vendor files")
+        raise SystemExit("Refusing to overwrite dirty, untracked, or ignored vendor files")
 with tempfile.TemporaryDirectory() as directory:
     stage = Path(directory)
     archive = stage / "source.tar"
