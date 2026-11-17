@@ -131,7 +131,7 @@ private struct SidebarContent: View {
             if settings.interfaceMode == .simple && appState.viewMode.isAdvanced {
                 Text("Advanced tool kept open")
                     .fixedSize(horizontal: false, vertical: true)
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
 
@@ -139,41 +139,41 @@ private struct SidebarContent: View {
                 HStack(spacing: 8) {
                     Image(systemName: "cpu").foregroundStyle(.secondary)
                     Text(EmbeddingBackendKind(rawValue: appState.settings.embeddingBackend)?.displayName ?? "Embedding")
-                        .font(.system(size: 14))
+                        .font(.title3)
                     Spacer()
                     Text(
                         appState.settings.embeddingModel.replacingOccurrences(
                             of: ":latest", with: "")
                     )
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(.secondary)
                     .lineLimit(1)
-                    .font(.system(size: 14))
+                    .font(.title3)
                 }
 
                 HStack(spacing: 8) {
                     Image(systemName: "doc.text.viewfinder").foregroundStyle(.secondary)
                     Text("VLM")
-                        .font(.system(size: 14))
+                        .font(.title3)
                     Spacer()
                     Text(vlmModelDisplayName)
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(.secondary)
                         .lineLimit(1)
-                        .font(.system(size: 14))
+                        .font(.title3)
                 }
 
                 HStack(spacing: 8) {
                     Image(systemName: "externaldrive").foregroundStyle(.secondary)
                     Text("Qdrant")
-                        .font(.system(size: 14))
+                        .font(.title3)
                     Spacer()
                     Text(appState.settings.defaultCollection)
-                        .foregroundStyle(.tertiary)
-                        .font(.system(size: 14))
+                        .foregroundStyle(.secondary)
+                        .font(.title3)
                 }
             } header: {
                 Text("Configuration")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
 
             Section {
@@ -185,12 +185,12 @@ private struct SidebarContent: View {
                 }
             } header: {
                 Text("Queue")
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+                    .font(.body.weight(.semibold))
+                    .foregroundStyle(.secondary)
             }
         }
         .listStyle(.sidebar)
-        .frame(minWidth: 180, maxWidth: 240)
+        .frame(minWidth: 220, idealWidth: 250, maxWidth: 300)
     }
 
     private var isQdrantConfigured: Bool {
@@ -214,11 +214,11 @@ struct NavigationRow: View {
     var body: some View {
         HStack(spacing: 8) {
             Image(systemName: icon)
-                .font(.system(size: 14))
+                .font(.title3)
                 .foregroundStyle(isSelected ? Color.accentColor : .secondary)
                 .frame(width: 20)
             Text(title)
-                .font(.system(size: 14))
+                .font(.title3)
                 .foregroundStyle(isSelected ? Color.accentColor : .primary)
             Spacer()
         }
@@ -247,7 +247,7 @@ struct StatRow: View {
                 .monospacedDigit()
                 .fontWeight(.medium)
         }
-        .font(.system(size: 14, design: .rounded))
+        .font(.system(.title3, design: .rounded))
     }
 }
 
@@ -335,8 +335,10 @@ struct DropZoneEmptyView: View {
                     .fontWeight(.medium)
 
                 Text("PDF, Word, PowerPoint, Excel, HTML, Images, Markdown, AsciiDoc, CSV, XML, JSON")
-                    .font(.caption)
-                    .foregroundStyle(.tertiary)
+                    .font(.body)
+                    .foregroundStyle(.secondary)
+                    .multilineTextAlignment(.center)
+                    .fixedSize(horizontal: false, vertical: true)
             }
 
             Button {
@@ -524,14 +526,14 @@ struct FileRowView: View {
 
                 if let notice = job.localFallbackNotice {
                     Text(notice)
-                        .font(.caption)
+                        .font(.body)
                         .foregroundStyle(.orange)
                         .fixedSize(horizontal: false, vertical: true)
                 }
 
                 HStack(spacing: 6) {
                     Text(jobTypeBadge)
-                        .font(.system(.caption2, weight: .medium))
+                        .font(.system(.callout, weight: .medium))
                         .foregroundStyle(.secondary)
                         .padding(.horizontal, 6)
                         .padding(.vertical, 2)
@@ -539,32 +541,34 @@ struct FileRowView: View {
 
                     if job.status == .pending {
                         Text("Ready")
-                            .font(.caption)
-                            .foregroundStyle(.tertiary)
+                            .font(.body)
+                            .foregroundStyle(.secondary)
                         Toggle("Reconvert", isOn: $job.forceReconvert)
                             .toggleStyle(.switch)
                             .controlSize(.mini)
                     } else if job.status == .completed {
                         VStack(alignment: .leading, spacing: 2) {
                             Text("\(job.chunksCount) chunks")
-                                .font(.caption)
+                                .font(.body)
                                 .foregroundStyle(AppTheme.accentFallback)
                             if let timing = job.timingSummary {
                                 Text(timing)
-                                    .font(.system(size: 10, design: .monospaced))
-                                    .foregroundStyle(.tertiary)
+                                    .font(.system(.body, design: .monospaced))
+                                    .foregroundStyle(.secondary)
+                                    .fixedSize(horizontal: false, vertical: true)
                             }
                             if let cache = job.cacheStatus {
                                 Text("cache \(cache)")
-                                    .font(.caption)
+                                    .font(.body)
                                     .foregroundStyle(.secondary)
                             }
                         }
                     } else if job.status == .failed {
                         Text(job.error ?? "Failed")
-                            .font(.caption)
+                            .font(.body)
                             .foregroundStyle(AppTheme.statusRed)
                             .lineLimit(5)
+                            .textSelection(.enabled)
                             .help(job.error ?? "Failed")
                     } else {
                         HStack(spacing: 8) {
@@ -573,8 +577,9 @@ struct FileRowView: View {
                                 .tint(AppTheme.accentFallback)
                                 .frame(maxWidth: 120)
                             Text(job.statusMessage)
-                                .font(.caption)
-                                .foregroundStyle(.tertiary)
+                                .font(.body)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
                         }
                     }
                 }
@@ -584,18 +589,20 @@ struct FileRowView: View {
 
             if job.chunksCount > 0 && job.status != .pending {
                 Text("\(job.embeddedCount)/\(job.chunksCount)")
-                    .font(.system(.caption, design: .rounded, weight: .medium))
-                    .foregroundStyle(.tertiary)
+                    .font(.system(.body, design: .rounded, weight: .medium))
+                    .foregroundStyle(.secondary)
                     .monospacedDigit()
             }
 
             if canRemove {
                 Button(action: onRemove) {
                     Image(systemName: "xmark.circle.fill")
-                        .foregroundStyle(.quaternary)
+                        .foregroundStyle(.secondary)
                         .font(.system(size: 16))
                 }
                 .buttonStyle(.plain)
+                .accessibilityLabel("Remove \(job.fileName) from queue")
+                .help("Remove from queue. The source file is kept.")
             }
         }
         .padding(.vertical, 6)
@@ -672,7 +679,7 @@ struct BottomBarView: View {
                     if appState.isCancellationRequested {
                         Text("Stopping...")
                             .foregroundStyle(AppTheme.statusOrange)
-                            .font(.caption)
+                            .font(.body)
                     }
                 }
 

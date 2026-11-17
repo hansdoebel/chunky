@@ -10,11 +10,11 @@ struct ChunkCacheSettingsPane: View {
                 Text(limitMB == 0 ? "Size limit: none" : "Size limit: \(limitMB) MB")
             }
             Text("Least recently used conversions are removed when the cache passes this limit. 0 keeps every entry.")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
             Button("Clear cache", action: onClear)
             Text("Re-ingest skips Docling when the PDF, Docling version, pipeline, and chunker settings match. A stored vector for the same embedding model skips embedding too.")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
         }
     }

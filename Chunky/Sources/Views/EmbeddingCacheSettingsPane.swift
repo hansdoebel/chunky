@@ -11,10 +11,10 @@ struct EmbeddingCacheSettingsPane: View {
         Toggle("Reuse embeddings in Qdrant", isOn: $reuseEmbeddings)
             .disabled(host == .devbox)
         Text(explanation)
-            .font(.caption)
+            .font(.body)
             .foregroundStyle(.secondary)
         Text("The separate chunk cache can reuse conversions and matching model/dimension vectors in either pipeline. Manage it in About, Chunk cache.")
-            .font(.caption)
+            .font(.body)
             .foregroundStyle(.secondary)
     }
 

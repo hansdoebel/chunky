@@ -12,7 +12,7 @@ struct WatchedFoldersPane: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             Text("New and changed documents are ingested. An unchanged file is skipped. Removing a file deletes its points only when that folder allows it.")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .fixedSize(horizontal: false, vertical: true)
             if folders.isEmpty {
@@ -34,7 +34,7 @@ struct WatchedFoldersPane: View {
             }
             if !status.isEmpty {
                 Text(status)
-                    .font(.caption)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
         }
@@ -54,15 +54,15 @@ struct WatchedFolderRow: View {
                     .font(.body.weight(.semibold))
                 Spacer()
                 Text(folder.paused ? "Paused" : "Watching")
-                    .font(.caption.weight(.semibold))
+                    .font(.body.weight(.semibold))
                     .foregroundStyle(folder.paused ? Color.secondary : Color.green)
             }
             Text(folder.path)
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
             Text(folder.collection)
-                .font(.caption)
+                .font(.body)
             HStack {
                 Button(folder.paused ? "Resume" : "Pause") { onTogglePause(folder.id) }
                 Toggle("Delete removed files", isOn: Binding(
@@ -73,7 +73,7 @@ struct WatchedFolderRow: View {
                 Spacer()
                 Button("Remove") { onRemove(folder.id) }
             }
-            .font(.caption)
+            .font(.body)
         }
         .padding(8)
         .frame(maxWidth: .infinity, alignment: .leading)

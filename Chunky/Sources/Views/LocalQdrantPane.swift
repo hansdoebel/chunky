@@ -81,7 +81,7 @@ struct LocalQdrantControls: View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Local database").font(.headline)
             Text("Start Qdrant on this Mac using a dedicated Colima VM named chunky.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.body).foregroundStyle(.secondary)
             HStack {
                 statusRow("Colima VM", status: snapshot.profile, state: snapshot.profileState)
                 Spacer()
@@ -105,31 +105,31 @@ struct LocalQdrantControls: View {
                 }
             }
             Text("Runtime status does not verify a database connection. Use the Qdrant connection check before importing.")
-                .font(.caption).foregroundStyle(.secondary)
+                .font(.body).foregroundStyle(.secondary)
             if showsDetails {
                 Divider()
                 if snapshot.profileState == .absent {
                     Text("New VM defaults: 2 CPUs · 4 GiB memory · 30 GiB disk")
-                        .font(.caption)
+                        .font(.body)
                 } else {
                     LabeledContent("Configured CPUs", value: snapshot.cpus.map(String.init) ?? "Not reported")
                     LabeledContent("Configured memory", value: capacity(snapshot.memoryBytes))
                     LabeledContent("Configured disk capacity", value: capacity(snapshot.diskBytes))
                     Text("Allocated capacity, not current usage. Existing VM settings are preserved.")
-                        .font(.caption).foregroundStyle(.secondary)
+                        .font(.body).foregroundStyle(.secondary)
                 }
                 Button("Open configuration", action: openConfiguration)
                     .disabled(busy || snapshot.configurationURL == nil)
                     .help("Open the existing ~/.colima/chunky/colima.yaml in its default editor. Chunky does not change this file.")
                 Text("REST http://127.0.0.1:6333 · gRPC 127.0.0.1:6334")
-                    .font(.caption).textSelection(.enabled)
+                    .font(.body).textSelection(.enabled)
                 Text("Qdrant 1.20.2 · Storage: chunky-qdrant-data. First start downloads the VM and image. Stopping retains collections. Connection settings are not changed.")
-                    .font(.caption).foregroundStyle(.secondary)
+                    .font(.body).foregroundStyle(.secondary)
             }
             if !message.isEmpty {
                 Label("Action needs attention", systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.red)
-                Text(message).font(.caption).textSelection(.enabled)
+                Text(message).font(.body).textSelection(.enabled)
                 Button("Copy details") {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(message, forType: .string)
@@ -144,7 +144,7 @@ struct LocalQdrantControls: View {
             Text(title)
             Label(status, systemImage: state == .running ? "checkmark.circle.fill" :
                     state == .stopped || state == .unavailable ? "stop.circle.fill" : "questionmark.circle")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(state == .running ? Color.green :
                     state == .stopped || state == .unavailable ? Color.red : Color.secondary)
         }
