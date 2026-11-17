@@ -145,7 +145,7 @@ final class DatasetLibraryState: ObservableObject {
                 }
                 return {
                     self.streamSnapshot = snapshot
-                    let route = snapshot.benchmarkCompatible ? "Compatible with Benchmark and Cloud ingest." : "Use Cloud ingest; this exceeds the legacy benchmark's 50 MiB / 10,000-row limit."
+                    let route = snapshot.benchmarkCompatible ? "Within snapshot size limits; Benchmark also validates selected text rows." : "Use Cloud ingest; this exceeds the legacy benchmark's 50 MiB / 10,000-row limit."
                     self.status = "Saved \(snapshot.manifest.rowCount.formatted()) rows · \(Self.byteLabel(snapshot.byteCount)). Stop: \(snapshot.manifest.stopReason.rawValue). \(route)"
                 }
             }
@@ -306,7 +306,7 @@ struct DatasetLibraryPane: View {
                                 }
                             } else if let budget = state.sampleSize.byteBudget {
                                 Text("Download budget: up to \(DatasetLibraryState.byteLabel(budget)) JSONL. Actual size may be smaller; requires budget + 64 MiB free disk space.")
-                                Text("Benchmark accepts snapshots up to 50 MiB and 10,000 rows. Larger samples use Cloud ingest.").font(.caption).foregroundStyle(.secondary)
+                                Text("Benchmark snapshot limits: 50 MiB / 10,000 rows. Selected text: up to 1,000 rows, 32 KiB each and 8 MiB total. Larger text uses Cloud ingest.").font(.caption).foregroundStyle(.secondary)
                             } else { Text("Sample JSONL size: unknown until downloaded") }
                             Text("Approximate disk size only; article lengths vary and network traffic includes metadata and response overhead. Cloud storage is checked separately during import; vectors and indexes need additional space.")
                                 .font(.caption).foregroundStyle(.secondary)
