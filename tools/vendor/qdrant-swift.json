@@ -1,6 +1,6 @@
 {
   "repository": "https://github.com/hansdoebel/qdrant-swift.git",
-  "revision": "6f0f0bdbc01ce9812fbefc979c547739c5980913",
+  "revision": "8a5e3076d52dc48646be7dd70214f46e2800a2f5",
   "paths": [
     "Sources",
     "Tests",
