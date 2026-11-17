@@ -99,3 +99,11 @@ Filter captures from macOS CI run [43977736859](https://github.com/hansdoebel/ch
 ![Light semantic search filters](images/web-filters-light.png)
 
 ![Dark semantic search filters](images/web-filters-dark.png)
+
+Job settings also offer optional Maximum pages for PDF conversion. Blank processes all pages; a limit must be a positive whole number. The Standard pipeline offers OCR (off by default), the worker default or English/French/German OCR language, and Fast/Accurate table recognition. OCR language applies only with OCR enabled. VLM uploads omit Standard OCR/table overrides; switching back retains the draft for this session. These settings apply to new uploads, remain in memory and reset on sign-out.
+
+Processing controls captured by macOS browser CI [43984267460](https://github.com/hansdoebel/chunky/actions/runs/43984267460), with mocked responses and nonblank image assertions:
+
+![Light processing settings](images/web-processing-light.png)
+
+![Dark mobile processing settings](images/web-processing-dark-mobile.png)
