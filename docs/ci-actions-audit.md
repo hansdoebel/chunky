@@ -15,7 +15,7 @@ The Bun and path-filter actions were already current. The actions run on Node.js
 
 Checkout 7 restricts fork code checkout under `pull_request_target` and `workflow_run`; these workflows use neither trigger. Checkout 6 moved persisted credentials into the runner temporary directory. No job runs authenticated Git commands inside Docker actions. Workflow permissions remain unchanged.
 
-Setup Python 7 changes its implementation to ESM without changing inputs or outputs. Existing Python 3.12 selection and explicit pip cache paths remain. Setup Node 7 removes a dummy registry authentication token; these workflows do not configure a registry URL or depend on that token. Automatic npm caching is explicitly disabled because package installation uses Bun and its committed lockfile.
+Setup Python 7 changes its implementation to ESM without changing inputs or outputs. Existing Python 3.12 selection remains; the Mac import workflow retains its explicit `requirements/macos-scripts.txt` pip cache dependency path. Setup Node 7 removes a dummy registry authentication token; these workflows do not configure a registry URL or depend on that token. Automatic npm caching is explicitly disabled because package installation uses Bun and its committed lockfile.
 
 Upload Artifact 7 adds optional direct single-file uploads. These workflows retain the default ZIP archive mode, existing artifact names, retention, missing-file policy, and hidden-file exclusion. No artifact consumer or screenshot format changes.
 
