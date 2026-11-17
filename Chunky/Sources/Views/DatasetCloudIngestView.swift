@@ -152,6 +152,7 @@ struct DatasetCloudIngestView: View {
         let provider = LocalEmbeddingService(backend: settings[0], ollamaURL: settings[2], apiURL: settings[3])
         let cloud = DatasetCloudQdrant(baseURL: settings[4], apiKey: settings[5], tier: tier)
         return DatasetCloudOperations(embed: { texts, query in
+            if settings[0] == "ollama" { return try await OllamaService(baseURL: settings[2]).embedBatch(texts: texts, model: settings[1], truncate: false) }
             if query { return [try await LiveRetrievalEmbedding().embed(text: texts[0], backend: settings[0], model: settings[1], ollamaURL: settings[2], apiURL: settings[3])] }
             return try await provider.embedBatch(texts: texts, model: settings[1])
         }, capacity: { try await cloud.capacity() }, create: { name, estimate in

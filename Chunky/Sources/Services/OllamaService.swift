@@ -5,6 +5,7 @@ actor OllamaService {
     struct EmbeddingRequest: Codable {
         let model: String
         let input: [String]
+        var truncate: Bool? = nil
     }
 
     struct EmbeddingResponse: Codable {
@@ -133,7 +134,7 @@ actor OllamaService {
         return first
     }
 
-    func embedBatch(texts: [String], model: String) async throws -> [[Float]] {
+    func embedBatch(texts: [String], model: String, truncate: Bool? = nil) async throws -> [[Float]] {
         guard !texts.isEmpty else { return [] }
 
         let url = baseURL.appendingPathComponent("api/embed")
@@ -141,7 +142,7 @@ actor OllamaService {
         request.httpMethod = "POST"
         request.setValue("application/json", forHTTPHeaderField: "Content-Type")
 
-        let requestBody = EmbeddingRequest(model: model, input: texts)
+        let requestBody = EmbeddingRequest(model: model, input: texts, truncate: truncate)
         request.httpBody = try JSONEncoder().encode(requestBody)
 
         let (data, response) = try await session.data(for: request)

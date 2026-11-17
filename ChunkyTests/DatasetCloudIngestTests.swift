@@ -6,6 +6,17 @@ import Testing
 struct DatasetCloudIngestTests {
     let budget = DatasetCloudBudget(tier: .free, ram: 700_000_000, disk: 3_000_000_000)
 
+    @Test func cloudOllamaRequestDisablesTruncationWithoutChangingOtherCallers() throws {
+        let fullText = String(repeating: "Unicode🙂", count: 1000)
+        let strict = OllamaService.EmbeddingRequest(model: "fixture", input: [fullText], truncate: false)
+        let legacy = OllamaService.EmbeddingRequest(model: "fixture", input: [fullText])
+        let strictJSON = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(strict)) as? [String: Any])
+        let legacyJSON = try #require(JSONSerialization.jsonObject(with: JSONEncoder().encode(legacy)) as? [String: Any])
+        #expect(strictJSON["truncate"] as? Bool == false)
+        #expect(strictJSON["input"] as? [String] == [fullText])
+        #expect(legacyJSON["truncate"] == nil)
+    }
+
     func source(rows: Int = 35, text: String = "Fixture text") throws -> DatasetCloudSource {
         let data = try JSONSerialization.data(withJSONObject: ["text": text])
         return DatasetCloudSource(datasetID: "fixture/corpus", revision: String(repeating: "a", count: 40), config: "en", split: "train", sha256: String(repeating: "b", count: 64), rows: rows, visit: { handler in
