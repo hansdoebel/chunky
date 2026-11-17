@@ -449,16 +449,23 @@ index 76f930a..573a1f5 100644
          collection: String,
          fieldName: String,
 diff --git a/Sources/QdrantGRPC/Services/Points/PointsService.swift b/Sources/QdrantGRPC/Services/Points/PointsService.swift
-index ab3b45d..9b1ea72 100644
+index ab3b45d..81e672c 100644
 --- a/Sources/QdrantGRPC/Services/Points/PointsService.swift
 +++ b/Sources/QdrantGRPC/Services/Points/PointsService.swift
-@@ -435,10 +435,11 @@ public final class PointsService: PointsServiceProtocol, Sendable {
-         collection: String,
+@@ -436,9 +436,19 @@ public final class PointsService: PointsServiceProtocol, Sendable {
          fieldName: String,
          fieldType: FieldType,
--        wait: Bool = true
+         wait: Bool = true
++    ) async throws {
++        try await createFieldIndex(collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: false)
++    }
++
++    public func createFieldIndex(
++        collection: String,
++        fieldName: String,
++        fieldType: FieldType,
 +        wait: Bool = true,
-+        isTenant: Bool = false
++        isTenant: Bool
      ) async throws {
          try await index.createFieldIndex(
 -            collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait)

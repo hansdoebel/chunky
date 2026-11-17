@@ -435,8 +435,17 @@ public final class PointsService: PointsServiceProtocol, Sendable {
         collection: String,
         fieldName: String,
         fieldType: FieldType,
+        wait: Bool = true
+    ) async throws {
+        try await createFieldIndex(collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: false)
+    }
+
+    public func createFieldIndex(
+        collection: String,
+        fieldName: String,
+        fieldType: FieldType,
         wait: Bool = true,
-        isTenant: Bool = false
+        isTenant: Bool
     ) async throws {
         try await index.createFieldIndex(
             collection: collection, fieldName: fieldName, fieldType: fieldType, wait: wait, isTenant: isTenant)
