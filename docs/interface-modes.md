@@ -1,6 +1,6 @@
 # Simple and Advanced
 
-See the [native readability and disclosure audit](native-ux-audit.md) for proposed follow-up improvements; those recommendations are not yet implemented.
+The main queue and Preferences use more readable status and explanation text, and Preferences adapts to available space. See the [native readability and disclosure audit](native-ux-audit.md) for the design background.
 
 Chunky starts in Simple mode on both new and existing installations. The switch is at the top of Preferences and the main sidebar. It changes presentation only: saved models, dimensions, worker profiles, credentials, collection names and processing options remain active.
 
@@ -23,3 +23,11 @@ Remote HTTP services use **Test connection** or **Check reachability**, because 
 [VLC Preferences](https://docs.videolan.me/vlc-user/desktop/3.0/en/basic/settings/preferences.html) separates common controls from detailed configuration. [OBS's overview](https://obsproject.com/kb/obs-studio-overview) similarly starts with Simple output settings and directs users to Advanced for detailed control. Chunky follows that progressive disclosure pattern while retaining one saved configuration across both modes.
 
 The owner waived additional screenshots for this iteration. Behavioral tests, the native macOS build, independent review and CI remain required; no screenshot result is claimed.
+
+## Appearance and finding settings
+
+The Appearance selector at the top of Preferences offers System, Light and Dark in both modes. System is the default and follows macOS. The choice is saved and applies immediately across Chunky windows and sheets; it does not alter macOS appearance for other apps.
+
+Use **Find a setting…** to search setting categories by terms such as OCR, model, timeout, folder or dark. Choose a result to open its Advanced pane and expand tuning sections. Clear search to return to the current presentation. Searching keeps the existing Advanced tabs mounted, preserving endpoint drafts and ongoing local database work. Results navigate to a pane rather than filtering or recreating its controls.
+
+Advanced embedding tuning, metadata fields and database tuning use disclosure groups with summaries of current values. Provider/model/dimensions, connection errors and service controls stay visible. Collapsing these groups changes presentation only; it does not reset their saved values. Simple mode keeps its short setup links visible.

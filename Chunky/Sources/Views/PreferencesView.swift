@@ -27,6 +27,10 @@ private struct PreferencesContent: View {
     @EnvironmentObject var appState: AppState
     @ObservedObject var settings: AppSettings
     let automaticallyCheckConnections: Bool
+    @State private var searchText = ""
+    @State private var performanceExpanded = false
+    @State private var metadataExpanded = false
+    @State private var uploadExpanded = false
     @State private var availableModels: [OllamaModel] = []
     @State private var isLoadingModels = false
     @State private var ollamaStatus: ConnectionStatus = .unknown
@@ -82,10 +86,14 @@ private struct PreferencesContent: View {
         VStack(spacing: 0) {
             VStack(alignment: .leading, spacing: 8) {
                 InterfaceModePicker(settings: settings)
+                AppearancePicker(settings: settings)
+                TextField("Find a setting…", text: $searchText)
+                    .textFieldStyle(.roundedBorder)
+                    .accessibilityLabel("Find a setting")
                 Text(advanced
                     ? "All settings are visible. Switching to Simple keeps your configuration."
                     : "Everyday settings. Saved advanced settings still apply; switch to Advanced to edit them.")
-                    .font(.callout)
+                    .font(.body)
                     .foregroundStyle(.secondary)
             }
             .frame(maxWidth: .infinity, alignment: .leading)
@@ -93,13 +101,13 @@ private struct PreferencesContent: View {
             Divider()
             ZStack {
                 preferencesTabs
-                    .opacity(advanced ? 1 : 0)
-                    .allowsHitTesting(advanced)
-                    .accessibilityHidden(!advanced)
-                if !advanced { simpleSetup }
+                    .opacity(advanced && !searching ? 1 : 0)
+                    .allowsHitTesting(advanced && !searching)
+                    .accessibilityHidden(!advanced || searching)
+                if searching { searchResults } else if !advanced { simpleSetup }
             }
         }
-        .frame(width: 660, height: 760)
+        .frame(minWidth: 600, idealWidth: 720, minHeight: 480, idealHeight: 700)
         .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             qdrantAPIKeyInput = appState.settings.qdrantAPIKey
@@ -127,6 +135,44 @@ private struct PreferencesContent: View {
         }
     }
 
+    private var metadataCount: Int {
+        [settings.metadataIncludeFilename, settings.metadataIncludePageNumber, settings.metadataIncludeHeadings,
+         settings.metadataIncludeTimestamp, settings.metadataIncludeDocTitle, settings.metadataIncludeAuthors,
+         settings.metadataIncludeChunkIndex, settings.metadataIncludeContentType, settings.metadataIncludeSection,
+         settings.metadataIncludeDOI, settings.metadataIncludeDocumentId, settings.metadataIncludeURL,
+         settings.metadataIncludeYear, settings.metadataIncludeLanguage].filter { $0 }.count
+    }
+
+    private var searching: Bool { !searchText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+
+    private var searchResults: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Settings results").font(.headline)
+                Text("Opening a result switches to Advanced and expands tuning sections.")
+                    .foregroundStyle(.secondary)
+                ForEach(PreferenceSearchItem.matches(searchText)) { item in
+                    Button {
+                        performanceExpanded = true
+                        metadataExpanded = true
+                        uploadExpanded = true
+                        openSettings(item.tab)
+                        searchText = ""
+                    } label: {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Label(item.title, systemImage: item.icon).font(.body.weight(.medium))
+                            Text(item.detail).font(.body).foregroundStyle(.secondary)
+                        }.frame(maxWidth: .infinity, alignment: .leading)
+                    }.buttonStyle(.bordered)
+                }
+                if PreferenceSearchItem.matches(searchText).isEmpty {
+                    Text("No settings found. Try model, OCR, timeout or folder.")
+                }
+                Button("Clear search") { searchText = "" }
+            }.padding().frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     private var simpleSetup: some View {
         Form {
             Section("What would you like to do?") {
@@ -142,7 +188,7 @@ private struct PreferencesContent: View {
                     }
                 }
                 LabeledContent("Process on", value: settings.processingHost == .localMac ? "This Mac" : "Remote worker")
-                Button("Document and worker settings…") { openSettings(1) }
+                Button("Document and worker settings…", systemImage: "doc.text") { openSettings(1) }
             }
             if appState.processingMode == .chunkOnly {
                 Section("Save files") {
@@ -155,7 +201,7 @@ private struct PreferencesContent: View {
                         Button(exportFolderDisplayName, action: selectExportFolder)
                     }
                     Text("Start with one short document. Embedding models and a vector database are not needed to save files.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.body).foregroundStyle(.secondary)
                 }
             } else {
                 Section("Searchable library") {
@@ -164,17 +210,17 @@ private struct PreferencesContent: View {
                     if let problem = settings.embeddingConfigurationProblem {
                         PreferenceMessage(context: "Check model compatibility", message: problem, secrets: diagnosticSecrets)
                     }
-                    Button("Database and collection settings…") { openSettings(2) }
-                    Button("Embedding model settings…") { openSettings(0) }
+                    Button("Database and collection settings…", systemImage: "externaldrive") { openSettings(2) }
+                    Button("Embedding model settings…", systemImage: "cpu") { openSettings(0) }
                     Text("Use a collection created for this model. Changing interface mode never changes or recreates a collection.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.body).foregroundStyle(.secondary)
                 }
                 Section("Service checks") {
                     if settings.usesWorkerCloud {
                         Label("Qdrant Cloud via worker", systemImage: "cloud")
                         Text("Cloud access is checked by the worker when you ingest or search. A connection check from this Mac would not verify that route.")
-                            .font(.callout).foregroundStyle(.secondary)
-                        Button("Worker and connection settings…") { openSettings(1) }
+                            .font(.body).foregroundStyle(.secondary)
+                        Button("Worker and connection settings…", systemImage: "network") { openSettings(1) }
                     } else {
                         HStack {
                             connectionStatusLabel(qdrantStatus)
@@ -198,15 +244,15 @@ private struct PreferencesContent: View {
                         }
                     }
                     Text("Statuses describe the last check, not a permanent connection. Configure custom endpoints in Advanced.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.body).foregroundStyle(.secondary)
                 }
             }
             Section("More options") {
-                Button("Chat settings…") { openSettings(4) }
-                Button("App information and dependencies…") { openSettings(5) }
+                Button("Chat settings…", systemImage: "bubble.left.and.bubble.right") { openSettings(4) }
+                Button("App information and dependencies…", systemImage: "info.circle") { openSettings(5) }
                 Link("Installation and first-run help", destination: URL(string: "https://github.com/hansdoebel/chunky/blob/main/docs/macbook-first-run.md")!)
                 Text("Your saved advanced settings remain active. Switch to Advanced whenever you need to inspect or change them.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.body).foregroundStyle(.secondary)
             }
         }
         .formStyle(.grouped)
@@ -342,7 +388,7 @@ private struct PreferencesContent: View {
                     ValidatedPreferenceField(title: "Model ID", value: $settings.embeddingModel)
                     dimensionField
                     Text("OpenAI-compatible /v1/embeddings. Local Mac and Devbox jobs use the configured endpoint.")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(.secondary)
                 }
             }
@@ -381,7 +427,7 @@ private struct PreferencesContent: View {
                             Image(systemName: "exclamationmark.triangle")
                                 .foregroundColor(.orange)
                             Text("No models found. Start Ollama and pull an embedding model.")
-                                .font(.callout)
+                                .font(.body)
                                 .foregroundColor(.secondary)
                         }
                     } else {
@@ -418,6 +464,7 @@ private struct PreferencesContent: View {
 
             if advanced {
                 Section {
+                    DisclosureGroup("Embedding tuning · batch \(settings.embeddingBatchSize), concurrency \(settings.embeddingConcurrency)", isExpanded: $performanceExpanded) {
                     StepperRow(
                         label: "Batch Size", value: $appState.settings.embeddingBatchSize, range: 1...32
                     )
@@ -429,6 +476,7 @@ private struct PreferencesContent: View {
                         reuseEmbeddings: $appState.settings.enableEmbeddingCache,
                         host: appState.settings.processingHost
                     )
+                    }
                 } header: {
                     Text("Performance")
                 }
@@ -534,7 +582,7 @@ private struct PreferencesContent: View {
                                           isError: devboxStatus != .connected)
                     }
                     Text("Plain HTTP to a private LAN address is allowed by NSAllowsLocalNetworking. MagicDNS HTTP uses the ts.net exception. The token is stored in the Keychain.")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundColor(.secondary)
                 }
 
@@ -560,7 +608,7 @@ private struct PreferencesContent: View {
                 if let selected = DoclingModel(rawValue: appState.settings.doclingModel),
                    selected != .standard {
                     Text(selected.description)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundColor(.secondary)
                 }
 
@@ -574,7 +622,7 @@ private struct PreferencesContent: View {
                     if let selected = LayoutModel(rawValue: appState.settings.layoutModel),
                        selected != .standard {
                         Text(selected.description)
-                            .font(.callout)
+                            .font(.body)
                             .foregroundColor(.secondary)
                     }
                 }
@@ -589,14 +637,14 @@ private struct PreferencesContent: View {
                     StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...16)
                     if appState.settings.processingHost == .localMac {
                         Text("TableFormer stays on the CPU. Keep table batches small on this machine.")
-                            .font(.callout)
+                            .font(.body)
                             .foregroundColor(.secondary)
                     }
                     StepperRow(label: "OCR batch", value: $appState.settings.ocrBatchSize, range: 0...64)
                     StepperRow(label: "Layout batch", value: $appState.settings.layoutBatchSize, range: 0...64)
                     StepperRow(label: "Table batch", value: $appState.settings.tableBatchSize, range: 0...16)
                     Text("Zero uses the host default. A worker host uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundColor(.secondary)
 
                     Picker("Accelerator", selection: $appState.settings.doclingAccelerator) {
@@ -677,7 +725,7 @@ private struct PreferencesContent: View {
                         }
                         ValidatedPreferenceField(title: "VLM server URL", value: $settings.vlmServerURL, kind: .endpoint, allowEmpty: true)
                         Text("Used by the API preset. This is not the embedding Ollama URL.")
-                            .font(.callout)
+                            .font(.body)
                             .foregroundColor(.secondary)
                     }
                     Toggle("Picture Classification", isOn: $appState.settings.doPictureClassification)
@@ -730,6 +778,7 @@ private struct PreferencesContent: View {
                 }
 
                 Section {
+                    DisclosureGroup("Included metadata fields · \(metadataCount) enabled", isExpanded: $metadataExpanded) {
                     Toggle("Filename", isOn: $appState.settings.metadataIncludeFilename)
                     Toggle("Page Number", isOn: $appState.settings.metadataIncludePageNumber)
                     Toggle("Headings", isOn: $appState.settings.metadataIncludeHeadings)
@@ -744,6 +793,7 @@ private struct PreferencesContent: View {
                     Toggle("URL", isOn: $appState.settings.metadataIncludeURL)
                     Toggle("Year", isOn: $appState.settings.metadataIncludeYear)
                     Toggle("Language", isOn: $appState.settings.metadataIncludeLanguage)
+                    }
                 } header: {
                     Text("Metadata to Include")
                 }
@@ -863,7 +913,7 @@ private struct PreferencesContent: View {
                         }
                     }
                     Text("Quality turns on picture description and classification.")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundColor(.secondary)
                     Picker("Worker ingest", selection: $appState.settings.devboxIngestTarget) {
                         ForEach(DevboxIngestTarget.allCases) { target in
@@ -872,7 +922,7 @@ private struct PreferencesContent: View {
                     }
                     ValidatedPreferenceField(title: "Qdrant Cloud URL", value: $settings.qdrantCloudURL, kind: .endpoint, allowEmpty: true)
                     Text("Used when Processing host is Devbox and ingest is Qdrant Cloud. The API key below is sent with the job and is not stored on the worker. Local Mac keeps using Server URL.")
-                        .font(.callout)
+                        .font(.body)
                         .foregroundColor(.secondary)
                 } header: {
                     Text("Worker ingest target")
@@ -887,10 +937,10 @@ private struct PreferencesContent: View {
                 ValidatedPreferenceField(title: "API key", value: qdrantKeyBinding, kind: .secret, allowEmpty: true)
                     .disabled(appState.isProcessing)
                 Text("Apply the API key first, then save and test the server URL. Credentials stay in the Keychain.")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.body).foregroundStyle(.secondary)
                 if appState.isProcessing {
                     Text("Database connection settings are locked while documents are processing.")
-                        .font(.callout).foregroundStyle(.secondary)
+                        .font(.body).foregroundStyle(.secondary)
                 }
                 HStack {
                     connectionStatusLabel(qdrantStatus)
@@ -914,6 +964,7 @@ private struct PreferencesContent: View {
 
             if advanced {
                 Section {
+                    DisclosureGroup("Database tuning · \(settings.qdrantDistanceMetric), \(settings.qdrantCompression), hybrid \(settings.hybridSearch ? "on" : "off")", isExpanded: $uploadExpanded) {
                     StepperRow(
                         label: "Batch Size", value: $appState.settings.qdrantBatchSize, range: 10...500,
                         step: 10)
@@ -935,6 +986,7 @@ private struct PreferencesContent: View {
                     .help(Compression(rawValue: appState.settings.qdrantCompression)?.description ?? "")
 
                     Toggle("Hybrid Search (Dense + Sparse)", isOn: $appState.settings.hybridSearch)
+                    }
                 } header: {
                     Text("Upload")
                 }
@@ -1194,10 +1246,10 @@ private struct PreferencesContent: View {
                             .font(.title2)
                             .fontWeight(.semibold)
                         Text("Version \(appVersion)")
-                            .font(.callout)
+                            .font(.body)
                             .foregroundStyle(.secondary)
                         Text("Document chunking and vector embedding tool")
-                            .font(.callout)
+                            .font(.body)
                             .foregroundStyle(.tertiary)
                     }
                     Spacer()
@@ -1220,7 +1272,7 @@ private struct PreferencesContent: View {
 
                             if let latest = latestDoclingVersion, latest != doclingVersion {
                                 Text("\(latest) available")
-                                    .font(.callout)
+                                    .font(.body)
                                     .foregroundStyle(.orange)
                             }
                         }
@@ -1232,7 +1284,7 @@ private struct PreferencesContent: View {
                         ProgressView()
                             .scaleEffect(0.7)
                         Text(doclingUpdateStatus ?? "Updating...")
-                            .font(.callout)
+                            .font(.body)
                             .foregroundStyle(.secondary)
                     }
                 } else {
@@ -1253,7 +1305,7 @@ private struct PreferencesContent: View {
 
                 if let status = doclingUpdateStatus, !isUpdatingDocling {
                     Text(status)
-                        .font(.callout)
+                        .font(.body)
                         .foregroundStyle(status.contains("success") ? .green : .secondary)
                 }
             } header: {

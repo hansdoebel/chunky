@@ -29,10 +29,10 @@ struct ValidatedPreferenceField: View {
                 }
             }
             if let error {
-                Text(error).foregroundStyle(.red).font(.callout).textSelection(.enabled)
+                Text(error).foregroundStyle(.red).font(.body).textSelection(.enabled)
             } else if loaded && draft != value {
                 Text("Not applied yet. Press Return or \(actionTitle.lowercased()).")
-                    .font(.callout).foregroundStyle(.secondary)
+                    .font(.body).foregroundStyle(.secondary)
             }
         }
         .onAppear {
