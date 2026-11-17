@@ -20,7 +20,7 @@ class MacPreflightTests(unittest.TestCase):
         self.assertEqual(len(check(lambda: "Darwin", lambda _: None)), 3)
 
     def test_supported_mac_and_toolchain(self):
-        outputs = {"sw_vers": "27.0", "xcodebuild": "Xcode 27.2", "xcrun": "Apple Swift version 6.4.2"}
+        outputs = {"sw_vers": "27.0", "xcodebuild": "Xcode 27.2", "xcrun": "swift-driver version: 1.139.2 Apple Swift version 6.4.2 (swiftlang-6.4.2 clang-2000.0.0)\nTarget: arm64-apple-macosx27.0"}
         def run(command, **kwargs):
             return subprocess.CompletedProcess(command, 0, outputs[command[0]], "")
         self.assertEqual(check(lambda: "Darwin", lambda name: name, run), [])
