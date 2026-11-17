@@ -8,7 +8,7 @@ Advanced exposes all six Preferences pages and specialist navigation tools. If a
 
 ## Connections and errors
 
-A status is the result of the last check, not a promise that a service is still reachable. Changing an endpoint invalidates its result. Qdrant checks use a separate temporary client and verify collection access, without disconnecting processing jobs or selecting another collection. Ollama checks list available models without changing the saved model or its dimensions. Model selection still probes dimensions for that selected model.
+A status is the result of the last check, not a promise that a service is still reachable. Changing an endpoint or database route invalidates its result. Simple mode identifies worker-to-Cloud routing explicitly and does not display a local Qdrant check as Cloud validation. That route is verified by the worker during ingest/search; checks from this Mac are labeled accordingly. Qdrant checks use a separate temporary client and verify collection access, without disconnecting processing jobs or selecting another collection. Ollama checks list available models without changing the saved model or its dimensions. Model selection still probes dimensions for that selected model.
 
 Endpoint, model, credential and dimension fields keep edits pending until **Apply**, **Save and test**, or Return. Invalid input leaves the previous saved value intact and explains how to correct it. Worker profile fields save together with **Save** or Return; **Use** also validates before applying the profile. Database credentials and endpoint changes are locked during document processing.
 

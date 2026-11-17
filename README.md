@@ -40,7 +40,7 @@ Ordinary app builds use checked-in generated Swift and SwiftPM dependencies. Pro
 
 ## Setup
 
-For a fresh MacBook, follow [the first-run checklist](docs/macbook-first-run.md). It separates building the app from downloading models and starting a database.
+For a fresh MacBook, follow [the first-run checklist](docs/macbook-first-run.md). [Installation and distribution](docs/distribution.md) covers `make install`, optional dependencies, verified archives and a private Homebrew tap. It separates building the app from downloading models and starting a database.
 
 ```
 make first-launch

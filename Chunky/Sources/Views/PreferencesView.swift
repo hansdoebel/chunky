@@ -109,6 +109,9 @@ private struct PreferencesContent: View {
         }
         .onChange(of: settings.ollamaURL) { _, new in if new != ollamaProbeURL { invalidateOllamaCheck() } }
         .onChange(of: settings.embeddingBackend) { _, new in if new != ollamaProbeBackend { invalidateOllamaCheck() } }
+        .onChange(of: settings.processingHost) { _, _ in invalidateQdrantCheck() }
+        .onChange(of: settings.devboxIngestTarget) { _, _ in invalidateQdrantCheck() }
+        .onChange(of: settings.qdrantCloudURL) { _, _ in invalidateQdrantCheck() }
         .onChange(of: settings.qdrantURL) { _, new in if new != qdrantProbeURL { invalidateQdrantCheck() } }
         .onChange(of: settings.qdrantAPIKey) { _, new in if new != qdrantProbeKey { invalidateQdrantCheck() } }
         .onDisappear {
@@ -167,20 +170,27 @@ private struct PreferencesContent: View {
                         .font(.callout).foregroundStyle(.secondary)
                 }
                 Section("Service checks") {
-                    HStack {
-                        connectionStatusLabel(qdrantStatus)
-                        Spacer()
-                        Button("Test database") { Task { await testQdrantConnection() } }
-                            .disabled(qdrantStatus == .checking)
-                    }
-                    if let error = appState.qdrantConnectionError {
-                        PreferenceMessage(context: "Database check", message: error, secrets: diagnosticSecrets)
+                    if usesWorkerCloud {
+                        Label("Qdrant Cloud via worker", systemImage: "cloud")
+                        Text("Cloud access is checked by the worker when you ingest or search. A connection check from this Mac would not verify that route.")
+                            .font(.callout).foregroundStyle(.secondary)
+                        Button("Worker and connection settings…") { openSettings(1) }
+                    } else {
+                        HStack {
+                            connectionStatusLabel(qdrantStatus)
+                            Spacer()
+                            Button("Test database from this Mac") { Task { await testQdrantConnection() } }
+                                .disabled(qdrantStatus == .checking)
+                        }
+                        if let error = appState.qdrantConnectionError {
+                            PreferenceMessage(context: "Database check from this Mac", message: error, secrets: diagnosticSecrets)
+                        }
                     }
                     if settings.embeddingBackend == EmbeddingBackendKind.ollama.rawValue {
                         HStack {
                             connectionStatusLabel(ollamaStatus)
                             Spacer()
-                            Button("Test Ollama") { Task { await loadModels() } }
+                            Button("Test Ollama from this Mac") { Task { await loadModels() } }
                                 .disabled(isLoadingModels)
                         }
                         if !ollamaMessage.isEmpty {
@@ -206,6 +216,10 @@ private struct PreferencesContent: View {
     private func openSettings(_ tab: Int) {
         selectedTab = tab
         settings.interfaceMode = .advanced
+    }
+
+    private var usesWorkerCloud: Bool {
+        settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud
     }
 
     private var diagnosticSecrets: [String] {
@@ -895,7 +909,7 @@ private struct PreferencesContent: View {
                     }
                 }
             } header: {
-                Text("Connection")
+                Text("Connection from this Mac (gRPC)")
             } footer: {
                 if let error = appState.qdrantConnectionError {
                     PreferenceMessage(context: "Qdrant connection failed", message: error, secrets: diagnosticSecrets)

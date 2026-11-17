@@ -18,6 +18,8 @@ Python is optional for building and opening the app. Install Python 3.12 before 
 
 `make run` builds and opens this checkout's `build/DerivedData/Build/Products/Debug/Chunky.app`. It does not search other checkouts' DerivedData. Builds disable code signing, so no Apple Developer account is required. This is a source-build workflow, not a notarized release installer.
 
+To install a local build in `~/Applications`, use `make install`. It refuses to overwrite an existing app. See [installation and distribution](distribution.md) for safe updates and the release/Homebrew workflow.
+
 The first launch does not need Docker, a GPU worker, Ollama, or downloaded models. Open Preferences and verify that the processing host is Local Mac before trying a local job. Saved settings and credentials are retained; a new build does not reset them.
 
 ## Choose the interface mode
