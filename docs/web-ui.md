@@ -99,3 +99,7 @@ Filter captures from macOS CI run [43977736859](https://github.com/hansdoebel/ch
 ![Light semantic search filters](images/web-filters-light.png)
 
 ![Dark semantic search filters](images/web-filters-dark.png)
+
+Job settings includes a read-only Worker model readiness catalog. Refresh asks the worker for its embedding-provider list, document-model cache/server discovery and installed model inventory. Reported available means the worker listed or cached the model; it does not prove that runtime resources can load it. Not detected is a completed negative discovery; incomplete cache/provider discovery and ambiguous model-server failures remain Unknown. Custom embedding endpoints are not checked by this catalog.
+
+Recommendations are labeled as coming from the worker devbox catalog. Apple-only MLX entries are omitted. Revision and cached size appear when supplied; long catalogs use explicit pages of twenty entries. Refresh clears old readiness while loading, and failures offer retry without changing model selections. The catalog never downloads a model or changes providers, collection settings or saved credentials.
