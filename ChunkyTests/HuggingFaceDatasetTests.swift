@@ -298,6 +298,8 @@ struct HuggingFaceDatasetTests {
     }
 
     @Test func presetsAndRecommendationsDoNotConflateLanguagesOrBudgets() {
+        #expect(DatasetLibraryState.byteLabel(10 * 1024 * 1024) == "10 MiB")
+        #expect(DatasetLibraryState.byteLabel(1024 * 1024 * 1024) == "1 GiB")
         #expect(DatasetSampleSize.small.byteBudget == 10 * 1024 * 1024)
         #expect(DatasetSampleSize.medium.byteBudget == 100 * 1024 * 1024)
         #expect(DatasetSampleSize.large.byteBudget == DatasetStreamSnapshot.maximumBytes)

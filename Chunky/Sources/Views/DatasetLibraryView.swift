@@ -93,7 +93,12 @@ final class DatasetLibraryState: ObservableObject {
     var estimatedBytes: Int? { requestedRows.flatMap { sampleEstimate?.bytes(for: $0) } }
 
     static func byteLabel(_ count: Int) -> String {
-        ByteCountFormatter.string(fromByteCount: Int64(count), countStyle: .binary)
+        for (divisor, unit) in [(1_073_741_824, "GiB"), (1_048_576, "MiB"), (1_024, "KiB")] {
+            if count >= divisor {
+                return (Double(count) / Double(divisor)).formatted(.number.precision(.fractionLength(0...1))) + " " + unit
+            }
+        }
+        return "\(count) bytes"
     }
 
     private func clearSizes() {
