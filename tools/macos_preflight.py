@@ -29,8 +29,6 @@ def check(system=platform.system, which=shutil.which, run=subprocess.run):
                 failures.append(message)
         except (OSError, subprocess.TimeoutExpired):
             failures.append(message)
-    if not which("python3.12"):
-        failures.append("Install Python 3.12 before make setup-venv (for example: brew install python@3.12).")
     return failures
 
 
@@ -40,4 +38,6 @@ if __name__ == "__main__":
         print(problem, file=sys.stderr)
     if problems:
         raise SystemExit(1)
+    if not shutil.which("python3.12"):
+        print("Local document processing needs Python 3.12: brew install python@3.12, then make setup-venv.")
     print("Mac build prerequisites found. Docker, Ollama and model downloads are optional for the first app launch.")

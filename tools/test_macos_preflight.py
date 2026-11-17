@@ -17,7 +17,7 @@ class MacPreflightTests(unittest.TestCase):
         self.assertEqual(len(check(lambda: "Linux", unexpected, unexpected)), 1)
 
     def test_reports_all_missing_prerequisites(self):
-        self.assertEqual(len(check(lambda: "Darwin", lambda _: None)), 4)
+        self.assertEqual(len(check(lambda: "Darwin", lambda _: None)), 3)
 
     def test_supported_mac_and_toolchain(self):
         outputs = {"sw_vers": "27.0", "xcodebuild": "Xcode 27.2", "xcrun": "Apple Swift version 6.4.2"}

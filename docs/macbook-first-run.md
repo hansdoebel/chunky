@@ -14,7 +14,7 @@ make doctor
 make run
 ```
 
-Install Python 3.12 if the check requests it: `brew install python@3.12`. If Xcode is not selected, use `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`, adjusting the path to your installed Xcode. `make first-launch` completes Xcode's first-launch setup; it may request administrator authentication.
+Python is optional for building and opening the app. Install Python 3.12 before local document processing: `brew install python@3.12`. If Xcode is not selected, use `sudo xcode-select --switch /Applications/Xcode.app/Contents/Developer`, adjusting the path to your installed Xcode. `make first-launch` completes Xcode's first-launch setup; it may request administrator authentication.
 
 `make run` builds and opens this checkout's `build/DerivedData/Build/Products/Debug/Chunky.app`. It does not search other checkouts' DerivedData. Builds disable code signing, so no Apple Developer account is required. This is a source-build workflow, not a notarized release installer.
 
