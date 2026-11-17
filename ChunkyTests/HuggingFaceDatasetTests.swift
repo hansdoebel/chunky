@@ -62,6 +62,32 @@ struct HuggingFaceDatasetTests {
         }
     }
 
+    @Test func missingOrMalformedTruncationMetadataFailsClosed() async throws {
+        for malformed in [false, true] {
+            let root = try temporaryFolder()
+            defer { try? FileManager.default.removeItem(at: root) }
+            let http = DatasetFixtureHTTP()
+            http.missingTruncation = !malformed
+            http.malformedTruncation = malformed
+            do {
+                _ = try await HuggingFaceDatasetService(http: http).download(dataset: Self.dataset, split: Self.split, rows: 1, folder: root)
+                Issue.record("Unverifiable row completeness should fail")
+            } catch DatasetError.invalidResponse { }
+            #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+        }
+    }
+
+    @Test func oversizedOrDuplicateSearchResultsAreRejected() async throws {
+        for duplicate in [false, true] {
+            let http = DatasetFixtureHTTP()
+            http.invalidSearchCount = duplicate ? 2 : 31
+            do {
+                _ = try await HuggingFaceDatasetService(http: http).search("fixture")
+                Issue.record("Invalid search list should fail")
+            } catch DatasetError.invalidResponse { }
+        }
+    }
+
     @Test func rowBoundsAndOversizedResponsesFailBeforeSaving() async throws {
         let root = try temporaryFolder()
         defer { try? FileManager.default.removeItem(at: root) }
@@ -198,11 +224,17 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
     var truncated = false
     var incomplete = false
     var oversized = false
+    var missingTruncation = false
+    var malformedTruncation = false
+    var invalidSearchCount: Int?
 
     func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
         let revision = HuggingFaceDatasetTests.revision
         if url.path == "/api/datasets" || url.path.hasPrefix("/api/datasets/") {
             let item: [String: Any] = ["id": "fixture/corpus", "sha": revision, "downloads": 10, "tags": ["license:cc-by-4.0"], "gated": false]
+            if let count = invalidSearchCount {
+                return DatasetHTTPResponse(data: try JSONSerialization.data(withJSONObject: Array(repeating: item, count: count)), revision: nil)
+            }
             let object: Any = url.path == "/api/datasets" ? [item, item.merging(["id": "fixture/private", "gated": "auto"]) { _, rhs in rhs }] : item
             return DatasetHTTPResponse(data: try JSONSerialization.data(withJSONObject: object), revision: nil)
         }
@@ -215,7 +247,11 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
         offsets.append(offset)
         if oversized { return DatasetHTTPResponse(data: Data(repeating: 32, count: maximumBytes + 1), revision: revision) }
         let count = incomplete ? 0 : min(length, 205 - offset)
-        let rows: [[String: Any]] = (0..<count).map { index in ["row_idx": offset + index, "row": ["_id": String(offset + index), "text": "Fixture row \(offset + index)", "optional": NSNull()], "truncated_cells": truncated ? ["text"] : []] }
+        let rows: [[String: Any]] = (0..<count).map { index in
+            var row: [String: Any] = ["row_idx": offset + index, "row": ["_id": String(offset + index), "text": "Fixture row \(offset + index)", "optional": NSNull()]]
+            if !missingTruncation { row["truncated_cells"] = malformedTruncation ? "invalid" : (truncated ? ["text"] : []) }
+            return row
+        }
         let data = try JSONSerialization.data(withJSONObject: ["rows": rows, "num_rows_total": 205])
         return DatasetHTTPResponse(data: data, revision: badRevisionOffset == offset ? (missingRevision ? nil : String(repeating: "b", count: 40)) : revision)
     }

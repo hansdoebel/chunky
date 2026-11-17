@@ -29,7 +29,10 @@ final class URLSessionDatasetHTTP: DatasetHTTP {
         guard response.expectedContentLength <= maximumBytes else { throw DatasetError.limitExceeded }
         var data = Data()
         for try await byte in bytes {
-            try Task.checkCancellation()
+            if data.count.isMultiple(of: 16 * 1024) {
+                try Task.checkCancellation()
+                await Task.yield()
+            }
             guard data.count < maximumBytes else { throw DatasetError.limitExceeded }
             data.append(byte)
         }
@@ -47,7 +50,10 @@ struct HuggingFaceDatasetService {
         guard !query.isEmpty, query.count <= 200 else { return [] }
         let response = try await http.get(Self.url(host: "huggingface.co", path: "/api/datasets", query: ["search": query, "limit": "30", "full": "true"]), maximumBytes: Self.pageBytes)
         guard response.data.count <= Self.pageBytes, let list = try JSONSerialization.jsonObject(with: response.data) as? [[String: Any]] else { throw DatasetError.invalidResponse }
-        return list.compactMap { Self.dataset($0) }
+        guard list.count <= 30 else { throw DatasetError.invalidResponse }
+        let datasets = list.compactMap { Self.dataset($0) }
+        guard Set(datasets.map(\.id)).count == datasets.count else { throw DatasetError.invalidResponse }
+        return datasets
     }
 
     func details(_ id: String) async throws -> HuggingFaceDataset {
@@ -85,7 +91,7 @@ struct HuggingFaceDatasetService {
             guard rows.count == min(length, max(0, available - count)) else { throw DatasetError.invalidResponse }
             for row in rows {
                 guard row["row_idx"] as? Int == count, let value = row["row"] as? [String: Any],
-                      (row["truncated_cells"] as? [Any] ?? []).isEmpty else { throw DatasetError.invalidResponse }
+                      let truncated = row["truncated_cells"] as? [Any], truncated.isEmpty else { throw DatasetError.invalidResponse }
                 let line = try JSONSerialization.data(withJSONObject: value, options: [.sortedKeys, .fragmentsAllowed])
                 guard data.count + line.count + 1 <= DatasetSnapshot.maximumBytes else { throw DatasetError.limitExceeded }
                 data.append(line)
