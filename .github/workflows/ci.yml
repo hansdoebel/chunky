@@ -128,12 +128,25 @@ jobs:
             -scheme Chunky \
             -destination 'platform=macOS,arch=arm64' \
             -only-testing:ChunkyTests \
+            -resultBundlePath "${RUNNER_TEMP}/ChunkyTests.xcresult" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=NO \
             CODE_SIGNING_ALLOWED=NO \
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
             ENABLE_HARDENED_RUNTIME=NO
+
+      - name: Report native test failures
+        if: failure()
+        run: xcrun xcresulttool get test-results summary --path "${RUNNER_TEMP}/ChunkyTests.xcresult"
+
+      - name: Upload native test result bundle
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: native-test-results
+          path: ${{ runner.temp }}/ChunkyTests.xcresult
+          retention-days: 7
 
       - name: Upload analytics screenshot
         if: always()
