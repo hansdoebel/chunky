@@ -24,10 +24,31 @@ nonisolated enum LocalRuntimeError: LocalizedError {
     }
 }
 
+nonisolated enum LocalRuntimeState: Sendable, Equatable {
+    case unknown, running, stopped, absent, unavailable
+
+    init(_ status: String) {
+        switch status.lowercased() {
+        case "running": self = .running
+        case "stopped", "vm stopped": self = .stopped
+        case "not created": self = .absent
+        case "unavailable": self = .unavailable
+        default: self = .unknown
+        }
+    }
+}
+
 nonisolated struct LocalQdrantSnapshot: Sendable, Equatable {
-    var profile = "Not created"
+    var profile = "Not checked"
     var container = "Not checked"
     var running = false
+    var cpus: Int?
+    var memoryBytes: Int64?
+    var diskBytes: Int64?
+    var configurationURL: URL?
+
+    var profileState: LocalRuntimeState { LocalRuntimeState(profile) }
+    var containerState: LocalRuntimeState { running ? .running : LocalRuntimeState(container) }
 }
 
 nonisolated final class LocalRuntimeProcessControl: @unchecked Sendable {
@@ -182,7 +203,24 @@ nonisolated struct LocalQdrantRuntime: Sendable {
         try await execute(docker, ["--host", socket] + arguments, timeout: timeout)
     }
 
-    private struct Profile: Decodable { let name: String; let status: String; let runtime: String? }
+    func existingConfigurationURL() -> URL? {
+        guard ownsProfile else { return nil }
+        let canonicalHome = home.resolvingSymlinksInPath().standardizedFileURL
+        let candidate = canonicalHome.appendingPathComponent(".colima/chunky/colima.yaml")
+        guard candidate.resolvingSymlinksInPath().standardizedFileURL == candidate,
+              let values = try? candidate.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey]),
+              values.isRegularFile == true, values.isSymbolicLink != true else { return nil }
+        return candidate
+    }
+
+    private struct Profile: Decodable {
+        let name: String
+        let status: String
+        let runtime: String?
+        let cpus: Int?
+        let memory: Int64?
+        let disk: Int64?
+    }
     private func currentProfile() async throws -> Profile? {
         let output = try await execute(colima, ["list", "--json"])
         let profiles = try output.split(whereSeparator: \.isNewline).map { try JSONDecoder().decode(Profile.self, from: Data($0.utf8)) }
@@ -202,12 +240,20 @@ nonisolated struct LocalQdrantRuntime: Sendable {
         guard docker != nil else { throw LocalRuntimeError.unavailable("Docker CLI is missing. Run brew install colima docker and reopen Preferences.") }
         let profile = try await currentProfile()
         try requireOwnership(profile)
-        guard let profile else { return LocalQdrantSnapshot() }
-        guard profile.status.lowercased() == "running" else {
-            return LocalQdrantSnapshot(profile: profile.status, container: "VM stopped")
-        }
+        guard let profile else { return LocalQdrantSnapshot(profile: "Not created", container: "Not created") }
+        var snapshot = LocalQdrantSnapshot(
+            profile: profile.status, container: profile.status.lowercased() == "stopped" ? "VM stopped" : "Not checked",
+            cpus: profile.cpus.flatMap { $0 > 0 ? $0 : nil },
+            memoryBytes: profile.memory.flatMap { $0 > 0 ? $0 : nil },
+            diskBytes: profile.disk.flatMap { $0 > 0 ? $0 : nil },
+            configurationURL: existingConfigurationURL()
+        )
+        guard profile.status.lowercased() == "running" else { return snapshot }
         let existing = try await ownedContainer()
-        return LocalQdrantSnapshot(profile: "Running", container: existing.map { $0 ? "Running" : "Stopped" } ?? "Not created", running: existing == true)
+        snapshot.profile = "Running"
+        snapshot.container = existing.map { $0 ? "Running" : "Stopped" } ?? "Not created"
+        snapshot.running = existing == true
+        return snapshot
     }
 
     func start() async throws {

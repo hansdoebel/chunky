@@ -10,6 +10,63 @@ import Glibc
 
 @MainActor
 struct LocalQdrantRuntimeTests {
+    @Test func uncheckedAndMissingProfilesHaveDistinctStates() async throws {
+        #expect(LocalQdrantSnapshot().profileState == .unknown)
+        let fixture = try RuntimeFixture(owned: false, outputs: [""])
+        defer { fixture.cleanup() }
+        let snapshot = try await fixture.runtime.refresh()
+        #expect(snapshot.profileState == .absent)
+        #expect(snapshot.containerState == .absent)
+        #expect(snapshot.cpus == nil)
+    }
+
+    @Test func stoppedProfileReportsActualAllocation() async throws {
+        let fixture = try RuntimeFixture(owned: true, outputs: [#"{"name":"chunky","status":"Stopped","runtime":"docker","cpus":6,"memory":8589934592,"disk":68719476736}"#])
+        defer { fixture.cleanup() }
+        let snapshot = try await fixture.runtime.refresh()
+        #expect(snapshot.profileState == .stopped)
+        #expect(snapshot.containerState == .stopped)
+        #expect(snapshot.cpus == 6)
+        #expect(snapshot.memoryBytes == 8589934592)
+        #expect(snapshot.diskBytes == 68719476736)
+        #expect(await fixture.script.calls.count == 1)
+    }
+
+    @Test func unknownStatusAndMissingResourcesDoNotInventDefaults() async throws {
+        let fixture = try RuntimeFixture(owned: true, outputs: [#"{"name":"chunky","status":"Starting","runtime":"docker","cpus":0,"memory":-1}"#])
+        defer { fixture.cleanup() }
+        let snapshot = try await fixture.runtime.refresh()
+        #expect(snapshot.profileState == .unknown)
+        #expect(snapshot.containerState == .unknown)
+        #expect(snapshot.cpus == nil)
+        #expect(snapshot.memoryBytes == nil)
+        #expect(snapshot.diskBytes == nil)
+    }
+
+    @Test func configurationRequiresOwnedRegularFileAndRevalidatesRemoval() throws {
+        let fixture = try RuntimeFixture(owned: true, outputs: [])
+        defer { fixture.cleanup() }
+        let config = fixture.directory.appendingPathComponent(".colima/chunky/colima.yaml")
+        #expect(fixture.runtime.existingConfigurationURL() == nil)
+        try FileManager.default.createDirectory(at: config.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try "cpu: 6".write(to: config, atomically: true, encoding: .utf8)
+        #expect(fixture.runtime.existingConfigurationURL() == config.resolvingSymlinksInPath())
+        try FileManager.default.removeItem(at: fixture.directory.appendingPathComponent("marker"))
+        #expect(fixture.runtime.existingConfigurationURL() == nil)
+    }
+
+    @Test(arguments: [false, true]) func configurationRejectsSymlinkEscape(profileLink: Bool) throws {
+        let fixture = try RuntimeFixture(owned: true, outputs: [])
+        defer { fixture.cleanup() }
+        let outside = fixture.directory.appendingPathComponent("outside")
+        try FileManager.default.createDirectory(at: outside, withIntermediateDirectories: true)
+        try "cpu: 6".write(to: outside.appendingPathComponent("colima.yaml"), atomically: true, encoding: .utf8)
+        let profile = fixture.directory.appendingPathComponent(".colima/chunky")
+        try FileManager.default.createDirectory(at: profileLink ? profile.deletingLastPathComponent() : profile, withIntermediateDirectories: true)
+        try FileManager.default.createSymbolicLink(at: profileLink ? profile : profile.appendingPathComponent("colima.yaml"), withDestinationURL: profileLink ? outside : outside.appendingPathComponent("colima.yaml"))
+        #expect(fixture.runtime.existingConfigurationURL() == nil)
+    }
+
     @Test func inheritedRemoteOverridesAreRemoved() {
         let clean = LocalQdrantRuntime.cleanEnvironment(["HOME": "/home/test", "DOCKER_HOST": "tcp://remote", "DOCKER_CONTEXT": "prod", "DOCKER_CONFIG": "/other", "COLIMA_HOME": "/other", "LIMA_HOME": "/other", "PATH": "/custom"])
         #expect(clean["HOME"] == "/home/test")
