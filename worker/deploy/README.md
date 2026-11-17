@@ -55,7 +55,7 @@ startup time and watch `docker compose logs`. Worker state, converted chunks,
 model downloads and optional Qdrant storage use separate persistent volumes.
 `docker compose down` preserves them. Do not use `down --volumes` for upgrades.
 
-For optional vLLM, recreate with the matching worker engine:
+The optional vLLM image is pinned to `v0.34.0-rocm100`. Its tag was verified in the official image registry; actual model serving still needs the GPU/driver check above. For optional vLLM, recreate with the matching worker engine:
 
 ```bash
 CHUNKY_VLM_ENGINE=vllm docker compose --profile vllm up -d
