@@ -158,7 +158,7 @@ private struct PreferencesContent: View {
                         metadataExpanded = true
                         uploadExpanded = true
                         if item.id == "datasets" { openWindow(id: "datasets") }
-                        else { openSettings(item.tab) }
+                        else if item.id != "appearance" { openSettings(item.tab) }
                         searchText = ""
                     } label: {
                         VStack(alignment: .leading, spacing: 4) {
@@ -466,7 +466,7 @@ private struct PreferencesContent: View {
 
             if advanced {
                 Section {
-                    DisclosureGroup("Embedding tuning · batch \(settings.embeddingBatchSize), concurrency \(settings.embeddingConcurrency)", isExpanded: $performanceExpanded) {
+                    DisclosureGroup("Embedding tuning · batch \(settings.embeddingBatchSize), concurrency \(settings.embeddingConcurrency), streaming \(settings.streamingPipeline ? "on" : "off"), cache \(settings.enableEmbeddingCache ? "on" : "off")", isExpanded: $performanceExpanded) {
                     StepperRow(
                         label: "Batch Size", value: $appState.settings.embeddingBatchSize, range: 1...32
                     )
