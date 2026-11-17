@@ -32,7 +32,11 @@ For the first smoke test, choose Standard (no VLM), Local Mac, and chunk-only pr
 
 ## Optional local Qdrant and embeddings
 
-Use the app's local-container controls when available, or the CLI helper below. Do not start both on ports 6333/6334 at once.
+Install `colima` and the Docker CLI with `brew install colima docker`, then open **Preferences → Qdrant** and choose **Start Qdrant**. The app uses its dedicated `chunky` Colima profile and explicit socket, without switching your Docker context. It starts the `chunky-qdrant` container with persistent volume `chunky-qdrant-data`. First start downloads a VM and Qdrant image. **Stop Qdrant** and **Stop VM** require confirmation and retain stored data. See [local Qdrant controls](local-qdrant.md) for ownership checks and conflicts.
+
+The panel does not select a connection for you: explicitly choose the local Qdrant endpoint in the existing connection controls, then check the connection. Native CI validates command fixtures and the rendered controls; a real Colima VM start still needs a manual Mac smoke test.
+
+Alternatively, use the CLI helper below with your intended Docker engine. It uses a separate container and volume from the app-managed profile. Do not start both on ports 6333/6334 at once.
 
 ```sh
 docker context show
@@ -45,6 +49,14 @@ The CLI helper uses the selected Docker context. Confirm that it is your intende
 `make ollama` runs Ollama in the foreground. If Ollama is already running, use that instance. Pull the model selected in Preferences; the documented default is `qwen3-embedding:0.6b` with 1024 dimensions. A different model or dimension requires a compatible collection. Chunky must not silently reconfigure an existing collection. CPU FastEmbed and OpenAI-compatible providers remain available alternatives.
 
 For an ingest smoke test, use a new disposable collection with an explicit name, ingest one small document, then search for a phrase it contains. Verify the selected provider, model and dimensions before ingest. Keep real libraries out of benchmark/fixture collections.
+
+## Download a dataset and benchmark a small sample
+
+Open **Window → Datasets**, search a public dataset such as `BeIR/scifact`, select a configuration and split, and review its card/license. Download a small row sample. The default destination is `~/Downloads/Chunky Datasets`. **Choose folder…** remembers another location; **Use default folder** changes future downloads without moving existing snapshots. Downloads require Dataset Viewer support and a matching immutable revision on every page; private/gated datasets and truncated rows are rejected. See [dataset snapshots](datasets.md).
+
+Open Benchmark and choose **Use downloaded dataset…**. Select the saved snapshot folder, choose a nonempty string field, and set 10–100 rows for a first test. The snapshot hash and revision are checked again. Runs allow at most 1,000 rows, 32 KiB per row and 8 MiB selected text. They use the Mac's current embedding settings even if document processing is set to Devbox; a configured embedding endpoint may still be remote.
+
+Run embedding-only first. After Qdrant is reachable, optionally enable **Also fill a new Qdrant test collection**. It creates a unique `chunky-dataset-test-<UUID>` dense-cosine collection and verifies dimensions before writing real embeddings. Existing collection/provider settings remain selected. Choose the Default paper library when browsing the test points. Cancellation or failure may leave partial test data; inspect it and remove it deliberately when no longer needed. Save the measured report to compare runs with the same snapshot hash. The workflow measures throughput, not retrieval quality without relevance labels. See [dataset benchmarks](dataset-benchmarks.md).
 
 ## Checks and cleanup
 
