@@ -124,6 +124,42 @@ struct HuggingFaceDatasetTests {
         #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
     }
 
+    @Test func cancellationAfterFirstPageLeavesNoSnapshotOrStagingFolder() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let http = DatasetFixtureHTTP()
+        let box = DatasetTaskBox()
+        let service = HuggingFaceDatasetService(http: http)
+        let task = Task {
+            try await service.download(dataset: Self.dataset, split: Self.split, rows: 101, folder: root) { count in
+                if count == 100 { box.task?.cancel() }
+            }
+        }
+        box.task = task
+        do {
+            _ = try await task.value
+            Issue.record("Mid-download cancellation should fail")
+        } catch is CancellationError { }
+        #expect(http.offsets == [0])
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
+    @Test func aggregateByteLimitRejectsIndividuallyValidPagesWithoutFiles() async throws {
+        let root = try temporaryFolder()
+        defer { try? FileManager.default.removeItem(at: root) }
+        let http = DatasetFixtureHTTP()
+        http.totalRows = 2_000
+        http.payloadSize = 50_000
+        do {
+            _ = try await HuggingFaceDatasetService(http: http).download(dataset: Self.dataset, split: Self.split, rows: 1_200, folder: root)
+            Issue.record("Aggregate limit should fail")
+        } catch DatasetError.limitExceeded { }
+        #expect(http.offsets.count > 1)
+        #expect(http.responseSizes.allSatisfy { $0 <= HuggingFaceDatasetService.pageBytes })
+        #expect(http.responseSizes.reduce(0, +) > DatasetSnapshot.maximumBytes)
+        #expect(try FileManager.default.contentsOfDirectory(atPath: root.path).isEmpty)
+    }
+
     @Test func searchAndSplitMetadataAreValidated() async throws {
         let http = DatasetFixtureHTTP()
         let service = HuggingFaceDatasetService(http: http)
@@ -219,6 +255,9 @@ struct HuggingFaceDatasetTests {
 @MainActor
 private final class DatasetFixtureHTTP: DatasetHTTP {
     var offsets: [Int] = []
+    var totalRows = 205
+    var payloadSize = 0
+    var responseSizes: [Int] = []
     var badRevisionOffset: Int?
     var missingRevision = false
     var truncated = false
@@ -246,13 +285,14 @@ private final class DatasetFixtureHTTP: DatasetHTTP {
         let length = Int(query["length"]!)!
         offsets.append(offset)
         if oversized { return DatasetHTTPResponse(data: Data(repeating: 32, count: maximumBytes + 1), revision: revision) }
-        let count = incomplete ? 0 : min(length, 205 - offset)
+        let count = incomplete ? 0 : min(length, totalRows - offset)
         let rows: [[String: Any]] = (0..<count).map { index in
-            var row: [String: Any] = ["row_idx": offset + index, "row": ["_id": String(offset + index), "text": "Fixture row \(offset + index)", "optional": NSNull()]]
+            var row: [String: Any] = ["row_idx": offset + index, "row": ["_id": String(offset + index), "text": payloadSize > 0 ? String(repeating: "x", count: payloadSize) : "Fixture row \(offset + index)", "optional": NSNull()]]
             if !missingTruncation { row["truncated_cells"] = malformedTruncation ? "invalid" : (truncated ? ["text"] : []) }
             return row
         }
-        let data = try JSONSerialization.data(withJSONObject: ["rows": rows, "num_rows_total": 205])
+        let data = try JSONSerialization.data(withJSONObject: ["rows": rows, "num_rows_total": totalRows])
+        responseSizes.append(data.count)
         return DatasetHTTPResponse(data: data, revision: badRevisionOffset == offset ? (missingRevision ? nil : String(repeating: "b", count: 40)) : revision)
     }
 }
@@ -263,4 +303,9 @@ private final class DeferredDatasetHTTP: DatasetHTTP {
     func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
         try await withCheckedThrowingContinuation { continuation = $0 }
     }
+}
+
+@MainActor
+private final class DatasetTaskBox {
+    var task: Task<DatasetSnapshot, Error>?
 }

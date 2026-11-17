@@ -1,26 +1,24 @@
 import Foundation
 
-struct DatasetHTTPResponse {
+nonisolated struct DatasetHTTPResponse: Sendable {
     var data: Data
     var revision: String?
 }
 
-@MainActor
-protocol DatasetHTTP {
+nonisolated protocol DatasetHTTP: Sendable {
     func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse
 }
 
-private final class DatasetRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
+nonisolated private final class DatasetRedirectPolicy: NSObject, URLSessionTaskDelegate, @unchecked Sendable {
     nonisolated func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse, newRequest request: URLRequest, completionHandler: @escaping (URLRequest?) -> Void) {
         completionHandler(request.url?.scheme == "https" && request.url?.host == task.originalRequest?.url?.host ? request : nil)
     }
 }
 
-@MainActor
-final class URLSessionDatasetHTTP: DatasetHTTP {
+nonisolated final class URLSessionDatasetHTTP: DatasetHTTP {
     private let session = URLSession(configuration: .ephemeral, delegate: DatasetRedirectPolicy(), delegateQueue: nil)
 
-    func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
+    @concurrent func get(_ url: URL, maximumBytes: Int) async throws -> DatasetHTTPResponse {
         var request = URLRequest(url: url)
         request.timeoutInterval = 45
         request.setValue("application/json", forHTTPHeaderField: "Accept")
@@ -40,12 +38,11 @@ final class URLSessionDatasetHTTP: DatasetHTTP {
     }
 }
 
-@MainActor
-struct HuggingFaceDatasetService {
+nonisolated struct HuggingFaceDatasetService: Sendable {
     var http: any DatasetHTTP = URLSessionDatasetHTTP()
     static let pageBytes = 5 * 1024 * 1024
 
-    func search(_ query: String) async throws -> [HuggingFaceDataset] {
+    @concurrent func search(_ query: String) async throws -> [HuggingFaceDataset] {
         let query = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !query.isEmpty, query.count <= 200 else { return [] }
         let response = try await http.get(Self.url(host: "huggingface.co", path: "/api/datasets", query: ["search": query, "limit": "30", "full": "true"]), maximumBytes: Self.pageBytes)
@@ -56,14 +53,14 @@ struct HuggingFaceDatasetService {
         return datasets
     }
 
-    func details(_ id: String) async throws -> HuggingFaceDataset {
+    @concurrent func details(_ id: String) async throws -> HuggingFaceDataset {
         guard DatasetSnapshot.validDatasetID(id) else { throw DatasetError.invalidDataset }
         let response = try await http.get(Self.url(host: "huggingface.co", path: "/api/datasets/" + id), maximumBytes: Self.pageBytes)
         guard response.data.count <= Self.pageBytes, let object = try JSONSerialization.jsonObject(with: response.data) as? [String: Any], let dataset = Self.dataset(object), dataset.id == id, !dataset.restricted else { throw DatasetError.unavailable }
         return dataset
     }
 
-    func splits(for dataset: HuggingFaceDataset) async throws -> [DatasetSplit] {
+    @concurrent func splits(for dataset: HuggingFaceDataset) async throws -> [DatasetSplit] {
         let object = try await viewer(path: "/splits", dataset: dataset, query: [:])
         guard let list = object["splits"] as? [[String: Any]], list.count <= 1000 else { throw DatasetError.invalidResponse }
         let splits = list.compactMap { row -> DatasetSplit? in
@@ -74,7 +71,7 @@ struct HuggingFaceDatasetService {
         return splits
     }
 
-    func download(dataset: HuggingFaceDataset, split: DatasetSplit, rows requested: Int, folder: URL, progress: (Int) -> Void = { _ in }) async throws -> DatasetSnapshot {
+    @concurrent func download(dataset: HuggingFaceDataset, split: DatasetSplit, rows requested: Int, folder: URL, progress: @MainActor @Sendable (Int) -> Void = { _ in }) async throws -> DatasetSnapshot {
         guard (1...DatasetSnapshot.maximumRows).contains(requested) else { throw DatasetError.limitExceeded }
         guard folder.isFileURL, !split.config.isEmpty, !split.split.isEmpty else { throw DatasetError.invalidDataset }
         var data = Data()
@@ -84,6 +81,7 @@ struct HuggingFaceDatasetService {
             try Task.checkCancellation()
             let length = min(100, requested - count)
             let object = try await viewer(path: "/rows", dataset: dataset, query: ["config": split.config, "split": split.split, "offset": String(count), "length": String(length)])
+            try Task.checkCancellation()
             guard let available = object["num_rows_total"] as? Int, available >= 0,
                   let rows = object["rows"] as? [[String: Any]], rows.count <= length,
                   total == nil || total == available, !rows.isEmpty || available == 0 else { throw DatasetError.invalidResponse }
@@ -98,7 +96,7 @@ struct HuggingFaceDatasetService {
                 data.append(10)
                 count += 1
             }
-            progress(count)
+            await progress(count)
         }
         try Task.checkCancellation()
         guard count > 0 else { throw DatasetError.invalidResponse }
