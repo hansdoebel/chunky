@@ -28,6 +28,8 @@ Large snapshots are validated off the UI actor with bounded file reads, a comple
 
 Read-only research on 2026-11-17 verified all four Viewer configurations, licenses and revisions. Wikimedia revision `b04c8d1ceb2f5cd4588862100d08de323dccfbaa` reported English 6,407,814 rows / 11,630,929,031 compressed bytes, German 2,845,308 / 5,771,317,942, and Simple English 241,787 / 156,885,218. Mini revision `1f9f3b53fbc5995b85aab8e993504ad42c5f16f6` reported 3,200 / 797,357. These are historical research observations; the UI fetches current verified metadata instead of hardcoding them. English/German first-100-row probes returned complete, untruncated rows under the response cap. No embedding benchmark or capacity guarantee is implied.
 
+German dataset availability does not establish model quality. Choose a German-capable or multilingual embedding model for meaningful German experiments; the current CPU Potion 32M model is English-focused. See [model guidance](models.md). Selecting a dataset never changes the configured provider or model.
+
 ## Pre-embedded DBpedia option
 
 The fifth recommendation is the official Qdrant source `Qdrant/dbpedia-entities-openai3-text-embedding-3-small-1536-100K`, `default/train`. Read-only research verified revision `0d5fd00fbc5a9c0c836d70cd409f7e461255e572`, 100,000 rows and 1,650,651,517 compressed Parquet bytes. Its source card does not declare a license; the UI reports that honestly and links the card.
