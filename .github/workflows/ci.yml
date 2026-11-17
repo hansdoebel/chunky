@@ -126,6 +126,7 @@ jobs:
           xcodebuild test \
             -project Chunky.xcodeproj \
             -scheme Chunky \
+            -derivedDataPath "${RUNNER_TEMP}/ChunkyDerivedData" \
             -destination 'platform=macOS,arch=arm64' \
             -only-testing:ChunkyTests \
             -resultBundlePath "${RUNNER_TEMP}/ChunkyTests.xcresult" \
@@ -135,6 +136,21 @@ jobs:
             CODE_SIGN_STYLE=Manual \
             DEVELOPMENT_TEAM="" \
             ENABLE_HARDENED_RUNTIME=NO
+
+      - name: Validate development app packaging
+        run: |
+          python3 tools/macos_distribution.py package \
+            --development \
+            --app "${RUNNER_TEMP}/ChunkyDerivedData/Build/Products/Debug/Chunky.app" \
+            --output "${RUNNER_TEMP}/chunky-development-package"
+
+      - name: Upload unsigned development app archive
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9
+        with:
+          name: chunky-development-unsigned
+          path: ${{ runner.temp }}/chunky-development-package/*
+          if-no-files-found: error
+          retention-days: 7
 
       - name: Report native test failures
         if: failure()
