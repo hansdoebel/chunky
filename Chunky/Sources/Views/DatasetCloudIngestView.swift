@@ -107,7 +107,7 @@ struct DatasetCloudIngestView: View {
 
     var body: some View {
         ScrollView(.vertical, showsIndicators: true) {
-            DatasetCloudIngestPanel(dataset: snapshot?.manifest.datasetID ?? "", rows: snapshot?.manifest.rowCount ?? 0, snapshotBytes: snapshot?.byteCount ?? 0, target: URL(string: appState.settings.qdrantCloudURL)?.host ?? "Configure Cloud in Preferences", provider: appState.settings.embeddingBackend, model: appState.settings.embeddingModel, field: $field, preembedded: $preembedded, chunkBytes: $chunkBytes, tier: $tier, ramGB: $ramGB, diskGB: $diskGB, running: task != nil, estimate: plan?.estimate, status: status, available: plan?.available, onChoose: { importing = true }, onPrepare: prepare, onStart: start, onCancel: { task?.cancel() }, onSave: result == nil ? nil : save)
+            panel
         }
         .frame(minWidth: 740, minHeight: 760)
         .fileImporter(isPresented: $importing, allowedContentTypes: [.folder]) { selection in
@@ -120,6 +120,24 @@ struct DatasetCloudIngestView: View {
         .onChange(of: ramGB) { _, _ in plan = nil }
         .onChange(of: diskGB) { _, _ in plan = nil }
         .onDisappear { task?.cancel(); accessURL?.stopAccessingSecurityScopedResource(); accessURL = nil }
+    }
+
+    private var panel: DatasetCloudIngestPanel {
+        DatasetCloudIngestPanel(
+            dataset: snapshot?.manifest.datasetID ?? "", rows: snapshot?.manifest.rowCount ?? 0,
+            snapshotBytes: snapshot?.byteCount ?? 0,
+            target: URL(string: appState.settings.qdrantCloudURL)?.host ?? "Configure Cloud in Preferences",
+            provider: appState.settings.embeddingBackend, model: appState.settings.embeddingModel,
+            field: $field, preembedded: $preembedded, chunkBytes: $chunkBytes, tier: $tier,
+            ramGB: $ramGB, diskGB: $diskGB, running: task != nil, estimate: plan?.estimate,
+            status: status, available: plan?.available, onChoose: { importing = true },
+            onPrepare: { prepare() }, onStart: { start() }, onCancel: { task?.cancel() }, onSave: saveAction
+        )
+    }
+
+    private var saveAction: (() -> Void)? {
+        guard result != nil else { return nil }
+        return { save() }
     }
 
     private func load(_ url: URL) {

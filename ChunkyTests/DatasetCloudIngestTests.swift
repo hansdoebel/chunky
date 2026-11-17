@@ -208,15 +208,15 @@ struct DatasetCloudIngestTests {
         let client = DatasetCloudQdrant(baseURL: "https://fixture.invalid:6333", apiKey: "fixture-key", tier: .free, transport: fixture)
         let name = DatasetBenchmarkSafety.collectionName()
         let estimate = DatasetCloudEstimate(points: 1, payloadBytes: 1000, dimensions: 2)
-        await fixture.respond(status: 409, body: Data("{}".utf8))
+        fixture.respond(status: 409, body: Data("{}".utf8))
         do { try await client.create(name: name, estimate: estimate); Issue.record("Expected conflict") } catch { }
-        #expect(await fixture.calls.count == 1)
-        await fixture.respond(status: 200, body: Data("{\"result\":{\"status\":\"acknowledged\"}}".utf8))
+        #expect(fixture.calls.count == 1)
+        fixture.respond(status: 200, body: Data("{\"result\":{\"status\":\"acknowledged\"}}".utf8))
         let point = ChunkPoint(id: UUID().uuidString, vector: [1, 0], text: "fixture", source: "hf://fixture", metadata: ["embedding_model": "fixture"])
         do { try await client.write(name: name, points: [point]); Issue.record("Expected incomplete acknowledgement") } catch { }
-        await fixture.respond(status: 200, body: Data("{\"result\":{\"status\":\"completed\"}}".utf8))
+        fixture.respond(status: 200, body: Data("{\"result\":{\"status\":\"completed\"}}".utf8))
         try await client.write(name: name, points: [point])
-        let calls = await fixture.calls
+        let calls = fixture.calls
         #expect(calls.count == 3)
         #expect(calls[2].url.host == "fixture.invalid" && calls[2].url.port == 6333)
         #expect(calls[2].url.query == "wait=true" && calls[2].method == "PUT" && calls[2].key == "fixture-key")
@@ -226,7 +226,7 @@ struct DatasetCloudIngestTests {
         #expect(points.count == 1 && points[0]["id"] as? String == point.id)
         let oversized = ChunkPoint(id: UUID().uuidString, vector: [1, 0], text: String(repeating: "x", count: 16 * 1024 * 1024), source: "fixture")
         do { try await client.write(name: name, points: [oversized]); Issue.record("Expected encoded byte limit") } catch { }
-        #expect(await fixture.calls.count == 3)
+        #expect(fixture.calls.count == 3)
     }
 
     @Test func verifiedCPUPlanSurvivesPartialUploadAndNeverOverwritesSavedPlans() async throws {
@@ -249,7 +249,8 @@ struct DatasetCloudIngestTests {
     }
 }
 
-private actor DatasetCloudHTTPFixture: SnapshotTransport {
+@MainActor
+private final class DatasetCloudHTTPFixture: SnapshotTransport {
     struct Call: Sendable { var method: String; var url: URL; var key: String; var body: Data? }
     var calls: [Call] = []
     var status = 200
