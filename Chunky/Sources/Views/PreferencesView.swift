@@ -86,6 +86,7 @@ private struct PreferencesContent: View {
             preferencesTabs
         }
         .frame(width: 540, height: 760)
+        .background(Color(nsColor: .windowBackgroundColor))
         .onAppear {
             qdrantAPIKeyInput = appState.settings.qdrantAPIKey
             workerTokenInput = appState.settings.workerToken

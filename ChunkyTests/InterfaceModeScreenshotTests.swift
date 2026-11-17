@@ -23,12 +23,14 @@ struct InterfaceModeScreenshotTests {
         for dark in [false, true] {
             let view = PreferencesView(initialTab: 1, automaticallyCheckConnections: false)
                 .environmentObject(appState)
+                .background(Color(nsColor: .windowBackgroundColor))
                 .environment(\.colorScheme, dark ? .dark : .light)
             let host = NSHostingView(rootView: view)
             let window = makeWindow(host: host, width: 540, height: 760, dark: dark)
             defer { window.orderOut(nil) }
             let sidebar = SidebarView()
                 .environmentObject(appState)
+                .background(Color(nsColor: .windowBackgroundColor))
                 .environment(\.colorScheme, dark ? .dark : .light)
             let sidebarHost = NSHostingView(rootView: sidebar)
             let sidebarWindow = makeWindow(host: sidebarHost, width: 280, height: 700, dark: dark)
@@ -62,31 +64,50 @@ struct InterfaceModeScreenshotTests {
         let window = NSWindow(contentRect: host.frame, styleMask: [.titled], backing: .buffered, defer: false)
         window.appearance = appearance
         window.contentView = host
-        window.orderFrontRegardless()
+        window.backgroundColor = .windowBackgroundColor
+        window.isOpaque = true
+        window.makeKeyAndOrderFront(nil)
         return window
     }
 
     private func capture<V: View>(host: NSHostingView<V>, window: NSWindow, name: String) throws -> [Double] {
+        window.makeKeyAndOrderFront(nil)
+        NSApp.activate(ignoringOtherApps: true)
         window.layoutIfNeeded()
         host.layoutSubtreeIfNeeded()
         window.displayIfNeeded()
         RunLoop.current.run(until: Date().addingTimeInterval(0.3))
-        let bitmap = try #require(host.bitmapImageRepForCachingDisplay(in: host.bounds))
-        host.cacheDisplay(in: host.bounds, to: bitmap)
+        let frame = try #require(window.contentView?.superview)
+        frame.layoutSubtreeIfNeeded()
+        frame.displayIfNeeded()
+        let bitmap = try #require(frame.bitmapImageRepForCachingDisplay(in: frame.bounds))
+        frame.cacheDisplay(in: frame.bounds, to: bitmap)
         let png = try #require(bitmap.representation(using: .png, properties: [:]))
         var contentLuminance: [Double] = []
+        var headerLightest = 0.0
+        var headerDarkest = 1.0
+        var interiorOpaque = true
         var lightest = 0.0
         var darkest = 1.0
         for y in stride(from: 0, to: bitmap.pixelsHigh, by: 5) {
             for x in stride(from: 0, to: bitmap.pixelsWide, by: 5) {
                 guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.sRGB) else { continue }
                 let luminance = Double((color.redComponent + color.greenComponent + color.blueComponent) / 3)
+                if x > 20 && x < bitmap.pixelsWide - 20 && y > 20 && y < bitmap.pixelsHigh - 20 {
+                    interiorOpaque = interiorOpaque && color.alphaComponent > 0.99
+                    if y < bitmap.pixelsHigh / 4 {
+                        headerLightest = max(headerLightest, luminance)
+                        headerDarkest = min(headerDarkest, luminance)
+                    }
+                }
                 lightest = max(lightest, luminance)
                 darkest = min(darkest, luminance)
                 if y > bitmap.pixelsHigh / 4 { contentLuminance.append(luminance) }
             }
         }
         #expect(png.count > 5000 && lightest - darkest > 0.2)
+        #expect(interiorOpaque)
+        #expect(headerLightest - headerDarkest > 0.2)
         try png.write(to: URL(fileURLWithPath: "/tmp/chunky-interface-\(name).png"))
         return contentLuminance
     }
