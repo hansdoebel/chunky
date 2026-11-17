@@ -40,7 +40,7 @@ Ordinary app builds use checked-in generated Swift and SwiftPM dependencies. Pro
 
 ## Setup
 
-For a fresh MacBook, follow [the first-run checklist](docs/macbook-first-run.md). It separates building the app from downloading models and starting a database.
+For a fresh MacBook, follow [the first-run checklist](docs/macbook-first-run.md). [Installation and distribution](docs/distribution.md) covers `make install`, optional dependencies, verified archives and a private Homebrew tap. It separates building the app from downloading models and starting a database.
 
 ```
 make first-launch
@@ -71,7 +71,9 @@ make clean         # clean this checkout's build artifacts
 make open-xcode    # open in Xcode
 ```
 
-Start only the services needed for the chosen workflow. For app-managed local Qdrant, use **Preferences → Qdrant → Start Qdrant** after installing `colima` and `docker`; see [local Qdrant](docs/local-qdrant.md). The CLI alternative is:
+Chunky defaults to **Simple** mode for everyday controls. The sidebar and Preferences offer a persistent **Simple / Advanced** switch. Advanced reveals specialist tools and tuning; saved settings stay active in either mode. See [interface modes](docs/interface-modes.md).
+
+Start only the services needed for the chosen workflow. For app-managed local Qdrant, use **Advanced → Preferences → Qdrant → Start Qdrant** after installing `colima` and `docker`; see [local Qdrant](docs/local-qdrant.md). The CLI alternative is:
 
 ```
 make qdrant        # detached Qdrant v1.20.2, loopback ports, volume chunky-qdrant
@@ -85,7 +87,7 @@ The CLI helper uses the selected Docker context and the name `chunky-qdrant-cli`
 
 Open **Window → Datasets** to search public Hugging Face datasets and save a bounded snapshot. Downloads default to `~/Downloads/Chunky Datasets`; **Choose folder…** remembers a custom location without moving existing files. See [dataset snapshots](docs/datasets.md) for revision checks and limits.
 
-In Benchmark, choose **Use downloaded dataset…**, select a snapshot and text field, and run a small embedding-only test first. Optional collection filling creates a unique dense-cosine test collection using real embeddings; select the Default library to browse its points. Failed or cancelled writes may leave partial test data for inspection. These are throughput measurements, not retrieval-quality scores. See [dataset benchmarks](docs/dataset-benchmarks.md).
+Switch the sidebar to **Advanced**, then in Benchmark choose **Use downloaded dataset…**, select a snapshot and text field, and run a small embedding-only test first. Optional collection filling creates a unique dense-cosine test collection using real embeddings; select the Default library to browse its points. Failed or cancelled writes may leave partial test data for inspection. These are throughput measurements, not retrieval-quality scores. See [dataset benchmarks](docs/dataset-benchmarks.md).
 
 Open **Window → Dataset Cloud Ingest** for larger text snapshots or the curated pre-embedded DBpedia profile. **Small**, **Medium** and **Large** download budgets are 10 MiB, 100 MiB and 1 GiB of JSONL; they do not predict Qdrant capacity or relax Benchmark’s text limits. Cloud import requires an explicit plan using current available per-node resources and creates only a new collection. See [Cloud dataset ingestion](docs/dataset-cloud-ingest.md), [pre-embedded compatibility](docs/preembedded-datasets.md), and the [first-run smoke steps](docs/macbook-first-run.md).
 

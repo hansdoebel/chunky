@@ -21,7 +21,7 @@ struct WorkerEndpointsPane: View {
             Text("Worker endpoints")
                 .font(.headline)
             Text("Save stores the name, URL, and Keychain token. Use applies that profile to new documents.")
-                .font(.caption)
+                .font(.callout)
                 .foregroundStyle(.secondary)
             ForEach(endpoints) { endpoint in
                 let selected = endpoint.id == selectedID
@@ -32,15 +32,15 @@ struct WorkerEndpointsPane: View {
                     VStack(alignment: .leading, spacing: 2) {
                         Text(endpoint.name)
                             .font(.body.weight(.medium))
-                        Text(endpoint.url.isEmpty ? "URL not set" : endpoint.url)
-                            .font(.caption)
+                        Text(endpoint.url.isEmpty ? "URL not set" : PreferenceDiagnostic.message(endpoint.url, secrets: [token]))
+                            .font(.callout)
                             .foregroundStyle(.secondary)
                             .lineLimit(1)
                     }
                     Spacer()
                     if active {
                         Text("In use")
-                            .font(.caption.weight(.semibold))
+                            .font(.callout.weight(.semibold))
                             .foregroundStyle(Color.accentColor)
                     }
                 }
@@ -51,21 +51,22 @@ struct WorkerEndpointsPane: View {
             }
             TextField("Name", text: Binding(get: { name }, set: onName))
                 .textFieldStyle(.roundedBorder)
+                .onSubmit(onSave)
             TextField("Worker URL", text: Binding(get: { url }, set: onURL), prompt: Text("http://host:8080 or https://host"))
                 .textFieldStyle(.roundedBorder)
+                .onSubmit(onSave)
             SecureField("Worker token", text: Binding(get: { token }, set: onToken))
                 .textFieldStyle(.roundedBorder)
+                .onSubmit(onSave)
             HStack {
                 Button("Save", action: onSave)
                 Button("Use", action: onUse)
                 Button("Check reachability", action: onCheck)
             }
             if let report {
-                Text(report.message)
-                    .font(.caption)
-                    .foregroundStyle(report.kind == .connected ? Color.secondary : Color.red)
+                PreferenceMessage(context: "Worker check", message: report.message, secrets: [token], isError: report.kind != .connected)
                 Text("Latency \(report.latencyMs) ms")
-                    .font(.caption.monospacedDigit())
+                    .font(.callout.monospacedDigit())
                     .foregroundStyle(.secondary)
             }
         }

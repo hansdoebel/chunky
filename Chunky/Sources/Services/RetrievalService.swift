@@ -490,7 +490,7 @@ struct RetrievalRequest: Equatable, Sendable {
         let embeddingURL = resolvedBackend == EmbeddingBackendKind.openai.rawValue
             ? settings.embeddingAPIURL
             : settings.ollamaURL
-        let usesWorker = settings.processingHost == .devbox && settings.devboxIngestTarget == .qdrantCloud
+        let usesWorker = settings.usesWorkerCloud
         let route: RetrievalRoute = usesWorker ? .worker : .localQdrant
         let qdrantURL = usesWorker ? settings.qdrantCloudURL : settings.qdrantURL
         let qdrantAPIKey = settings.qdrantAPIKey

@@ -63,7 +63,7 @@ From a Linux checkout, `python3 -m pytest -q worker` is the suite that can run h
 
 - Unit tests only. Integration tests stay outside CI. Do not add a live network, a GPU, or a Qdrant server to CI.
 - Do not add code comments. Do not add doc comments. Tool directives that change compilation or lint stay: `noqa`, `type: ignore`, and generated `swiftlint` or `swift-format-ignore` lines.
-- A UI change needs a real screenshot from the macOS runner, usually `ImageRenderer` or an `NSHostingView` in a unit test. Browser UI changes use Playwright captures of the production frontend on that runner. The test must fail when the PNG is blank. Put the image in the pull request.
+- A UI change needs a real screenshot from the macOS runner, usually `ImageRenderer` or an `NSHostingView` in a unit test. Browser UI changes use Playwright captures of the production frontend on that runner. The test must fail when the PNG is blank. Put the image in the pull request. For the Preferences/install UX iteration authorized on 2026-11-17, the owner explicitly waived additional screenshots. Use native builds, behavioral regression tests and independent review for that work; do not require Screen Recording permission.
 - Tickets are Linear team PER, project Chunky. Name the branch for the ticket, link the issue from the pull request, and move the status when the work starts and when it merges.
 - No behavior change belongs in a cleanup diff. Do not create release tags.
 - Secrets stay in the Keychain or in worker token files. Do not commit tokens, Qdrant keys, or machine addresses.
