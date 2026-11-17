@@ -230,6 +230,7 @@ export class WorkerAPI {
     return (await this.request('search', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal })).json();
   }
   async config(): Promise<WorkerConfig> { return (await this.request('ui/config')).json(); }
+  async modelCatalog(signal?: AbortSignal): Promise<unknown> { return (await this.request('models', { signal })).json(); }
   async models(): Promise<{ embeddings?: { name: string }[] }> { return (await this.request('models')).json(); }
   async jobs(offset = 0): Promise<JobPage> { return (await this.request(`jobs?limit=50&offset=${offset}`)).json(); }
   async job(id: string, vectors = false): Promise<Job> {
