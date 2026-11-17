@@ -11,11 +11,27 @@ extension String {
 
 struct PreferencesView: View {
     @EnvironmentObject var appState: AppState
+    var initialTab = 0
+    var automaticallyCheckConnections = true
+
+    var body: some View {
+        PreferencesContent(
+            settings: appState.settings,
+            initialTab: initialTab,
+            automaticallyCheckConnections: automaticallyCheckConnections
+        )
+    }
+}
+
+private struct PreferencesContent: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var settings: AppSettings
+    let automaticallyCheckConnections: Bool
     @State private var availableModels: [OllamaModel] = []
     @State private var isLoadingModels = false
     @State private var ollamaStatus: ConnectionStatus = .unknown
     @State private var qdrantStatus: ConnectionStatus = .unknown
-    @State private var selectedTab = 0
+    @State private var selectedTab: Int
     @State private var qdrantAPIKeyInput: String = ""
     @State private var workerTokenInput: String = ""
     @State private var workerEndpointURL = ""
@@ -43,11 +59,53 @@ struct PreferencesView: View {
     @State private var chatAPIKeyInput = ""
     @ObservedObject private var cpuReadiness = CPUEmbeddingReadiness.shared
 
+    init(settings: AppSettings, initialTab: Int, automaticallyCheckConnections: Bool) {
+        self.settings = settings
+        self.automaticallyCheckConnections = automaticallyCheckConnections
+        _selectedTab = State(initialValue: initialTab)
+    }
+
+    private var advanced: Bool { settings.interfaceMode == .advanced }
+
     enum ConnectionStatus {
         case unknown, checking, connected, failed
     }
 
     var body: some View {
+        VStack(spacing: 0) {
+            VStack(alignment: .leading, spacing: 8) {
+                InterfaceModePicker(settings: settings)
+                Text(advanced
+                    ? "All settings are visible. Switching to Simple keeps your configuration."
+                    : "Everyday settings. Saved advanced settings still apply; switch to Advanced to edit them.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
+            .padding()
+            Divider()
+            preferencesTabs
+        }
+        .frame(width: 540, height: 760)
+        .onAppear {
+            qdrantAPIKeyInput = appState.settings.qdrantAPIKey
+            workerTokenInput = appState.settings.workerToken
+            qdrantCloudURLInput = appState.settings.qdrantCloudURL
+            chatAPIKeyInput = appState.settings.chatAPIKey
+        }
+        .onDisappear {
+            appState.settings.save()
+        }
+        .sheet(isPresented: $showNewCollection) {
+            NewCollectionSheet(
+                vectorSize: appState.settings.embeddingDimensions,
+                embeddingBackend: appState.settings.embeddingBackend,
+                embeddingModel: appState.settings.embeddingModel
+            )
+            .environmentObject(appState)
+        }
+    }
+
+    private var preferencesTabs: some View {
         TabView(selection: $selectedTab) {
             embeddingTab
                 .tabItem {
@@ -85,24 +143,6 @@ struct PreferencesView: View {
                 }
                 .tag(5)
         }
-        .frame(width: 500, height: 700)
-        .onAppear {
-            qdrantAPIKeyInput = appState.settings.qdrantAPIKey
-            workerTokenInput = appState.settings.workerToken
-            qdrantCloudURLInput = appState.settings.qdrantCloudURL
-            chatAPIKeyInput = appState.settings.chatAPIKey
-        }
-        .onDisappear {
-            appState.settings.save()
-        }
-        .sheet(isPresented: $showNewCollection) {
-            NewCollectionSheet(
-                vectorSize: appState.settings.embeddingDimensions,
-                embeddingBackend: appState.settings.embeddingBackend,
-                embeddingModel: appState.settings.embeddingModel
-            )
-            .environmentObject(appState)
-        }
     }
 
     private var chatTab: some View {
@@ -124,6 +164,7 @@ struct PreferencesView: View {
             appState.settings.chatAPIKey = newValue
         }
         .task {
+            guard automaticallyCheckConnections else { return }
             await refreshPi()
         }
     }
@@ -274,25 +315,28 @@ struct PreferencesView: View {
                 }
             }
 
-            Section {
-                StepperRow(
-                    label: "Batch Size", value: $appState.settings.embeddingBatchSize, range: 1...32
-                )
-                StepperRow(
-                    label: "Concurrency", value: $appState.settings.embeddingConcurrency,
-                    range: 1...4)
-                EmbeddingCacheSettingsPane(
-                    streaming: $appState.settings.streamingPipeline,
-                    reuseEmbeddings: $appState.settings.enableEmbeddingCache,
-                    host: appState.settings.processingHost
-                )
-            } header: {
-                Text("Performance")
+            if advanced {
+                Section {
+                    StepperRow(
+                        label: "Batch Size", value: $appState.settings.embeddingBatchSize, range: 1...32
+                    )
+                    StepperRow(
+                        label: "Concurrency", value: $appState.settings.embeddingConcurrency,
+                        range: 1...4)
+                    EmbeddingCacheSettingsPane(
+                        streaming: $appState.settings.streamingPipeline,
+                        reuseEmbeddings: $appState.settings.enableEmbeddingCache,
+                        host: appState.settings.processingHost
+                    )
+                } header: {
+                    Text("Performance")
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
         .task(id: appState.settings.embeddingBackend) {
+            guard automaticallyCheckConnections else { return }
             if appState.settings.embeddingBackend == "fastembed" {
                 await checkCPUEmbedding(download: false)
             } else {
@@ -389,13 +433,15 @@ struct PreferencesView: View {
                         .foregroundColor(.secondary)
                 }
 
-                RecommendedModelsSection(
-                    host: appState.settings.processingHost,
-                    installed: installedModels,
-                    downloading: downloadingModels,
-                    statusMessage: modelStatusMessage,
-                    onDownload: { repo in Task { await downloadModel(repo) } }
-                )
+                if advanced {
+                    RecommendedModelsSection(
+                        host: appState.settings.processingHost,
+                        installed: installedModels,
+                        downloading: downloadingModels,
+                        statusMessage: modelStatusMessage,
+                        onDownload: { repo in Task { await downloadModel(repo) } }
+                    )
+                }
 
                 Picker("VLM Model", selection: $appState.settings.doclingModel) {
                     ForEach(DoclingModel.models(for: appState.settings.processingHost), id: \.rawValue) { model in
@@ -413,7 +459,7 @@ struct PreferencesView: View {
                         .foregroundColor(.secondary)
                 }
 
-                if appState.settings.doclingModel == DoclingModel.standard.rawValue {
+                if advanced && appState.settings.doclingModel == DoclingModel.standard.rawValue {
                     Picker("Layout Model", selection: $appState.settings.layoutModel) {
                         ForEach(LayoutModel.allCases, id: \.rawValue) { model in
                             Text(model.displayName).tag(model.rawValue)
@@ -431,69 +477,71 @@ struct PreferencesView: View {
                 Text("Document Model")
             }
 
-            Section {
-                Toggle("Daemon Mode", isOn: $appState.settings.useDaemonMode)
-                StepperRow(label: "Parallel Jobs", value: $appState.settings.maxParallelJobs, range: 1...4)
-                StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...16)
-                if appState.settings.processingHost == .localMac {
-                    Text("TableFormer stays on the CPU. Keep table batches small on this machine.")
+            if advanced {
+                Section {
+                    Toggle("Daemon Mode", isOn: $appState.settings.useDaemonMode)
+                    StepperRow(label: "Parallel Jobs", value: $appState.settings.maxParallelJobs, range: 1...4)
+                    StepperRow(label: "Workers", value: $appState.settings.doclingWorkers, range: 1...16)
+                    if appState.settings.processingHost == .localMac {
+                        Text("TableFormer stays on the CPU. Keep table batches small on this machine.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
+                    }
+                    StepperRow(label: "OCR batch", value: $appState.settings.ocrBatchSize, range: 0...64)
+                    StepperRow(label: "Layout batch", value: $appState.settings.layoutBatchSize, range: 0...64)
+                    StepperRow(label: "Table batch", value: $appState.settings.tableBatchSize, range: 0...16)
+                    Text("Zero uses the host default. A worker host uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
                         .font(.caption)
                         .foregroundColor(.secondary)
-                }
-                StepperRow(label: "OCR batch", value: $appState.settings.ocrBatchSize, range: 0...64)
-                StepperRow(label: "Layout batch", value: $appState.settings.layoutBatchSize, range: 0...64)
-                StepperRow(label: "Table batch", value: $appState.settings.tableBatchSize, range: 0...16)
-                Text("Zero uses the host default. A worker host uses 64 without a vision model, and 8 to 16 when one shares the GPU.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
 
-                Picker("Accelerator", selection: $appState.settings.doclingAccelerator) {
-                    ForEach(Accelerator.allCases, id: \.rawValue) { accel in
-                        Text(accel.displayName).tag(accel.rawValue)
+                    Picker("Accelerator", selection: $appState.settings.doclingAccelerator) {
+                        ForEach(Accelerator.allCases, id: \.rawValue) { accel in
+                            Text(accel.displayName).tag(accel.rawValue)
+                        }
                     }
-                }
 
-                StepperRow(
-                    label: "Timeout", value: $appState.settings.doclingTimeout, range: 60...600,
-                    step: 30,
-                    suffix: "s")
+                    StepperRow(
+                        label: "Timeout", value: $appState.settings.doclingTimeout, range: 60...600,
+                        step: 30,
+                        suffix: "s")
 
-                LabeledContent("Max Pages") {
-                    HStack(spacing: 8) {
-                        Text(
-                            appState.settings.doclingMaxPages == 0
-                                ? "Unlimited" : "\(appState.settings.doclingMaxPages)"
-                        )
-                        .monospacedDigit()
-                        .foregroundStyle(.secondary)
-                        .frame(width: 70, alignment: .trailing)
-                        Stepper(
-                            "", value: $appState.settings.doclingMaxPages, in: 0...500, step: 10
-                        )
-                        .labelsHidden()
+                    LabeledContent("Max Pages") {
+                        HStack(spacing: 8) {
+                            Text(
+                                appState.settings.doclingMaxPages == 0
+                                    ? "Unlimited" : "\(appState.settings.doclingMaxPages)"
+                            )
+                            .monospacedDigit()
+                            .foregroundStyle(.secondary)
+                            .frame(width: 70, alignment: .trailing)
+                            Stepper(
+                                "", value: $appState.settings.doclingMaxPages, in: 0...500, step: 10
+                            )
+                            .labelsHidden()
+                        }
                     }
+
+                    StepperRow(
+                        label: "Max Tokens/Chunk", value: $appState.settings.maxTokensPerChunk,
+                        range: 128...2048, step: 128)
+
+                    StepperRow(
+                        label: "Chunk Overlap", value: $appState.settings.chunkOverlap,
+                        range: 0...512, step: 16)
+
+                    Toggle("Merge Peers", isOn: $appState.settings.chunkMergePeers)
+
+                    HStack {
+                        Text("Tokenizer")
+                        Spacer()
+                        TextField(text: $appState.settings.chunkTokenizer, prompt: Text("auto")) {}
+                            .textFieldStyle(.roundedBorder)
+                            .frame(maxWidth: 200)
+                            .multilineTextAlignment(.trailing)
+                    }
+                } header: {
+                    Text("Processing")
                 }
-
-                StepperRow(
-                    label: "Max Tokens/Chunk", value: $appState.settings.maxTokensPerChunk,
-                    range: 128...2048, step: 128)
-
-                StepperRow(
-                    label: "Chunk Overlap", value: $appState.settings.chunkOverlap,
-                    range: 0...512, step: 16)
-
-                Toggle("Merge Peers", isOn: $appState.settings.chunkMergePeers)
-
-                HStack {
-                    Text("Tokenizer")
-                    Spacer()
-                    TextField(text: $appState.settings.chunkTokenizer, prompt: Text("auto")) {}
-                        .textFieldStyle(.roundedBorder)
-                        .frame(maxWidth: 200)
-                        .multilineTextAlignment(.trailing)
-                }
-            } header: {
-                Text("Processing")
             }
 
             Section {
@@ -517,29 +565,31 @@ struct PreferencesView: View {
                     }
                 }
 
-                Toggle("Formula Enrichment", isOn: $appState.settings.doFormulaEnrichment)
-                Toggle("Code Enrichment", isOn: $appState.settings.doCodeEnrichment)
-                Toggle("Chart Extraction", isOn: $appState.settings.doChartExtraction)
-                Toggle("Picture Description", isOn: $appState.settings.doPictureDescription)
-                if appState.settings.doPictureDescription {
-                    Picker("Description model", selection: $appState.settings.pictureDescriptionPreset) {
-                        Text("Host default").tag("")
-                        ForEach(PictureDescriptionPreset.allCases) { preset in
-                            Text(preset.displayName).tag(preset.rawValue)
+                if advanced {
+                    Toggle("Formula Enrichment", isOn: $appState.settings.doFormulaEnrichment)
+                    Toggle("Code Enrichment", isOn: $appState.settings.doCodeEnrichment)
+                    Toggle("Chart Extraction", isOn: $appState.settings.doChartExtraction)
+                    Toggle("Picture Description", isOn: $appState.settings.doPictureDescription)
+                    if appState.settings.doPictureDescription {
+                        Picker("Description model", selection: $appState.settings.pictureDescriptionPreset) {
+                            Text("Host default").tag("")
+                            ForEach(PictureDescriptionPreset.allCases) { preset in
+                                Text(preset.displayName).tag(preset.rawValue)
+                            }
                         }
+                        TextField(
+                            "VLM server URL",
+                            text: $appState.settings.vlmServerURL,
+                            prompt: Text("http://127.0.0.1:8001")
+                        )
+                        .textFieldStyle(.roundedBorder)
+                        Text("Used by the API preset. This is not the embedding Ollama URL.")
+                            .font(.caption)
+                            .foregroundColor(.secondary)
                     }
-                    TextField(
-                        "VLM server URL",
-                        text: $appState.settings.vlmServerURL,
-                        prompt: Text("http://127.0.0.1:8001")
-                    )
-                    .textFieldStyle(.roundedBorder)
-                    Text("Used by the API preset. This is not the embedding Ollama URL.")
-                        .font(.caption)
-                        .foregroundColor(.secondary)
+                    Toggle("Picture Classification", isOn: $appState.settings.doPictureClassification)
+                    Toggle("Text Cleanup", isOn: $appState.settings.doTextCleanup)
                 }
-                Toggle("Picture Classification", isOn: $appState.settings.doPictureClassification)
-                Toggle("Text Cleanup", isOn: $appState.settings.doTextCleanup)
             } header: {
                 Text("Features")
             } footer: {
@@ -547,64 +597,67 @@ struct PreferencesView: View {
                     .foregroundStyle(.secondary)
             }
 
-            Section {
-                Toggle("Structured Extraction", isOn: $appState.settings.doStructuredExtraction)
+            if advanced {
+                Section {
+                    Toggle("Structured Extraction", isOn: $appState.settings.doStructuredExtraction)
 
-                if appState.settings.doStructuredExtraction {
-                    HStack {
-                        Text(extractionSchemaDisplayName)
-                            .foregroundStyle(.secondary)
-                            .lineLimit(1)
-                            .truncationMode(.middle)
-                        Spacer()
-                        Button("Select Schema...") {
-                            let panel = NSOpenPanel()
-                            panel.allowedContentTypes = [UTType.json]
-                            panel.allowsMultipleSelection = false
-                            if panel.runModal() == .OK, let url = panel.url {
-                                appState.settings.extractionSchemaPath = url.path
+                    if appState.settings.doStructuredExtraction {
+                        HStack {
+                            Text(extractionSchemaDisplayName)
+                                .foregroundStyle(.secondary)
+                                .lineLimit(1)
+                                .truncationMode(.middle)
+                            Spacer()
+                            Button("Select Schema...") {
+                                let panel = NSOpenPanel()
+                                panel.allowedContentTypes = [UTType.json]
+                                panel.allowsMultipleSelection = false
+                                if panel.runModal() == .OK, let url = panel.url {
+                                    appState.settings.extractionSchemaPath = url.path
+                                }
                             }
                         }
                     }
+                } header: {
+                    Text("Structured Extraction (Beta)")
+                } footer: {
+                    Text("Extract structured data using a JSON template schema.")
+                        .foregroundStyle(.secondary)
                 }
-            } header: {
-                Text("Structured Extraction (Beta)")
-            } footer: {
-                Text("Extract structured data using a JSON template schema.")
-                    .foregroundStyle(.secondary)
-            }
 
-            Section {
-                Picker("Image Export Mode", selection: $appState.settings.imageExportMode) {
-                    ForEach(ImageExportMode.allCases, id: \.rawValue) { mode in
-                        Text(mode.displayName).tag(mode.rawValue)
+                Section {
+                    Picker("Image Export Mode", selection: $appState.settings.imageExportMode) {
+                        ForEach(ImageExportMode.allCases, id: \.rawValue) { mode in
+                            Text(mode.displayName).tag(mode.rawValue)
+                        }
                     }
+                    .help(ImageExportMode(rawValue: appState.settings.imageExportMode)?.description ?? "")
+                } header: {
+                    Text("Image Export")
                 }
-                .help(ImageExportMode(rawValue: appState.settings.imageExportMode)?.description ?? "")
-            } header: {
-                Text("Image Export")
-            }
 
-            Section {
-                Toggle("Filename", isOn: $appState.settings.metadataIncludeFilename)
-                Toggle("Page Number", isOn: $appState.settings.metadataIncludePageNumber)
-                Toggle("Headings", isOn: $appState.settings.metadataIncludeHeadings)
-                Toggle("Timestamp", isOn: $appState.settings.metadataIncludeTimestamp)
-                Toggle("Document Title", isOn: $appState.settings.metadataIncludeDocTitle)
-                Toggle("Authors", isOn: $appState.settings.metadataIncludeAuthors)
-                Toggle("Chunk Index", isOn: $appState.settings.metadataIncludeChunkIndex)
-                Toggle("Content Type", isOn: $appState.settings.metadataIncludeContentType)
-                Toggle("Section", isOn: $appState.settings.metadataIncludeSection)
-                Toggle("DOI", isOn: $appState.settings.metadataIncludeDOI)
-                Toggle("Document ID", isOn: $appState.settings.metadataIncludeDocumentId)
-                Toggle("URL", isOn: $appState.settings.metadataIncludeURL)
-                Toggle("Year", isOn: $appState.settings.metadataIncludeYear)
-                Toggle("Language", isOn: $appState.settings.metadataIncludeLanguage)
-            } header: {
-                Text("Metadata to Include")
+                Section {
+                    Toggle("Filename", isOn: $appState.settings.metadataIncludeFilename)
+                    Toggle("Page Number", isOn: $appState.settings.metadataIncludePageNumber)
+                    Toggle("Headings", isOn: $appState.settings.metadataIncludeHeadings)
+                    Toggle("Timestamp", isOn: $appState.settings.metadataIncludeTimestamp)
+                    Toggle("Document Title", isOn: $appState.settings.metadataIncludeDocTitle)
+                    Toggle("Authors", isOn: $appState.settings.metadataIncludeAuthors)
+                    Toggle("Chunk Index", isOn: $appState.settings.metadataIncludeChunkIndex)
+                    Toggle("Content Type", isOn: $appState.settings.metadataIncludeContentType)
+                    Toggle("Section", isOn: $appState.settings.metadataIncludeSection)
+                    Toggle("DOI", isOn: $appState.settings.metadataIncludeDOI)
+                    Toggle("Document ID", isOn: $appState.settings.metadataIncludeDocumentId)
+                    Toggle("URL", isOn: $appState.settings.metadataIncludeURL)
+                    Toggle("Year", isOn: $appState.settings.metadataIncludeYear)
+                    Toggle("Language", isOn: $appState.settings.metadataIncludeLanguage)
+                } header: {
+                    Text("Metadata to Include")
+                }
             }
         }
         .task(id: appState.settings.processingHost) {
+            guard automaticallyCheckConnections else { return }
             await refreshInstalledModels()
         }
         .formStyle(.grouped)
@@ -702,41 +755,43 @@ struct PreferencesView: View {
 
     private var qdrantTab: some View {
         Form {
-            Section { LocalQdrantPane() }
-            Section {
-                Picker("Profile", selection: $appState.settings.qdrantProfile) {
-                    ForEach(QdrantProfile.allCases) { profile in
-                        Text(profile.displayName).tag(profile)
+            Section { LocalQdrantPane(automaticallyRefresh: automaticallyCheckConnections) }
+            if advanced || settings.processingHost == .devbox {
+                Section {
+                    Picker("Profile", selection: $appState.settings.qdrantProfile) {
+                        ForEach(QdrantProfile.allCases) { profile in
+                            Text(profile.displayName).tag(profile)
+                        }
                     }
-                }
-                .onChange(of: appState.settings.qdrantProfile) { _, profile in
-                    if profile == .quality {
-                        appState.settings.doPictureDescription = true
-                        appState.settings.doPictureClassification = true
+                    .onChange(of: appState.settings.qdrantProfile) { _, profile in
+                        if profile == .quality {
+                            appState.settings.doPictureDescription = true
+                            appState.settings.doPictureClassification = true
+                        }
                     }
-                }
-                Text("Quality turns on picture description and classification.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-                Picker("Worker ingest", selection: $appState.settings.devboxIngestTarget) {
-                    ForEach(DevboxIngestTarget.allCases) { target in
-                        Text(target.rawValue).tag(target)
+                    Text("Quality turns on picture description and classification.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                    Picker("Worker ingest", selection: $appState.settings.devboxIngestTarget) {
+                        ForEach(DevboxIngestTarget.allCases) { target in
+                            Text(target.rawValue).tag(target)
+                        }
                     }
+                    TextField(
+                        "Qdrant Cloud URL",
+                        text: $qdrantCloudURLInput,
+                        prompt: Text("https://example.cloud.qdrant.io")
+                    )
+                    .textFieldStyle(.roundedBorder)
+                    .onChange(of: qdrantCloudURLInput) { _, newValue in
+                        appState.settings.qdrantCloudURL = newValue
+                    }
+                    Text("Used when Processing host is Devbox and ingest is Qdrant Cloud. The API key below is sent with the job and is not stored on the worker. Local Mac keeps using Server URL.")
+                        .font(.caption)
+                        .foregroundColor(.secondary)
+                } header: {
+                    Text("Worker ingest target")
                 }
-                TextField(
-                    "Qdrant Cloud URL",
-                    text: $qdrantCloudURLInput,
-                    prompt: Text("https://example.cloud.qdrant.io")
-                )
-                .textFieldStyle(.roundedBorder)
-                .onChange(of: qdrantCloudURLInput) { _, newValue in
-                    appState.settings.qdrantCloudURL = newValue
-                }
-                Text("Used when Processing host is Devbox and ingest is Qdrant Cloud. The API key below is sent with the job and is not stored on the worker. Local Mac keeps using Server URL.")
-                    .font(.caption)
-                    .foregroundColor(.secondary)
-            } header: {
-                Text("Worker ingest target")
             }
 
             Section {
@@ -795,36 +850,38 @@ struct PreferencesView: View {
                 }
             }
 
-            Section {
-                StepperRow(
-                    label: "Batch Size", value: $appState.settings.qdrantBatchSize, range: 10...500,
-                    step: 10)
-                StepperRow(
-                    label: "Timeout", value: $appState.settings.qdrantTimeout, range: 10...120,
-                    step: 10,
-                    suffix: "s")
-                Picker("Distance Metric", selection: $appState.settings.qdrantDistanceMetric) {
-                    ForEach(DistanceMetric.allCases, id: \.rawValue) { metric in
-                        Text(metric.displayName).tag(metric.rawValue)
+            if advanced {
+                Section {
+                    StepperRow(
+                        label: "Batch Size", value: $appState.settings.qdrantBatchSize, range: 10...500,
+                        step: 10)
+                    StepperRow(
+                        label: "Timeout", value: $appState.settings.qdrantTimeout, range: 10...120,
+                        step: 10,
+                        suffix: "s")
+                    Picker("Distance Metric", selection: $appState.settings.qdrantDistanceMetric) {
+                        ForEach(DistanceMetric.allCases, id: \.rawValue) { metric in
+                            Text(metric.displayName).tag(metric.rawValue)
+                        }
                     }
-                }
 
-                Picker("Quantization", selection: $appState.settings.qdrantCompression) {
-                    ForEach(Compression.allCases, id: \.rawValue) { compression in
-                        Text(compression.displayName).tag(compression.rawValue)
+                    Picker("Quantization", selection: $appState.settings.qdrantCompression) {
+                        ForEach(Compression.allCases, id: \.rawValue) { compression in
+                            Text(compression.displayName).tag(compression.rawValue)
+                        }
                     }
-                }
-                .help(Compression(rawValue: appState.settings.qdrantCompression)?.description ?? "")
+                    .help(Compression(rawValue: appState.settings.qdrantCompression)?.description ?? "")
 
-                Toggle("Hybrid Search (Dense + Sparse)", isOn: $appState.settings.hybridSearch)
-            } header: {
-                Text("Upload")
+                    Toggle("Hybrid Search (Dense + Sparse)", isOn: $appState.settings.hybridSearch)
+                } header: {
+                    Text("Upload")
+                }
             }
         }
         .formStyle(.grouped)
         .padding()
         .task {
-
+            guard automaticallyCheckConnections else { return }
             if !appState.settings.qdrantURL.isEmpty && qdrantStatus == .unknown {
                 await testQdrantConnection()
             }
@@ -1107,7 +1164,7 @@ struct PreferencesView: View {
                     onRemove: removeWatchedFolder
                 )
                 .onAppear {
-                    appState.startWatchedFolders()
+                    if automaticallyCheckConnections { appState.startWatchedFolders() }
                 }
             } header: {
                 Text("Watched folders")
@@ -1131,6 +1188,7 @@ struct PreferencesView: View {
         .formStyle(.grouped)
         .padding()
         .task {
+            guard automaticallyCheckConnections else { return }
             await checkDoclingVersion()
         }
     }

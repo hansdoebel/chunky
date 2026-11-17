@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct LocalQdrantPane: View {
+    var automaticallyRefresh = true
     @State private var snapshot = LocalQdrantSnapshot()
     @State private var busy = false
     @State private var message = ""
@@ -15,7 +16,9 @@ struct LocalQdrantPane: View {
                             stop: { stopVM = false; confirmStop = true },
                             stopProfile: { stopVM = true; confirmStop = true },
                             cancel: { operation?.cancel() })
-            .task { perform { } }
+            .task {
+                if automaticallyRefresh { perform { } }
+            }
             .onDisappear { operation?.cancel() }
             .confirmationDialog(stopVM ? "Stop the Chunky Colima VM?" : "Stop local Qdrant?", isPresented: $confirmStop) {
                 Button("Stop", role: .destructive) {
