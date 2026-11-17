@@ -223,6 +223,7 @@ struct DatasetLibraryView: View {
 }
 
 struct DatasetLibraryPane: View {
+    @Environment(\.openWindow) private var openWindow
     @ObservedObject var state: DatasetLibraryState
 
     var body: some View {
@@ -332,6 +333,7 @@ struct DatasetLibraryPane: View {
                 HStack {
                     Button("Download sample", action: state.download)
                         .disabled(state.busy || state.selectedSplit == nil || (state.sampleSize == .legacy && state.requestedRows == nil) || !state.folderAvailable)
+                    Button("Open Cloud ingest") { openWindow(id: "dataset-cloud-ingest") }
                     if state.busy {
                         ProgressView().controlSize(.small)
                         Button("Cancel", action: state.cancel)
