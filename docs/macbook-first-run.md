@@ -20,6 +20,14 @@ Python is optional for building and opening the app. Install Python 3.12 before 
 
 The first launch does not need Docker, a GPU worker, Ollama, or downloaded models. Open Preferences and verify that the processing host is Local Mac before trying a local job. Saved settings and credentials are retained; a new build does not reset them.
 
+## Choose the interface mode
+
+Chunky starts in **Simple** mode for new and existing installations without a saved mode preference. Switch between **Simple** and **Advanced** in the sidebar or at the top of Preferences; the choice is saved across launches.
+
+Simple keeps Queue, Collections, Retrieval and everyday Preferences controls visible. Advanced also shows Eval, Analytics, Benchmark and Verification, plus specialist tuning in Preferences. If an advanced tool is open when you switch to Simple, it stays visible until you navigate away. Running work continues.
+
+This changes visibility only. Your saved models, credentials, worker profiles, collection configuration and advanced tuning remain active in either mode. Use Advanced to inspect or change specialist settings. No collection is recreated or reconfigured by changing modes.
+
 ## Try a small local document
 
 ```sh
@@ -32,7 +40,7 @@ For the first smoke test, choose Standard (no VLM), Local Mac, and chunk-only pr
 
 ## Optional local Qdrant and embeddings
 
-Install `colima` and the Docker CLI with `brew install colima docker`, then open **Preferences → Qdrant** and choose **Start Qdrant**. The app uses its dedicated `chunky` Colima profile and explicit socket, without switching your Docker context. It starts the `chunky-qdrant` container with persistent volume `chunky-qdrant-data`. First start downloads a VM and Qdrant image. **Stop Qdrant** and **Stop VM** require confirmation and retain stored data. See [local Qdrant controls](local-qdrant.md) for ownership checks and conflicts.
+Install `colima` and the Docker CLI with `brew install colima docker`, then switch to **Advanced**, open **Preferences → Qdrant** and choose **Start Qdrant**. The app uses its dedicated `chunky` Colima profile and explicit socket, without switching your Docker context. It starts the `chunky-qdrant` container with persistent volume `chunky-qdrant-data`. First start downloads a VM and Qdrant image. **Stop Qdrant** and **Stop VM** require confirmation and retain stored data. See [local Qdrant controls](local-qdrant.md) for ownership checks and conflicts.
 
 The panel does not select a connection for you: explicitly choose the local Qdrant endpoint in the existing connection controls, then check the connection. Native CI validates command fixtures and the rendered controls; a real Colima VM start still needs a manual Mac smoke test.
 

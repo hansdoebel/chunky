@@ -41,6 +41,10 @@ class AppSettings: ObservableObject {
     private let secrets: SettingsSecretStore
     private let prefix = "chunky."
 
+    @Published var interfaceMode: InterfaceMode {
+        didSet { defaults.set(interfaceMode.rawValue, forKey: prefix + "interfaceMode") }
+    }
+
     var ollamaURL: String {
         get { secret(KeychainService.ollamaURLKey, default: "http://localhost:11434") }
         set { setSecret(KeychainService.ollamaURLKey, newValue) }
@@ -441,6 +445,7 @@ class AppSettings: ObservableObject {
     init(defaults: UserDefaults = .standard, secrets: SettingsSecretStore = KeychainSecretStore()) {
         self.defaults = defaults
         self.secrets = secrets
+        self.interfaceMode = InterfaceMode(rawValue: defaults.string(forKey: prefix + "interfaceMode") ?? "") ?? .simple
 
         self.embeddingBackend = defaults.string(forKey: prefix + "embeddingBackend") ?? EmbeddingBackendKind.ollama.rawValue
         self.embeddingAPIURL = defaults.string(forKey: prefix + "embeddingAPIURL") ?? ""

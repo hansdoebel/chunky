@@ -1,5 +1,16 @@
 import SwiftUI
 
+enum InterfaceMode: String, CaseIterable, Identifiable {
+    case simple, advanced
+
+    var id: String { rawValue }
+    var displayName: String { rawValue.capitalized }
+
+    func visibleViews(selected: ViewMode) -> [ViewMode] {
+        ViewMode.allCases.filter { self == .advanced || !$0.isAdvanced || $0 == selected }
+    }
+}
+
 enum ViewMode: String, CaseIterable {
     case queue = "Queue"
     case collections = "Collections"
@@ -8,6 +19,25 @@ enum ViewMode: String, CaseIterable {
     case analytics = "Analytics"
     case benchmark = "Benchmark"
     case verification = "Verification"
+
+    var isAdvanced: Bool {
+        switch self {
+        case .queue, .collections, .retrieval: return false
+        case .eval, .analytics, .benchmark, .verification: return true
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .queue: return "tray.full"
+        case .collections: return "square.stack.3d.up"
+        case .retrieval: return "magnifyingglass"
+        case .eval: return "checklist"
+        case .analytics: return "chart.bar"
+        case .benchmark: return "speedometer"
+        case .verification: return "checkmark.seal"
+        }
+    }
 }
 
 enum ProcessingMode: String, CaseIterable {

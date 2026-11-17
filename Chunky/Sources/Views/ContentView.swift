@@ -106,44 +106,33 @@ struct ContentView: View {
 
 struct SidebarView: View {
     @EnvironmentObject var appState: AppState
-    @Environment(\.colorScheme) var colorScheme
+
+    var body: some View {
+        SidebarContent(settings: appState.settings)
+    }
+}
+
+private struct SidebarContent: View {
+    @EnvironmentObject var appState: AppState
+    @ObservedObject var settings: AppSettings
 
     var body: some View {
         List {
-            NavigationRow(
-                icon: "tray.full", title: "Queue", isSelected: appState.viewMode == .queue
-            )
-            .onTapGesture { appState.viewMode = .queue }
-            NavigationRow(
-                icon: "square.stack.3d.up", title: "Collections",
-                isSelected: appState.viewMode == .collections
-            )
-            .onTapGesture { appState.viewMode = .collections }
-            NavigationRow(
-                icon: "magnifyingglass", title: "Retrieval",
-                isSelected: appState.viewMode == .retrieval
-            )
-            .onTapGesture { appState.viewMode = .retrieval }
-            NavigationRow(
-                icon: "checklist", title: "Eval",
-                isSelected: appState.viewMode == .eval
-            )
-            .onTapGesture { appState.viewMode = .eval }
-            NavigationRow(
-                icon: "chart.bar", title: "Analytics",
-                isSelected: appState.viewMode == .analytics
-            )
-            .onTapGesture { appState.viewMode = .analytics }
-            NavigationRow(
-                icon: "speedometer", title: "Benchmark",
-                isSelected: appState.viewMode == .benchmark
-            )
-            .onTapGesture { appState.viewMode = .benchmark }
-            NavigationRow(
-                icon: "checkmark.seal", title: "Verification",
-                isSelected: appState.viewMode == .verification
-            )
-            .onTapGesture { appState.viewMode = .verification }
+            Section {
+                InterfaceModePicker(settings: settings)
+            }
+            ForEach(settings.interfaceMode.visibleViews(selected: appState.viewMode), id: \.self) { mode in
+                Button { appState.viewMode = mode } label: {
+                    NavigationRow(icon: mode.icon, title: mode.rawValue, isSelected: appState.viewMode == mode)
+                }
+                .buttonStyle(.plain)
+                .accessibilityAddTraits(appState.viewMode == mode ? .isSelected : [])
+            }
+            if settings.interfaceMode == .simple && appState.viewMode.isAdvanced {
+                Text("Your open advanced tool stays available until you leave it.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+            }
 
             Section {
                 HStack(spacing: 8) {
