@@ -14,7 +14,7 @@ The panel never changes Chunky's saved Qdrant URL, API key, worker profiles, mod
 
 There are no delete, volume-prune, automatic image-upgrade or collection-migration actions. Containers with unexpected ownership, image, storage or network configuration are refused. A newer image is not silently substituted into existing storage. Back up collections and plan upgrades explicitly.
 
-The ownership marker is `~/Library/Application Support/Chunky/colima-profile-v1`. Keep it with the profile. Removing the marker does not remove any data; it makes Chunky refuse to control the existing profile. Runtime failures are shown in the panel. Cancel operation or closing the pane cancels the current command and prevents later startup steps; it does not roll back a VM or volume already created. A timed-out start may still be completing in Colima; refresh and inspect `colima list --json` before retrying.
+The ownership marker is `~/Library/Application Support/Chunky/colima-profile-v1`. Keep it with the profile. Removing the marker does not remove any data; it makes Chunky refuse to control the existing profile. Runtime failures show the bounded end of command output, so download progress does not hide the final error; known environment secrets and URL credentials are redacted. Cancel operation or closing the pane cancels the current command and prevents later startup steps; it does not roll back a VM or volume already created. A timed-out start may still be completing in Colima; refresh and inspect `colima list --json` before retrying.
 
 ## Validation
 

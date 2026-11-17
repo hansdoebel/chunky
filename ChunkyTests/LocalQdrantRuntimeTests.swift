@@ -49,6 +49,38 @@ struct LocalQdrantRuntimeTests {
         #expect(calls.count == 6)
     }
 
+    @Test func stoppedOwnedContainerReusesVolumeWithoutCreation() async throws {
+        let stopped = String(decoding: try Self.containerData(), as: UTF8.self).replacingOccurrences(of: "\"Running\":true", with: "\"Running\":false")
+        let fixture = try RuntimeFixture(owned: true, outputs: [Self.runningProfile, "chunky-qdrant", stopped, "chunky-qdrant-data", "[{\"Driver\":\"local\",\"Labels\":{\"io.chunky.managed\":\"qdrant-v1\"},\"Options\":null}]", "started"])
+        defer { fixture.cleanup() }
+        try await fixture.runtime.start()
+        let calls = await fixture.script.calls
+        #expect(calls.count == 6)
+        #expect(calls.last?.arguments == ["--host", fixture.runtime.socket, "container", "start", "chunky-qdrant"])
+        #expect(!calls.flatMap(\.arguments).contains("create"))
+        #expect(!calls.flatMap(\.arguments).contains("run"))
+    }
+
+    @Test func restartRefusesAnUnexpectedStorageVolume() async throws {
+        let fixture = try RuntimeFixture(owned: true, outputs: [Self.runningProfile, "chunky-qdrant", String(decoding: Self.containerData(), as: UTF8.self), "chunky-qdrant-data", "[{\"Driver\":\"local\",\"Labels\":{},\"Options\":null}]"])
+        defer { fixture.cleanup() }
+        await #expect(throws: LocalRuntimeError.self) { try await fixture.runtime.start() }
+        #expect(await fixture.script.calls.count == 5)
+    }
+
+    @Test func failedCommandRetainsTheFinalDiagnosticAfterLargeProgressOutput() async throws {
+        let command = RuntimeCommand(executable: "/bin/sh", arguments: ["-c", "printf '%1100000d' 0; printf '\\nport-already-in-use\\n'; exit 7"], environment: [:], timeout: 5)
+        let result = try await LocalRuntimeProcess.run(command)
+        #expect(result.status == 7)
+        #expect(result.output.hasSuffix("port-already-in-use\n"))
+        #expect(result.output.utf8.count <= 1_048_576)
+        let tail = LocalQdrantRuntime.diagnosticTail(result.output + " https://user:password@registry.example failed fixture-token", environment: ["HF_TOKEN": "fixture-token"])
+        #expect(tail.contains("port-already-in-use"))
+        #expect(tail.count <= 2000)
+        #expect(!tail.contains("user:password"))
+        #expect(!tail.contains("fixture-token"))
+    }
+
     @Test func existingUnownedProfileIsNeverAdopted() async throws {
         let fixture = try RuntimeFixture(owned: false, outputs: [Self.runningProfile])
         defer { fixture.cleanup() }

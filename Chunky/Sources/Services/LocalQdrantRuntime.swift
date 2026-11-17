@@ -107,6 +107,8 @@ nonisolated enum LocalRuntimeProcess {
         process.waitUntilExit()
         let reader = try FileHandle(forReadingFrom: output)
         defer { try? reader.close() }
+        let size = try reader.seekToEnd()
+        try reader.seek(toOffset: process.terminationStatus != 0 && size > 1_048_576 ? size - 1_048_576 : 0)
         let bytes = try reader.read(upToCount: 1_048_576) ?? Data()
         return RuntimeCommandResult(status: process.terminationStatus, output: String(decoding: bytes, as: UTF8.self))
     }
@@ -151,6 +153,15 @@ nonisolated struct LocalQdrantRuntime: Sendable {
         return result
     }
 
+    static func diagnosticTail(_ output: String, environment: [String: String]) -> String {
+        var safe = output
+        for (key, value) in environment where !value.isEmpty && ["TOKEN", "PASSWORD", "SECRET", "API_KEY"].contains(where: key.uppercased().contains) {
+            safe = safe.replacingOccurrences(of: value, with: "[redacted]")
+        }
+        safe = safe.replacingOccurrences(of: #"(?i)(https?://)[^/\s@]+@"#, with: "$1[redacted]@", options: .regularExpression)
+        return String(safe.suffix(2000))
+    }
+
     var socket: String { "unix://" + home.appendingPathComponent(".colima/chunky/docker.sock").path }
     var ownsProfile: Bool { (try? String(contentsOf: marker, encoding: .utf8)) == "chunky-v1\n" }
 
@@ -162,7 +173,7 @@ nonisolated struct LocalQdrantRuntime: Sendable {
         let result = try await run(RuntimeCommand(executable: executable, arguments: arguments, environment: environment, timeout: timeout))
         try Task.checkCancellation()
         guard result.status == 0 else {
-            throw LocalRuntimeError.unavailable("Local runtime command failed (\(result.status)): \(result.output.prefix(2000))")
+            throw LocalRuntimeError.unavailable("Local runtime command failed (\(result.status)): \(Self.diagnosticTail(result.output, environment: environment))")
         }
         return result.output
     }
