@@ -19,3 +19,9 @@ The ownership marker is `~/Library/Application Support/Chunky/colima-profile-v1`
 ## Validation
 
 Unit tests inject command responses; they never start a VM or connect to Docker. They cover environment isolation, exact socket and loopback arguments, ownership conflicts, unrelated-container protection and persistent storage configuration, cancellation and timeout cleanup of a real harmless child process. macOS CI captures the production controls in light and dark appearances with nonblank assertions. A real Colima VM startup must be smoke-tested on a Mac with installed tools; the Linux build environment cannot validate macOS virtualization.
+
+Production controls captured on macOS in [CI run 43994415763](https://github.com/hansdoebel/chunky/actions/runs/43994415763), artifact `14290091066`, source `81455f7`. Both themes passed nonblank assertions and visual inspection. The running status is an injected UI fixture, not evidence of a live VM.
+
+![Local Qdrant controls in light appearance](images/local-qdrant-light.png)
+
+![Local Qdrant controls in dark appearance](images/local-qdrant-dark.png)
