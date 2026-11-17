@@ -40,7 +40,7 @@ For the first smoke test, choose Standard (no VLM), Local Mac, and chunk-only pr
 
 ## Optional local Qdrant and embeddings
 
-Install `colima` and the Docker CLI with `brew install colima docker`, then switch to **Advanced**, open **Preferences → Qdrant** and choose **Start Qdrant**. The app uses its dedicated `chunky` Colima profile and explicit socket, without switching your Docker context. It starts the `chunky-qdrant` container with persistent volume `chunky-qdrant-data`. First start downloads a VM and Qdrant image. **Stop Qdrant** and **Stop VM** require confirmation and retain stored data. See [local Qdrant controls](local-qdrant.md) for ownership checks and conflicts.
+Install `colima` and the Docker CLI with `brew install colima docker`, then open **Preferences → Qdrant** and choose **Start Qdrant**. The app uses its dedicated `chunky` Colima profile and explicit socket, without switching your Docker context. It starts the `chunky-qdrant` container with persistent volume `chunky-qdrant-data`. First start downloads a VM and Qdrant image. **Stop Qdrant** and **Stop VM** require confirmation and retain stored data. See [local Qdrant controls](local-qdrant.md) for ownership checks and conflicts.
 
 The panel does not select a connection for you: explicitly choose the local Qdrant endpoint in the existing connection controls, then check the connection. Native CI validates command fixtures and the rendered controls; a real Colima VM start still needs a manual Mac smoke test.
 
