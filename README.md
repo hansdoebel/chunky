@@ -9,7 +9,7 @@ A native macOS application for processing documents into semantic chunks and sto
 - Multi-format document processing (PDF, DOCX, PPTX, HTML, images) via Docling
 - Local VLM support with DocTags output (SmolDocling MLX, Granite-Docling MLX), or granite-docling on a worker host through vLLM
 - Text chunking with configurable token limits and overlap
-- Embeddings from Ollama or an OpenAI-compatible `/v1/embeddings` endpoint
+- Embeddings from local CPU FastEmbed, Ollama or an OpenAI-compatible `/v1/embeddings` endpoint
 - Vector storage in local Docker Qdrant or Qdrant Cloud
 - Optional worker browser workspace for uploads, queue progress, cancellation, chunk preview, job settings, semantic collection search, and system-aware light/dark appearance
 - Named worker profiles (wired LAN, Wi-Fi, Tailscale) with a reachability and latency check
@@ -27,7 +27,7 @@ A native macOS application for processing documents into semantic chunks and sto
 ## Prerequisites
 
 - Xcode 27.2, macOS 27, Swift 6.4
-- Docker (for local Qdrant v1.20.1)
+- Docker (for local Qdrant v1.20.2)
 - [Ollama](https://ollama.com/)
 - Python 3.12 (Docling scripts and the worker)
 
@@ -39,8 +39,11 @@ brew install protobuf swift-protobuf grpc-swift
 
 ## Setup
 
+For a fresh MacBook, follow [the first-run checklist](docs/macbook-first-run.md). It separates building the app from downloading models and starting a database.
+
 ```
 make first-launch
+make doctor
 make setup-venv
 ```
 
@@ -61,17 +64,21 @@ make test          # Swift scheme, including UI tests
 make test-python   # Python helper tests (no Docling needed)
 make test-worker   # worker unit tests
 make test-all      # scheme, helper tests, worker tests, and Docling integration
-make clean         # clean build artifacts
+make doctor        # read-only macOS/toolchain prerequisite check
+make test-setup    # setup-check unit tests
+make clean         # clean this checkout's build artifacts
 make open-xcode    # open in Xcode
 ```
 
 Start the required services:
 
 ```
-make qdrant        # Qdrant v1.20.1 on localhost:6333 / 6334, volume chunky-qdrant
+make qdrant        # detached Qdrant v1.20.2, loopback ports, volume chunky-qdrant
 make ollama        # start Ollama
-make services      # start both
+make services      # start Qdrant detached, then Ollama in foreground
 ```
+
+The CLI helper uses the selected Docker context and the name `chunky-qdrant-cli`. Confirm `docker context show` before starting it. Existing named containers are never replaced automatically; see the [first-run guide](docs/macbook-first-run.md).
 
 ## VLM Models
 
@@ -145,6 +152,9 @@ The gRPC migration already landed in [PER-55 / PR #5](https://github.com/hansdoe
 These replace the old `grpc-swift` repository and 1.x transport/protobuf bounds. The major migration described as deferred in PER-57 is therefore already complete; no additional migration or downgrade is needed. SwiftPM’s `from:` requirements allow compatible updates within each major version. When updating the vendored package, validate its unit tests with `swift test --package-path LocalPackages/qdrant-swift --skip IntegrationTests` from the repository root, then build and test the macOS app. Live Qdrant integration tests remain a separate operator check outside CI.
 
 ## Resources
+
+- [MacBook first run](docs/macbook-first-run.md)
+- [Verified version audit](docs/version-audit.md)
 
 - [Model choices](docs/models.md)
 - [Worker host](docs/worker-host.md)
