@@ -51,12 +51,13 @@ struct DatasetSnapshot {
         }
         let decoder = JSONDecoder()
         decoder.dateDecodingStrategy = .iso8601
-        let manifest = try decoder.decode(DatasetManifest.self, from: Data(contentsOf: manifestURL))
-        let data = try Data(contentsOf: rowsURL)
+        let manifest = try decoder.decode(DatasetManifest.self, from: readBounded(manifestURL, limit: 64 * 1024))
+        let data = try readBounded(rowsURL, limit: maximumBytes)
         guard manifest.schemaVersion == 1, validDatasetID(manifest.datasetID), validRevision(manifest.revision),
               manifest.rowCount > 0, manifest.rowCount <= maximumRows,
               manifest.requestedRows >= manifest.rowCount, manifest.requestedRows <= maximumRows,
               manifest.totalRows >= manifest.rowCount, !manifest.config.isEmpty, !manifest.split.isEmpty,
+              manifest.sourceURL == "https://huggingface.co/datasets/" + manifest.datasetID,
               manifest.sha256 == digest(data), data.count <= maximumBytes else { throw DatasetError.invalidSnapshot }
         let lines = data.split(separator: 10, omittingEmptySubsequences: false)
         guard lines.last?.isEmpty == true, lines.count - 1 == manifest.rowCount else { throw DatasetError.invalidSnapshot }
@@ -64,6 +65,14 @@ struct DatasetSnapshot {
             guard (try JSONSerialization.jsonObject(with: Data(line))) is [String: Any] else { throw DatasetError.invalidSnapshot }
         }
         return Self(manifest: manifest, directory: directory)
+    }
+
+    static func readBounded(_ url: URL, limit: Int) throws -> Data {
+        let file = try FileHandle(forReadingFrom: url)
+        defer { try? file.close() }
+        let data = try file.read(upToCount: limit + 1) ?? Data()
+        guard data.count <= limit else { throw DatasetError.limitExceeded }
+        return data
     }
 
     static func digest(_ data: Data) -> String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
