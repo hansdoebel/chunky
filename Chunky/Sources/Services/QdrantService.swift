@@ -443,15 +443,12 @@ class QdrantService: ObservableObject {
     }
 
     func setPayload(collectionName: String, ids: [String], fields: [String: String]) async throws {
-        guard let client = client else {
-            throw QdrantServiceError.notConnected
-        }
+        guard let handle else { throw QdrantServiceError.notConnected }
         guard !ids.isEmpty, !fields.isEmpty else { return }
-        try await client.points.setPayload(
-            collection: collectionName,
-            ids: ids.map { PointID.uuid($0) },
-            payload: fields.mapValues { PayloadValue.string($0) },
-            wait: true
+        try await handle.setPayload(
+            collectionName,
+            ids.map { StoredPointID.parse($0) },
+            fields.mapValues { PayloadValue.string($0) }
         )
     }
 
@@ -471,15 +468,8 @@ class QdrantService: ObservableObject {
     }
 
     func deletePoints(collectionName: String, ids: [String]) async throws {
-        guard let client = client else {
-            throw QdrantServiceError.notConnected
-        }
-        let pointIds = ids.map { PointID.uuid($0) }
-        try await client.points.delete(
-            collection: collectionName,
-            ids: pointIds,
-            wait: true
-        )
+        guard let handle else { throw QdrantServiceError.notConnected }
+        try await handle.deletePoints(collectionName, ids.map { StoredPointID.parse($0) })
     }
 
     func deleteBySource(collectionName: String, source: String, libraryID: String? = nil) async throws {
