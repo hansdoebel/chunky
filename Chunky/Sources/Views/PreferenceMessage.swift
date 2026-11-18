@@ -14,7 +14,7 @@ struct PreferenceMessage: View {
                 .font(.body.weight(.medium))
                 .foregroundStyle(isError ? Color.red : Color.secondary)
             Text(PreferenceDiagnostic.message(message, secrets: secrets))
-                .font(.callout)
+                .font(.body)
                 .textSelection(.enabled)
                 .fixedSize(horizontal: false, vertical: true)
             Button(copied ? "Copied" : "Copy details", systemImage: copied ? "checkmark" : "doc.on.doc") {

@@ -17,7 +17,7 @@ struct CPUEmbeddingSettingsPane: View {
             LabeledContent("Embedding host", value: "Local Mac")
             LabeledContent("Runtime", value: "FastEmbed · NumPy CPU")
             Label(readiness, systemImage: busy ? "hourglass" : "internaldrive")
-                .font(.caption)
+                .font(.body)
                 .accessibilityIdentifier("cpu-embedding-readiness")
             HStack {
                 Button("Check readiness", action: onCheck)
@@ -25,12 +25,12 @@ struct CPUEmbeddingSettingsPane: View {
             }
             .disabled(busy)
             Text("Download once while online. Cached models work offline. Checking readiness does not download a model. Document and query vectors must use the same model; existing collections are never converted automatically.")
-                .font(.caption)
+                .font(.body)
                 .foregroundStyle(.secondary)
             if let problem {
                 Label(problem, systemImage: "exclamationmark.triangle.fill")
                     .foregroundStyle(.orange)
-                    .font(.caption)
+                    .font(.body)
             }
         }
     }
@@ -54,7 +54,7 @@ struct EmbeddingJobSummary: View {
                     .foregroundStyle(.orange)
             }
         }
-        .font(.caption)
+        .font(.body)
         .foregroundStyle(.secondary)
         .task(id: settings.embeddingBackend + settings.embeddingModel) {
             guard settings.embeddingBackend == "fastembed" else { return }
