@@ -27,7 +27,7 @@ class AppState: ObservableObject {
     @Published private(set) var evalRuns: [RetrievalEvalDraft] = []
     @Published var historyWarning: String?
 
-    var qdrantService: QdrantService?
+    @Published var qdrantService: QdrantService?
 
     var pendingJobs: [ProcessingJob] { jobs.filter { $0.status == .pending } }
     var completedJobs: [ProcessingJob] { jobs.filter { $0.status == .completed } }
@@ -319,9 +319,14 @@ class AppState: ObservableObject {
             do {
                 try await service.configure(url: url, apiKey: apiKey)
                 try await service.connect(timeout: settings.qdrantTimeout)
+                guard qdrantService === service, settings.qdrantURL == url,
+                      settings.qdrantAPIKey == (apiKey ?? "") else { throw CancellationError() }
                 qdrantConnectionError = nil
             } catch {
-                qdrantConnectionError = error.localizedDescription
+                if !(error is CancellationError), qdrantService === service,
+                   settings.qdrantURL == url, settings.qdrantAPIKey == (apiKey ?? "") {
+                    qdrantConnectionError = PreferenceDiagnostic.message(error.localizedDescription, secrets: [apiKey ?? ""])
+                }
                 throw error
             }
         }

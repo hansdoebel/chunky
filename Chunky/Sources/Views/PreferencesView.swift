@@ -175,6 +175,10 @@ private struct PreferencesContent: View {
         }
     }
 
+    private var cloudDashboardURL: URL? {
+        PreferenceBrowserAddress.cloudDashboard(cloudAddress: settings.qdrantCloudURL, nativeAddress: settings.qdrantURL)
+    }
+
     private var simpleSetup: some View {
         Form {
             Section("What would you like to do?") {
@@ -250,6 +254,10 @@ private struct PreferencesContent: View {
                 }
             }
             Section("More options") {
+                if let dashboard = cloudDashboardURL {
+                    Link(destination: dashboard) { Label("Open Qdrant Cloud dashboard", systemImage: "cloud") }
+                        .help("Open the Cloud console in your default browser. Sign in with your Qdrant Cloud account.")
+                }
                 Button("Chat settings…", systemImage: "bubble.left.and.bubble.right") { openSettings(4) }
                 Button("App information and dependencies…", systemImage: "info.circle") { openSettings(5) }
                 Link("Installation and first-run help", destination: URL(string: "https://github.com/hansdoebel/chunky/blob/main/docs/macbook-first-run.md")!)
@@ -901,6 +909,13 @@ private struct PreferencesContent: View {
     private var qdrantTab: some View {
         Form {
             Section { LocalQdrantPane(automaticallyRefresh: automaticallyCheckConnections) }
+            if let dashboard = cloudDashboardURL {
+                Section {
+                    Link(destination: dashboard) { Label("Open Qdrant Cloud dashboard", systemImage: "cloud") }
+                    Text("Manage your cluster in the Cloud console. Browser sign-in is separate from the app's database API key.")
+                        .font(.body).foregroundStyle(.secondary)
+                }
+            }
             if advanced || settings.processingHost == .devbox {
                 Section {
                     Picker("Profile", selection: $appState.settings.qdrantProfile) {
@@ -922,7 +937,7 @@ private struct PreferencesContent: View {
                             Text(target.rawValue).tag(target)
                         }
                     }
-                    ValidatedPreferenceField(title: "Qdrant Cloud URL", value: $settings.qdrantCloudURL, kind: .endpoint, allowEmpty: true)
+                    ValidatedPreferenceField(title: "Qdrant Cloud REST URL", value: $settings.qdrantCloudURL, kind: .endpoint, allowEmpty: true)
                     Text("Used when Processing host is Devbox and ingest is Qdrant Cloud. The API key below is sent with the job and is not stored on the worker. Local Mac keeps using Server URL.")
                         .font(.body)
                         .foregroundColor(.secondary)
@@ -932,12 +947,22 @@ private struct PreferencesContent: View {
             }
 
             Section {
-                ValidatedPreferenceField(title: "Server URL", value: qdrantURLBinding, kind: .endpoint, actionTitle: "Save and test") {
+                ValidatedPreferenceField(title: "gRPC server URL", value: qdrantURLBinding, kind: .endpoint, actionTitle: "Save and test", browserAddress: CollectionSnapshots.restBase(qdrantURL: settings.qdrantURL)?.absoluteString ?? "") {
                     Task { await testQdrantConnection() }
                 }
                 .disabled(appState.isProcessing)
                 ValidatedPreferenceField(title: "API key", value: qdrantKeyBinding, kind: .secret, allowEmpty: true)
                     .disabled(appState.isProcessing)
+                Text("Use port 6334 for the gRPC connection, including Qdrant Cloud. REST normally uses 6333 or HTTPS 443. A successful gRPC check does not verify REST access.")
+                    .font(.body).foregroundStyle(.secondary)
+                if let rest = CollectionSnapshots.restBase(qdrantURL: settings.qdrantURL) {
+                    LabeledContent("REST address for HTTP features") {
+                        Text(PreferenceDiagnostic.message(rest.absoluteString, secrets: diagnosticSecrets))
+                            .textSelection(.enabled)
+                    }
+                    Text("Snapshots, database health and some search features use this derived REST address. Port 6334 maps to 6333; custom ports remain unchanged.")
+                        .font(.body).foregroundStyle(.secondary)
+                }
                 Text("Apply the API key first, then save and test the server URL. Credentials stay in the Keychain.")
                     .font(.body).foregroundStyle(.secondary)
                 if appState.isProcessing {
@@ -949,6 +974,9 @@ private struct PreferencesContent: View {
                     Spacer()
                     Button("Test connection") { Task { await testQdrantConnection() } }
                         .disabled(qdrantStatus == .checking)
+                }
+                if let service = appState.qdrantService {
+                    QdrantIndexStatus(service: service)
                 }
                 Button("New collection") { showNewCollection = true }
                 Picker("Collection", selection: $appState.settings.defaultCollection) {
