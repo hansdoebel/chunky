@@ -97,6 +97,7 @@ class QdrantService: ObservableObject {
             try await withTaskCancellationHandler {
                 try await task.value
                 try Task.checkCancellation()
+                guard started == generation, isConnected else { throw CancellationError() }
             } onCancel: {
                 Task { @MainActor [weak self] in self?.cancelConnectionWaiter(waiter, started: started) }
             }
