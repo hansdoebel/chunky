@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 
 struct WorkerEndpointsPane: View {
@@ -55,6 +56,11 @@ struct WorkerEndpointsPane: View {
             TextField("Worker URL", text: Binding(get: { url }, set: onURL), prompt: Text("http://host:8080 or https://host"))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(onSave)
+            Button("Open worker in browser", systemImage: "safari") {
+                if let address = PreferenceBrowserAddress.url(url) { NSWorkspace.shared.open(address) }
+            }
+            .disabled(PreferenceBrowserAddress.url(url) == nil)
+            .help("Open this worker server in your default browser without saving or applying the profile.")
             SecureField("Worker token", text: Binding(get: { token }, set: onToken))
                 .textFieldStyle(.roundedBorder)
                 .onSubmit(onSave)
