@@ -15,6 +15,13 @@ struct PreferenceBrowserAddressTests {
         }
     }
 
+    @Test func cloudDashboardRequiresConfiguredCloudAndNeverIncludesCredentials() {
+        #expect(PreferenceBrowserAddress.cloudDashboard(cloudAddress: "", nativeAddress: "http://localhost:6334") == nil)
+        #expect(PreferenceBrowserAddress.cloudDashboard(cloudAddress: "https://proxy.example.test:6333", nativeAddress: "")?.absoluteString == "https://cloud.qdrant.io")
+        #expect(PreferenceBrowserAddress.cloudDashboard(cloudAddress: "", nativeAddress: "https://cluster.eu.aws.cloud.qdrant.io:6334")?.absoluteString == "https://cloud.qdrant.io")
+        #expect(PreferenceBrowserAddress.cloudDashboard(cloudAddress: "", nativeAddress: "https://cloud.qdrant.io.evil.test:6334") == nil)
+    }
+
     @Test func qdrantBrowserAddressUsesRestPort() throws {
         let rest = try #require(CollectionSnapshots.restBase(qdrantURL: "https://example.test:6334"))
         #expect(PreferenceBrowserAddress.url(rest.absoluteString)?.port == 6333)

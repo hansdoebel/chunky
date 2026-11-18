@@ -175,6 +175,10 @@ private struct PreferencesContent: View {
         }
     }
 
+    private var cloudDashboardURL: URL? {
+        PreferenceBrowserAddress.cloudDashboard(cloudAddress: settings.qdrantCloudURL, nativeAddress: settings.qdrantURL)
+    }
+
     private var simpleSetup: some View {
         Form {
             Section("What would you like to do?") {
@@ -250,6 +254,10 @@ private struct PreferencesContent: View {
                 }
             }
             Section("More options") {
+                if let dashboard = cloudDashboardURL {
+                    Link(destination: dashboard) { Label("Open Qdrant Cloud dashboard", systemImage: "cloud") }
+                        .help("Open the Cloud console in your default browser. Sign in with your Qdrant Cloud account.")
+                }
                 Button("Chat settings…", systemImage: "bubble.left.and.bubble.right") { openSettings(4) }
                 Button("App information and dependencies…", systemImage: "info.circle") { openSettings(5) }
                 Link("Installation and first-run help", destination: URL(string: "https://github.com/hansdoebel/chunky/blob/main/docs/macbook-first-run.md")!)
@@ -901,6 +909,13 @@ private struct PreferencesContent: View {
     private var qdrantTab: some View {
         Form {
             Section { LocalQdrantPane(automaticallyRefresh: automaticallyCheckConnections) }
+            if let dashboard = cloudDashboardURL {
+                Section {
+                    Link(destination: dashboard) { Label("Open Qdrant Cloud dashboard", systemImage: "cloud") }
+                    Text("Manage your cluster in the Cloud console. Browser sign-in is separate from the app's database API key.")
+                        .font(.body).foregroundStyle(.secondary)
+                }
+            }
             if advanced || settings.processingHost == .devbox {
                 Section {
                     Picker("Profile", selection: $appState.settings.qdrantProfile) {
