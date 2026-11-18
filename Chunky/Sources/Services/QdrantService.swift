@@ -18,6 +18,7 @@ class QdrantService: ObservableObject {
     private var pendingUrl: String?
     private var pendingApiKey: String?
     private var indexedCollections: Set<String> = []
+    private var indexErrors: [String: String] = [:]
     private var collectionGenerations: [String: Int] = [:]
 
     init(makeClient: @escaping (QdrantConfiguration) async throws -> QdrantClientHandle = QdrantClientHandle.live) {
@@ -35,7 +36,14 @@ class QdrantService: ObservableObject {
         isConnected = false
         serverVersion = nil
         connectionError = nil
+        indexErrors.removeAll()
         indexError = nil
+    }
+
+    private func updateIndexError(collection: String, message: String?) {
+        indexErrors[collection] = message
+        let messages = indexErrors.keys.sorted().compactMap { indexErrors[$0] }
+        indexError = messages.isEmpty ? nil : messages.joined(separator: "\n")
     }
 
     func configure(url: String, apiKey: String?) async throws {
@@ -227,7 +235,7 @@ class QdrantService: ObservableObject {
             try await createPayloadIndexes(collection: collection)
         } catch {
             guard started == generation, collectionStarted == collectionGenerations[collection, default: 0], !(error is CancellationError) else { return }
-            indexError = PreferenceDiagnostic.message("Payload indexes for \(collection): \(error.localizedDescription)", secrets: [pendingApiKey ?? ""])
+            updateIndexError(collection: collection, message: PreferenceDiagnostic.message("Payload indexes for \(collection): \(error.localizedDescription)", secrets: [pendingApiKey ?? ""]))
         }
     }
 
@@ -258,7 +266,7 @@ class QdrantService: ObservableObject {
         try Task.checkCancellation()
         guard started == generation, collectionStarted == collectionGenerations[collection, default: 0] else { throw CancellationError() }
         indexedCollections.insert(collection)
-        indexError = nil
+        updateIndexError(collection: collection, message: nil)
     }
 
     func deleteCollection(_ name: String) async throws {
@@ -273,6 +281,7 @@ class QdrantService: ObservableObject {
             }
         }
         try await handle.deleteCollection(name)
+        if started == generation { updateIndexError(collection: name, message: nil) }
     }
 
     func upsertPoints(

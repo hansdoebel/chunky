@@ -249,6 +249,45 @@ struct QdrantLifecycleTests {
         #expect(service.indexError == nil)
     }
 
+    @Test func successfulOtherCollectionDoesNotHideOutstandingIndexFailure() async throws {
+        var failA = true
+        let service = QdrantService(makeClient: { _ in
+            QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
+                createFieldIndex: { collection, _, _, _ in
+                    if collection == "a", failA { throw QdrantError.permissionDenied("denied-a") }
+                })
+        })
+        try await service.configure(url: "http://localhost:6334", apiKey: nil)
+        try await service.connect()
+        await service.ensureRetrievalIndexes(collection: "a")
+        #expect(service.indexError?.contains("denied-a") == true)
+        await service.ensureRetrievalIndexes(collection: "b")
+        #expect(service.indexError?.contains("denied-a") == true)
+        failA = false
+        await service.ensureRetrievalIndexes(collection: "a")
+        #expect(service.indexError == nil)
+    }
+
+    @Test func deletionClearsOnlyItsOwnIndexDiagnosticAndDisconnectClearsAll() async throws {
+        let service = QdrantService(makeClient: { _ in
+            QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
+                createFieldIndex: { collection, _, _, _ in
+                    throw QdrantError.permissionDenied("denied-" + collection)
+                }, deleteCollection: { _ in })
+        })
+        try await service.configure(url: "http://localhost:6334", apiKey: nil)
+        try await service.connect()
+        await service.ensureRetrievalIndexes(collection: "a")
+        await service.ensureRetrievalIndexes(collection: "b")
+        #expect(service.indexError?.contains("denied-a") == true)
+        #expect(service.indexError?.contains("denied-b") == true)
+        try await service.deleteCollection("a")
+        #expect(service.indexError?.contains("denied-a") == false)
+        #expect(service.indexError?.contains("denied-b") == true)
+        await service.disconnect()
+        #expect(service.indexError == nil)
+    }
+
     @Test func typedAlreadyExistsIsAcceptedButSimilarFailureIsNot() async throws {
         var alreadyExists = true
         var calls = 0
