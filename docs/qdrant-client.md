@@ -32,3 +32,7 @@ The pinned client includes upstream PR #14 (`f7316979dbeaba3504693ff051fc7c58774
 The native app links QdrantCore and QdrantGRPC. QdrantREST remains available and tested in the standalone/vendored package, but is not linked by Chunky: the app's HTTP integrations currently use their own URLSession transports. No binary-size or build-time savings are claimed without measurement.
 
 Keep the maintained client separate. The current vendor manifest and compatibility patch provide a pinned, reproducible snapshot with an ordinary clone. A Git submodule would add checkout/update steps without removing gRPC, NIO, TLS or protobuf dependencies. Copying selected client files would retain that transport stack while creating another fork to maintain. Once reusable compatibility changes are upstream and the local patch is no longer required, evaluate a pinned remote Swift package instead of moving client internals into the app.
+
+## Connection fields
+
+Preferences labels the native connection as **gRPC server URL** (normally port6334), and the worker ingest endpoint as **Qdrant Cloud REST URL** (normally6333 or HTTPS443). Removing the unused REST package product does not remove HTTP features. The panel shows the REST address derived for snapshots, health and HTTP search: explicit6334 maps to6333 and custom ports stay unchanged. A successful gRPC connection check validates only that protocol. Custom reverse proxies must expose the appropriate protocols; the app does not silently change saved endpoints or database collections.
