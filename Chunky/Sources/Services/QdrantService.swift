@@ -9,69 +9,88 @@ class QdrantService: ObservableObject {
     @Published private(set) var connectionError: String?
     @Published private(set) var serverVersion: String?
 
-    private var client: QdrantGRPCClient?
+    @Published private(set) var indexError: String?
+    private var handle: QdrantClientHandle?
+    private var connectingHandle: QdrantClientHandle?
+    private var client: QdrantGRPCClient? { handle?.client }
+    private let makeClient: (QdrantConfiguration) async throws -> QdrantClientHandle
+    private var generation = 0
     private var pendingUrl: String?
     private var pendingApiKey: String?
     private var indexedCollections: Set<String> = []
+    private var collectionGenerations: [String: Int] = [:]
+
+    init(makeClient: @escaping (QdrantConfiguration) async throws -> QdrantClientHandle = QdrantClientHandle.live) {
+        self.makeClient = makeClient
+    }
+
+    private func invalidateConnection() {
+        generation += 1
+        connectingHandle?.close()
+        connectingHandle = nil
+        handle?.close()
+        handle = nil
+        indexedCollections.removeAll()
+        collectionGenerations.removeAll()
+        isConnected = false
+        serverVersion = nil
+        connectionError = nil
+        indexError = nil
+    }
 
     func configure(url: String, apiKey: String?) async throws {
-
-        self.pendingUrl = url
-        self.pendingApiKey = apiKey
+        if pendingUrl != url || pendingApiKey != apiKey { invalidateConnection() }
+        pendingUrl = url
+        pendingApiKey = apiKey
     }
 
     func connect(timeout: Int = 30) async throws {
-        guard let url = pendingUrl else {
-            throw QdrantServiceError.notConfigured
-        }
-
-        guard let urlComponents = URLComponents(string: url),
-            let host = urlComponents.host, !host.isEmpty
-        else {
+        guard let url = pendingUrl else { throw QdrantServiceError.notConfigured }
+        invalidateConnection()
+        let started = generation
+        guard let components = URLComponents(string: url), let host = components.host, !host.isEmpty else {
             throw QdrantServiceError.invalidURL(url)
         }
-
-        let useTLS = urlComponents.scheme == "https"
-        let port = urlComponents.port ?? 6334
-
+        var candidate: QdrantClientHandle?
         do {
-
-            client?.close()
-
-            let config = try QdrantConfiguration(
-                host: host,
-                port: port,
-                apiKey: pendingApiKey,
-                useTLS: useTLS,
-                timeout: .seconds(timeout)
-            )
-            let newClient = try await QdrantGRPCClient(configuration: config)
-
-            let health = try await newClient.healthCheck()
-
-            self.client = newClient
-            self.serverVersion = health.version
-            self.isConnected = true
-            self.connectionError = nil
+            let config = try QdrantConfiguration(host: host, port: components.port ?? 6334,
+                apiKey: pendingApiKey, useTLS: components.scheme?.lowercased() == "https", timeout: .seconds(timeout))
+            let created = try await makeClient(config)
+            candidate = created
+            guard started == generation else { throw CancellationError() }
+            try Task.checkCancellation()
+            connectingHandle = created
+            let health = try await created.healthCheck()
+            try Task.checkCancellation()
+            guard started == generation else { throw CancellationError() }
+            connectingHandle = nil
+            handle = created
+            serverVersion = health.version
+            isConnected = true
+            connectionError = nil
         } catch {
+            candidate?.close()
+            guard started == generation else { throw CancellationError() }
+            connectingHandle = nil
             isConnected = false
-            connectionError = error.localizedDescription
-            throw QdrantServiceError.connectionFailed(error.localizedDescription)
+            serverVersion = nil
+            if error is CancellationError { throw error }
+            let message = PreferenceDiagnostic.message(error.localizedDescription, secrets: [pendingApiKey ?? ""])
+            connectionError = message
+            throw QdrantServiceError.connectionFailed(message)
         }
     }
 
     func disconnect() async {
-        client?.close()
-        client = nil
-        isConnected = false
-        serverVersion = nil
+        invalidateConnection()
     }
 
     func testConnection() async -> Bool {
-        guard let client = client else { return false }
+        guard let handle else { return false }
+        let started = generation
         do {
-            _ = try await client.healthCheck()
-            return true
+            _ = try await handle.healthCheck()
+            return started == generation && isConnected
         } catch {
             return false
         }
@@ -140,6 +159,8 @@ class QdrantService: ObservableObject {
 
         let exists = try await client.collections.exists(name: name)
         if !exists {
+            indexedCollections.remove(name)
+            collectionGenerations[name, default: 0] += 1
             let payloadOnDisk = onDiskPayload ?? (hybrid ? true : nil)
             let dense = VectorConfig(size: vectorSize, distance: distance, onDisk: onDiskVectors)
             if hybrid {
@@ -200,48 +221,50 @@ class QdrantService: ObservableObject {
 
     func ensureRetrievalIndexes(collection: String) async {
         if indexedCollections.contains(collection) { return }
-        try? await createPayloadIndexes(collection: collection)
-        indexedCollections.insert(collection)
+        let started = generation
+        let collectionStarted = collectionGenerations[collection, default: 0]
+        do {
+            try await createPayloadIndexes(collection: collection)
+        } catch {
+            guard started == generation, collectionStarted == collectionGenerations[collection, default: 0], !(error is CancellationError) else { return }
+            indexError = PreferenceDiagnostic.message("Payload indexes for \(collection): \(error.localizedDescription)", secrets: [pendingApiKey ?? ""])
+        }
     }
 
     func createPayloadIndexes(collection: String) async throws {
-        guard let client = client else {
-            throw QdrantServiceError.notConnected
+        guard let handle else { throw QdrantServiceError.notConnected }
+        let started = generation
+        let collectionStarted = collectionGenerations[collection, default: 0]
+        let fields: [(String, FieldType)] =
+            ["source", "content_type", "content_types", "language", "doi", "picture_class", "record_type"].map { ($0, .keyword) }
+            + ["doc_title", "authors", "headings", "picture_description", "table_markdown", "embedding_text"].map { ($0, .text) }
+            + ["page", "page_end", "year"].map { ($0, .integer) }
+            + [(PaperLibrary.field, .keyword)]
+        for (field, type) in fields {
+            try Task.checkCancellation()
+            guard started == generation, collectionStarted == collectionGenerations[collection, default: 0] else { throw CancellationError() }
+            do {
+                try await handle.createFieldIndex(collection, field, type, field == PaperLibrary.field)
+            } catch QdrantError.collectionAlreadyExists {
+                continue
+            } catch is CancellationError {
+                throw CancellationError()
+            } catch {
+                let message = PreferenceDiagnostic.message(error.localizedDescription, secrets: [pendingApiKey ?? ""])
+                throw QdrantServiceError.operationFailed("Could not create index \(field): \(message)")
+            }
         }
-
-        let keywordFields = ["source", "content_type", "content_types", "language", "doi", "picture_class", "record_type"]
-        let textFields = ["doc_title", "authors", "headings", "picture_description", "table_markdown", "embedding_text"]
-        let integerFields = ["page", "page_end", "year"]
-
-        for field in keywordFields {
-            try? await client.points.createFieldIndex(
-                collection: collection, fieldName: field, fieldType: .keyword, wait: false
-            )
-        }
-        for field in textFields {
-            try? await client.points.createFieldIndex(
-                collection: collection, fieldName: field, fieldType: .text, wait: false
-            )
-        }
-        for field in integerFields {
-            try? await client.points.createFieldIndex(
-                collection: collection, fieldName: field, fieldType: .integer, wait: false
-            )
-        }
-        try? await client.points.createFieldIndex(
-            collection: collection,
-            fieldName: PaperLibrary.field,
-            fieldType: .keyword,
-            wait: false,
-            isTenant: true
-        )
+        try Task.checkCancellation()
+        guard started == generation, collectionStarted == collectionGenerations[collection, default: 0] else { throw CancellationError() }
+        indexedCollections.insert(collection)
+        indexError = nil
     }
 
     func deleteCollection(_ name: String) async throws {
-        guard let client = client else {
-            throw QdrantServiceError.notConnected
-        }
-        try await client.collections.delete(name: name)
+        guard let handle else { throw QdrantServiceError.notConnected }
+        indexedCollections.remove(name)
+        collectionGenerations[name, default: 0] += 1
+        try await handle.deleteCollection(name)
     }
 
     func upsertPoints(
