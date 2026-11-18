@@ -1,6 +1,6 @@
 # Native readability and progressive disclosure audit
 
-Source audit of the main window and Preferences after PR #100, on 2026-11-17. These are recommendations, not additional shipped UI changes or a claim of visual testing. The owner requested no additional screenshots for this iteration.
+Source audit of the main window and Preferences after PR #100, on 2026-11-17. The observations below describe the pre-follow-up source. PR #104 subsequently implemented the main readability, icon-label and disclosure work; see Implementation status below. This audit is not a claim of visual testing. The owner requested no additional screenshots for this iteration.
 
 ## Typography
 
@@ -51,3 +51,9 @@ The preceding research used official project documentation and repositories, not
 - [Stats](https://github.com/exelban/stats): visible status and optional modules illustrate task-relevant information; its troubleshooting documents concrete next actions.
 
 For personal installation and current update limitations, see [personal installation](personal-installation.md). Runtime maintenance and safe app replacement are tracked separately as [PER-240](https://linear.app/hansdoebel/issue/PER-240) and [PER-241](https://linear.app/hansdoebel/issue/PER-241).
+
+## Implementation status after the audit
+
+[PR #104](https://github.com/hansdoebel/chunky/pull/104) shipped readable queue/status and nested Preferences text, accessible queue removal, text-plus-symbol setup links, flexible Preferences sizing, consistent wider sidebar bounds, settings search, and selective disclosure groups with current-value summaries. System/Light/Dark appearance is saved across native windows. The fixed-size and caption observations above are historical, not a description of the current implementation. Current behavior is documented in [interface modes](interface-modes.md).
+
+The remaining optional ideas include disclosure for completed-job diagnostics and additional document-processing tuning. They have not been implemented merely because they appear in this audit. Screenshot validation was waived by the owner; native builds, regression tests and independent reviews passed for the shipped changes.
