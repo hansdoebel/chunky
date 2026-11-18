@@ -182,3 +182,5 @@ These replace the old `grpc-swift` repository and 1.x transport/protobuf bounds.
 - [Browser workspace](docs/web-ui.md)
 - [Worker API](worker/README.md)
 - [Docling](https://www.docling.ai/)
+
+For branch cleanup and Linear archive constraints, see [repository and ticket maintenance](docs/maintenance.md).
