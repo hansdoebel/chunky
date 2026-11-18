@@ -950,6 +950,9 @@ private struct PreferencesContent: View {
                     Button("Test connection") { Task { await testQdrantConnection() } }
                         .disabled(qdrantStatus == .checking)
                 }
+                if let service = appState.qdrantService {
+                    QdrantIndexStatus(service: service)
+                }
                 Button("New collection") { showNewCollection = true }
                 Picker("Collection", selection: $appState.settings.defaultCollection) {
                     ForEach(appState.availableCollections, id: \.self) { collection in
