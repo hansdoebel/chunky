@@ -10,7 +10,6 @@
 		3A062E3F2F2C0E87003CDEAF /* Chunky.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3A062E3E2F2C0E87003CDEAF /* Chunky.icon */; };
 		3A53CED72F2F77B300CAD968 /* QdrantCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CED62F2F77B300CAD968 /* QdrantCore */; };
 		3A53CED92F2F77B300CAD968 /* QdrantGRPC in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CED82F2F77B300CAD968 /* QdrantGRPC */; };
-		3A53CEDB2F2F77B300CAD968 /* QdrantREST in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CEDA2F2F77B300CAD968 /* QdrantREST */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,7 +66,6 @@
 			buildActionMask = 2147483647;
 			files = (
 				3A53CED92F2F77B300CAD968 /* QdrantGRPC in Frameworks */,
-				3A53CEDB2F2F77B300CAD968 /* QdrantREST in Frameworks */,
 				3A53CED72F2F77B300CAD968 /* QdrantCore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
@@ -154,7 +152,6 @@
 			packageProductDependencies = (
 				3A53CED62F2F77B300CAD968 /* QdrantCore */,
 				3A53CED82F2F77B300CAD968 /* QdrantGRPC */,
-				3A53CEDA2F2F77B300CAD968 /* QdrantREST */,
 			);
 			productName = Chunky;
 			productReference = 3A062E122F2C0D27003CDEAF /* Chunky.app */;
@@ -643,10 +640,7 @@
 			isa = XCSwiftPackageProductDependency;
 			productName = QdrantGRPC;
 		};
-		3A53CEDA2F2F77B300CAD968 /* QdrantREST */ = {
-			isa = XCSwiftPackageProductDependency;
-			productName = QdrantREST;
-		};
+
 /* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = 3A062E0A2F2C0D27003CDEAF /* Project object */;
