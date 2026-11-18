@@ -31,6 +31,10 @@ final class QdrantClientHandle {
         self.deletePoints = deletePoints
     }
 
+    isolated deinit {
+        close()
+    }
+
     func close() {
         guard !closed else { return }
         closed = true

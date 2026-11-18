@@ -28,6 +28,11 @@ private final class HealthGate {
         continuation?.resume(returning: HealthCheckResult(title: "test", version: "old"))
         continuation = nil
     }
+
+    func fail(_ error: Error) {
+        continuation?.resume(throwing: error)
+        continuation = nil
+    }
 }
 
 @MainActor
@@ -43,6 +48,18 @@ struct QdrantLifecycleTests {
         #expect(service.serverVersion == nil)
         #expect(service.connectionError?.contains("fixture-secret") == false)
         await service.disconnect()
+        #expect(closes == 1)
+    }
+
+    @Test func releasingServiceClosesCommittedClient() async throws {
+        var closes = 0
+        var service: QdrantService? = QdrantService(makeClient: { _ in
+            QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: { closes += 1 })
+        })
+        try await service?.configure(url: "http://localhost:6334", apiKey: nil)
+        try await service?.connect()
+        #expect(service?.isConnected == true)
+        service = nil
         #expect(closes == 1)
     }
 
@@ -189,6 +206,47 @@ struct QdrantLifecycleTests {
         #expect(service.indexError == nil)
         await service.ensureRetrievalIndexes(collection: "docs")
         #expect(calls == 18)
+    }
+
+    @Test func indexesCompletedDuringDeletionAreInvalidatedWhenDeleteFinishes() async throws {
+        let gate = HealthGate()
+        var calls = 0
+        let service = QdrantService(makeClient: { _ in
+            QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
+                createFieldIndex: { _, _, _, _ in calls += 1 },
+                deleteCollection: { _ in _ = try await gate.wait() })
+        })
+        try await service.configure(url: "http://localhost:6334", apiKey: nil)
+        try await service.connect()
+        let deletion = Task { try await service.deleteCollection("docs") }
+        await gate.waitForStart()
+        await service.ensureRetrievalIndexes(collection: "docs")
+        #expect(calls == 17)
+        gate.finish()
+        try await deletion.value
+        await service.ensureRetrievalIndexes(collection: "docs")
+        #expect(calls == 34)
+    }
+
+    @Test func indexFailureRedactsTheCredentialUsedBeforeReconfiguration() async throws {
+        let gate = HealthGate()
+        let service = QdrantService(makeClient: { _ in
+            QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
+                createFieldIndex: { _, _, _, _ in _ = try await gate.wait() })
+        })
+        try await service.configure(url: "http://localhost:6334", apiKey: "old-fixture-secret")
+        try await service.connect()
+        let indexing = Task { try await service.createPayloadIndexes(collection: "docs") }
+        await gate.waitForStart()
+        try await service.configure(url: "http://127.0.0.1:6334", apiKey: "new-fixture-secret")
+        gate.fail(QdrantError.unavailable("old-fixture-secret"))
+        do {
+            try await indexing.value
+            Issue.record("Expected index failure")
+        } catch {
+            #expect(!error.localizedDescription.contains("old-fixture-secret"))
+        }
+        #expect(service.indexError == nil)
     }
 
     @Test func typedAlreadyExistsIsAcceptedButSimilarFailureIsNot() async throws {

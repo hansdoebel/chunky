@@ -235,6 +235,7 @@ class QdrantService: ObservableObject {
         guard let handle else { throw QdrantServiceError.notConnected }
         let started = generation
         let collectionStarted = collectionGenerations[collection, default: 0]
+        let apiKey = pendingApiKey ?? ""
         let fields: [(String, FieldType)] =
             ["source", "content_type", "content_types", "language", "doi", "picture_class", "record_type"].map { ($0, .keyword) }
             + ["doc_title", "authors", "headings", "picture_description", "table_markdown", "embedding_text"].map { ($0, .text) }
@@ -250,7 +251,7 @@ class QdrantService: ObservableObject {
             } catch is CancellationError {
                 throw CancellationError()
             } catch {
-                let message = PreferenceDiagnostic.message(error.localizedDescription, secrets: [pendingApiKey ?? ""])
+                let message = PreferenceDiagnostic.message(error.localizedDescription, secrets: [apiKey])
                 throw QdrantServiceError.operationFailed("Could not create index \(field): \(message)")
             }
         }
@@ -262,8 +263,15 @@ class QdrantService: ObservableObject {
 
     func deleteCollection(_ name: String) async throws {
         guard let handle else { throw QdrantServiceError.notConnected }
+        let started = generation
         indexedCollections.remove(name)
         collectionGenerations[name, default: 0] += 1
+        defer {
+            if started == generation {
+                indexedCollections.remove(name)
+                collectionGenerations[name, default: 0] += 1
+            }
+        }
         try await handle.deleteCollection(name)
     }
 
