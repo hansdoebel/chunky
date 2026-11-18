@@ -27,7 +27,7 @@ class AppState: ObservableObject {
     @Published private(set) var evalRuns: [RetrievalEvalDraft] = []
     @Published var historyWarning: String?
 
-    var qdrantService: QdrantService?
+    @Published var qdrantService: QdrantService?
 
     var pendingJobs: [ProcessingJob] { jobs.filter { $0.status == .pending } }
     var completedJobs: [ProcessingJob] { jobs.filter { $0.status == .completed } }
