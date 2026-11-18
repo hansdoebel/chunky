@@ -12,6 +12,12 @@ class QdrantService: ObservableObject {
     @Published private(set) var indexError: String?
     private var handle: QdrantClientHandle?
     private var connectingHandle: QdrantClientHandle?
+    private var connectingTask: Task<Void, Error>?
+    private var connectingTimeout: Int?
+    private var connectedTimeout: Int?
+    private var connectionWaiters: Set<UUID> = []
+    private var deliveredConnection = false
+    var pendingConnectionCount: Int { connectionWaiters.count }
     private var client: QdrantGRPCClient? { handle?.client }
     private let makeClient: (QdrantConfiguration) async throws -> QdrantClientHandle
     private var generation = 0
@@ -27,6 +33,12 @@ class QdrantService: ObservableObject {
 
     private func invalidateConnection() {
         generation += 1
+        connectingTask?.cancel()
+        connectingTask = nil
+        connectingTimeout = nil
+        connectedTimeout = nil
+        connectionWaiters.removeAll()
+        deliveredConnection = false
         connectingHandle?.close()
         connectingHandle = nil
         handle?.close()
@@ -53,16 +65,66 @@ class QdrantService: ObservableObject {
     }
 
     func connect(timeout: Int = 30) async throws {
+        try Task.checkCancellation()
+        if let task = connectingTask, connectingTimeout == timeout {
+            try await waitForConnection(task, started: generation)
+            return
+        }
+        if isConnected, connectedTimeout == timeout { return }
         guard let url = pendingUrl else { throw QdrantServiceError.notConfigured }
+        let apiKey = pendingApiKey
         invalidateConnection()
         let started = generation
+        let task = Task { try await performConnect(url: url, apiKey: apiKey, timeout: timeout, started: started) }
+        connectingTask = task
+        connectingTimeout = timeout
+        try await waitForConnection(task, started: started)
+    }
+
+    private func waitForConnection(_ task: Task<Void, Error>, started: Int) async throws {
+        let waiter = UUID()
+        connectionWaiters.insert(waiter)
+        defer {
+            if started == generation {
+                connectionWaiters.remove(waiter)
+                if connectionWaiters.isEmpty {
+                    connectingTask = nil
+                    connectingTimeout = nil
+                }
+            }
+        }
+        do {
+            try await withTaskCancellationHandler {
+                try await task.value
+                try Task.checkCancellation()
+            } onCancel: {
+                Task { @MainActor [weak self] in self?.cancelConnectionWaiter(waiter, started: started) }
+            }
+            deliveredConnection = true
+        } catch {
+            if Task.isCancelled {
+                cancelConnectionWaiter(waiter, started: started)
+                throw CancellationError()
+            }
+            throw error
+        }
+    }
+
+    private func cancelConnectionWaiter(_ waiter: UUID, started: Int) {
+        guard started == generation else { return }
+        guard connectionWaiters.remove(waiter) != nil else { return }
+        if connectionWaiters.isEmpty, !deliveredConnection { invalidateConnection() }
+    }
+
+    private func performConnect(url: String, apiKey: String?, timeout: Int, started: Int) async throws {
+        try Task.checkCancellation()
         guard let components = URLComponents(string: url), let host = components.host, !host.isEmpty else {
             throw QdrantServiceError.invalidURL(url)
         }
         var candidate: QdrantClientHandle?
         do {
             let config = try QdrantConfiguration(host: host, port: components.port ?? 6334,
-                apiKey: pendingApiKey, useTLS: components.scheme?.lowercased() == "https", timeout: .seconds(timeout))
+                apiKey: apiKey, useTLS: components.scheme?.lowercased() == "https", timeout: .seconds(timeout))
             let created = try await makeClient(config)
             candidate = created
             guard started == generation else { throw CancellationError() }
@@ -75,6 +137,7 @@ class QdrantService: ObservableObject {
             handle = created
             serverVersion = health.version
             isConnected = true
+            connectedTimeout = timeout
             connectionError = nil
         } catch {
             candidate?.close()
@@ -83,7 +146,7 @@ class QdrantService: ObservableObject {
             isConnected = false
             serverVersion = nil
             if error is CancellationError { throw error }
-            let message = PreferenceDiagnostic.message(error.localizedDescription, secrets: [pendingApiKey ?? ""])
+            let message = PreferenceDiagnostic.message(error.localizedDescription, secrets: [apiKey ?? ""])
             connectionError = message
             throw QdrantServiceError.connectionFailed(message)
         }
@@ -254,7 +317,7 @@ class QdrantService: ObservableObject {
             guard started == generation, collectionStarted == collectionGenerations[collection, default: 0] else { throw CancellationError() }
             do {
                 try await handle.createFieldIndex(collection, field, type, field == PaperLibrary.field)
-            } catch QdrantError.collectionAlreadyExists {
+            } catch QdrantGRPC.QdrantError.collectionAlreadyExists {
                 continue
             } catch is CancellationError {
                 throw CancellationError()

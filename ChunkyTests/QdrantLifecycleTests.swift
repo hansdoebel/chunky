@@ -39,7 +39,7 @@ private final class HealthGate {
 struct QdrantLifecycleTests {
     @Test func failedHealthClosesUncommittedClientAndRedactsError() async throws {
         var closes = 0
-        let handle = QdrantClientHandle(healthCheck: { throw QdrantError.unavailable("fixture-secret") }, close: { closes += 1 })
+        let handle = QdrantClientHandle(healthCheck: { throw QdrantGRPC.QdrantError.unavailable("fixture-secret") }, close: { closes += 1 })
         let service = QdrantService(makeClient: { _ in handle })
         try await service.configure(url: "http://localhost:6334", apiKey: "fixture-secret")
         await #expect(throws: Error.self) { try await service.connect() }
@@ -60,6 +60,62 @@ struct QdrantLifecycleTests {
         try await service?.connect()
         #expect(service?.isConnected == true)
         service = nil
+        #expect(closes == 1)
+    }
+
+    @Test(.timeLimit(.minutes(1))) func concurrentSameIdentityConnectionsShareOneFactoryAndHealthCheck() async throws {
+        let gate = HealthGate()
+        var factories = 0
+        var healthChecks = 0
+        let service = QdrantService(makeClient: { _ in
+            factories += 1
+            return QdrantClientHandle(healthCheck: {
+                healthChecks += 1
+                return try await gate.wait()
+            }, close: {})
+        })
+        try await service.configure(url: "http://localhost:6334", apiKey: nil)
+        let first = Task { try await service.connect() }
+        await gate.waitForStart()
+        let second = Task { try await service.connect() }
+        while service.pendingConnectionCount < 2 {
+            try Task.checkCancellation()
+            await Task.yield()
+        }
+        gate.finish()
+        try await first.value
+        try await second.value
+        try await service.connect()
+        #expect(factories == 1)
+        #expect(healthChecks == 1)
+        #expect(service.isConnected)
+        await service.disconnect()
+    }
+
+    @Test(.timeLimit(.minutes(1))) func cancellingOneWaiterPreservesTheOtherConnectionRequest() async throws {
+        let gate = HealthGate()
+        var factories = 0
+        var closes = 0
+        let service = QdrantService(makeClient: { _ in
+            factories += 1
+            return QdrantClientHandle(healthCheck: { try await gate.wait() }, close: { closes += 1 })
+        })
+        try await service.configure(url: "http://localhost:6334", apiKey: nil)
+        let first = Task { try await service.connect() }
+        await gate.waitForStart()
+        let second = Task { try await service.connect() }
+        while service.pendingConnectionCount < 2 {
+            try Task.checkCancellation()
+            await Task.yield()
+        }
+        first.cancel()
+        gate.finish()
+        try await second.value
+        await #expect(throws: CancellationError.self) { try await first.value }
+        #expect(factories == 1)
+        #expect(closes == 0)
+        #expect(service.isConnected)
+        await service.disconnect()
         #expect(closes == 1)
     }
 
@@ -145,7 +201,7 @@ struct QdrantLifecycleTests {
             QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
                 createFieldIndex: { _, _, _, _ in
                     calls += 1
-                    if fail { throw QdrantError.permissionDenied("fixture-secret") }
+                    if fail { throw QdrantGRPC.QdrantError.permissionDenied("fixture-secret") }
                 })
         })
         try await service.configure(url: "http://localhost:6334", apiKey: "fixture-secret")
@@ -239,7 +295,7 @@ struct QdrantLifecycleTests {
         let indexing = Task { try await service.createPayloadIndexes(collection: "docs") }
         await gate.waitForStart()
         try await service.configure(url: "http://127.0.0.1:6334", apiKey: "new-fixture-secret")
-        gate.fail(QdrantError.unavailable("old-fixture-secret"))
+        gate.fail(QdrantGRPC.QdrantError.unavailable("old-fixture-secret"))
         do {
             try await indexing.value
             Issue.record("Expected index failure")
@@ -254,7 +310,7 @@ struct QdrantLifecycleTests {
         let service = QdrantService(makeClient: { _ in
             QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
                 createFieldIndex: { collection, _, _, _ in
-                    if collection == "a", failA { throw QdrantError.permissionDenied("denied-a") }
+                    if collection == "a", failA { throw QdrantGRPC.QdrantError.permissionDenied("denied-a") }
                 })
         })
         try await service.configure(url: "http://localhost:6334", apiKey: nil)
@@ -272,7 +328,7 @@ struct QdrantLifecycleTests {
         let service = QdrantService(makeClient: { _ in
             QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
                 createFieldIndex: { collection, _, _, _ in
-                    throw QdrantError.permissionDenied("denied-" + collection)
+                    throw QdrantGRPC.QdrantError.permissionDenied("denied-" + collection)
                 }, deleteCollection: { _ in })
         })
         try await service.configure(url: "http://localhost:6334", apiKey: nil)
@@ -295,8 +351,8 @@ struct QdrantLifecycleTests {
             QdrantClientHandle(healthCheck: { HealthCheckResult(title: "test", version: "1") }, close: {},
                 createFieldIndex: { _, _, _, _ in
                     calls += 1
-                    if alreadyExists { throw QdrantError.collectionAlreadyExists("index") }
-                    throw QdrantError.permissionDenied("already exists but unauthorized")
+                    if alreadyExists { throw QdrantGRPC.QdrantError.collectionAlreadyExists("index") }
+                    throw QdrantGRPC.QdrantError.permissionDenied("already exists but unauthorized")
                 })
         })
         try await service.configure(url: "http://localhost:6334", apiKey: nil)
