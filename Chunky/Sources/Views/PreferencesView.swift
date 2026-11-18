@@ -932,7 +932,7 @@ private struct PreferencesContent: View {
             }
 
             Section {
-                ValidatedPreferenceField(title: "gRPC server URL", value: qdrantURLBinding, kind: .endpoint, actionTitle: "Save and test") {
+                ValidatedPreferenceField(title: "gRPC server URL", value: qdrantURLBinding, kind: .endpoint, actionTitle: "Save and test", browserAddress: CollectionSnapshots.restBase(qdrantURL: settings.qdrantURL)?.absoluteString ?? "") {
                     Task { await testQdrantConnection() }
                 }
                 .disabled(appState.isProcessing)
