@@ -86,6 +86,12 @@ Browser jobs use `use_worker_qdrant=true` with `mode=chunk_and_embed` and `inges
 
 Payload fields match the app: `text`, `source`, `page` (int), `year` (int), `headings` (string array), and string metadata `chunk_index`, `content_type`, `section`, `doc_title`, `authors` (joined with `"; "`), `doi`, `document_id`, `url`, `language`, `ingested_at`, `content_hash` (SHA-256 of embedding text, `|`, and model). Metadata flags on the job default to on, same as the app.
 
+## Vector stores
+
+Qdrant remains the default, and a request that omits `vector_store` keeps the existing Qdrant behavior. `CHUNKY_VECTOR_STORE` or `--vector-store` selects the store used when browser ingest and search set `use_worker_qdrant=true`. Those requests still reject client URLs and keys. A direct API call names `vector_store`, `vector_store_url`, and an optional `vector_store_api_key`. Unknown names are rejected. Qdrant itself continues to use `CHUNKY_QDRANT_URL` and `CHUNKY_QDRANT_API_KEY`.
+
+A non-Qdrant write keeps `ingest.target=qdrant_cloud` (the worker upserted) and sets `ingest.store`. Paper summaries, section expansion, snapshots, quantization, and Qdrant payload indexes stay on the Qdrant path. See [vector stores](../docs/vector-stores.md).
+
 ## Verification
 
 After a successful job the worker writes `verification.json` beside the upload. The report has a green, yellow, or red status per page. Checks are text coverage (pypdfium2, or pypdf when that is not installed; not Docling), page attribution from `page` through `page_end`, a Qdrant store check, a re-embedded cosine sample, and a retrieval self-test. Chunk text stays in the job result or the PDF-hash chunk cache (`chunky_worker.chunk_cache`). The report stores scores and short previews only. The Qdrant API key is not written to the report or the log.

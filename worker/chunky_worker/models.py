@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator, model_serializer
 
 class JobMode(str, Enum):
     CHUNK_ONLY = "chunk_only"
@@ -84,6 +84,9 @@ class JobSettings(BaseModel):
     qdrant_url: str | None = None
 
     qdrant_api_key: str | None = Field(default=None, repr=False)
+    vector_store: str = ""
+    vector_store_url: str = ""
+    vector_store_api_key: str | None = Field(default=None, repr=False)
     qdrant_collection: str = "documents"
     qdrant_distance: str = "cosine"
     qdrant_hybrid: bool = False
@@ -120,8 +123,24 @@ class JobSettings(BaseModel):
     source_path: str = ""
     library_id: str = "default"
 
+    @field_validator("vector_store")
+    @classmethod
+    def known_vector_store(cls, value: str) -> str:
+        text = (value or "").strip().lower()
+        if not text:
+            return ""
+        from chunky_worker.vector_store import StoreError, require_store
+
+        try:
+            return require_store(text)
+        except StoreError as exc:
+            raise ValueError(str(exc)) from None
+
     def public_dict(self) -> dict[str, Any]:
-        return self.model_dump(mode="json", exclude={"qdrant_api_key"})
+        data = self.model_dump(mode="json", exclude={"qdrant_api_key", "vector_store_api_key", "vector_store_url"})
+        if not data.get("vector_store"):
+            data.pop("vector_store", None)
+        return data
 
 class ProgressEvent(BaseModel):
     type: str = "progress"
@@ -138,6 +157,14 @@ class IngestReceipt(BaseModel):
     upserted: int = 0
     vector_size: int | None = None
     distance: str | None = None
+    store: str | None = None
+
+    @model_serializer(mode="wrap")
+    def _serialize(self, handler: Any) -> dict[str, Any]:
+        data = handler(self)
+        if data.get("store") is None:
+            data.pop("store", None)
+        return data
 
 class JobResult(BaseModel):
     mode: JobMode

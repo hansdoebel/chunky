@@ -99,6 +99,15 @@ def require_token_when_exposed(settings: "Settings") -> None:
         "Loopback (127.0.0.1, localhost, ::1) may start without one."
     )
 
+def _vector_store_from_env() -> str:
+    from chunky_worker.vector_store import StoreError, configured_store
+
+    try:
+        return configured_store(os.environ.get("CHUNKY_VECTOR_STORE", ""))
+    except StoreError as exc:
+        raise ValueError(str(exc)) from exc
+
+
 def default_scripts_dir() -> Path:
     override = os.environ.get("CHUNKY_SCRIPTS_DIR")
     if override:
@@ -127,6 +136,9 @@ class Settings:
     embedding_url: str = ""
     qdrant_url: str = ""
     qdrant_api_key: str = field(default="", repr=False)
+    vector_store: str = "qdrant"
+    vector_store_url: str = ""
+    vector_store_api_key: str = field(default="", repr=False)
 
     token: str | None = None
 
@@ -149,5 +161,8 @@ class Settings:
             embedding_url=os.environ.get("CHUNKY_EMBEDDING_URL", "").strip(),
             qdrant_url=os.environ.get("CHUNKY_QDRANT_URL", "").strip(),
             qdrant_api_key=os.environ.get("CHUNKY_QDRANT_API_KEY", "").strip(),
+            vector_store=_vector_store_from_env(),
+            vector_store_url=os.environ.get("CHUNKY_VECTOR_STORE_URL", "").strip(),
+            vector_store_api_key=os.environ.get("CHUNKY_VECTOR_STORE_API_KEY", "").strip(),
             token=load_token(),
         )

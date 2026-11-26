@@ -33,6 +33,7 @@ from chunky_worker.models import (
 )
 from chunky_worker.pipeline import DocumentPipeline
 from chunky_worker.settings import Settings
+from chunky_worker.vector_store import endpoint_for_job, resolve_job_store, stored_vector_size, upsert_prepared
 from chunky_worker.verification import (
     ensure_chunk_ids,
     hash_file,
@@ -298,6 +299,8 @@ class JobStore:
             job = self._jobs.get(job_id)
             if job is not None and job.settings.qdrant_api_key:
                 job.settings.qdrant_api_key = None
+            if job is not None and job.settings.vector_store_api_key:
+                job.settings.vector_store_api_key = None
 
     def append_event(self, job_id: str, event: dict[str, Any]) -> None:
         with self._lock:
@@ -442,6 +445,16 @@ class JobRunner:
             hybrid=job_settings.qdrant_hybrid,
         )
 
+    def _reject_store_dimension_mismatch(self, job: Job, model: str, probed: int) -> None:
+        kind = resolve_job_store(job.settings, self.settings)
+        endpoint = endpoint_for_job(job.settings, self.settings, kind)
+        existing = stored_vector_size(kind, endpoint)
+        if existing is not None and existing != probed:
+            raise DimensionMismatch(
+                f"Collection {job.settings.qdrant_collection!r} has vector size {existing}, "
+                f"but {model} produces vectors of size {probed}. Refusing to upsert."
+            )
+
     def _apply_ingest(
         self,
         job_id: str,
@@ -485,24 +498,38 @@ class JobRunner:
         def on_batch(done: int, total: int) -> None:
             self._emit(job_id, f"Upserted {done}/{total}", 98)
 
-        upserted = self.ingestor.upsert_cloud(
-            url=job.settings.qdrant_url or "",
-            api_key=job.settings.qdrant_api_key or "",
-            collection=job.settings.qdrant_collection,
-            points=points,
-            vector_size=result.embedding_dim or len(points[0].vector),
-            distance=distance,
-            batch_size=job.settings.qdrant_batch_size,
-            hybrid=job.settings.qdrant_hybrid,
-            quantization=job.settings.qdrant_quantization,
-            on_disk=job.settings.qdrant_on_disk,
-            vector_memory=job.settings.qdrant_vector_memory,
-            hnsw_memory=job.settings.qdrant_hnsw_memory,
-            quantization_memory=job.settings.qdrant_quantization_memory,
-            payload_memory=job.settings.qdrant_payload_memory,
-            on_progress=on_batch,
-            **({"identity": self._identity(job.settings, result.embedding_dim or len(points[0].vector))} if job.settings.use_worker_qdrant else {}),
-        )
+        vector_size = result.embedding_dim or len(points[0].vector)
+        store_kind = resolve_job_store(job.settings, self.settings)
+        receipt_store = None
+        if store_kind == "qdrant":
+            upserted = self.ingestor.upsert_cloud(
+                url=job.settings.qdrant_url or "",
+                api_key=job.settings.qdrant_api_key or "",
+                collection=job.settings.qdrant_collection,
+                points=points,
+                vector_size=vector_size,
+                distance=distance,
+                batch_size=job.settings.qdrant_batch_size,
+                hybrid=job.settings.qdrant_hybrid,
+                quantization=job.settings.qdrant_quantization,
+                on_disk=job.settings.qdrant_on_disk,
+                vector_memory=job.settings.qdrant_vector_memory,
+                hnsw_memory=job.settings.qdrant_hnsw_memory,
+                quantization_memory=job.settings.qdrant_quantization_memory,
+                payload_memory=job.settings.qdrant_payload_memory,
+                on_progress=on_batch,
+                **({"identity": self._identity(job.settings, vector_size)} if job.settings.use_worker_qdrant else {}),
+            )
+        else:
+            upserted = upsert_prepared(
+                store_kind,
+                endpoint_for_job(job.settings, self.settings, store_kind),
+                points,
+                vector_size=vector_size,
+                batch_size=job.settings.qdrant_batch_size,
+                on_progress=on_batch,
+            )
+            receipt_store = store_kind
 
         result.embeddings = None
         result.ingest = IngestReceipt(
@@ -511,6 +538,7 @@ class JobRunner:
             upserted=upserted,
             vector_size=result.embedding_dim,
             distance=distance,
+            store=receipt_store,
         )
 
     def _run(self, job_id: str, input_path: Path) -> None:
@@ -521,7 +549,7 @@ class JobRunner:
         assert cancel_event is not None
         output_dir = self.settings.work_dir / job_id / "out"
         output_dir.mkdir(parents=True, exist_ok=True)
-        secret = job.settings.qdrant_api_key
+        secret = job.settings.qdrant_api_key or job.settings.vector_store_api_key
 
         try:
             if cancel_event.is_set():
@@ -610,7 +638,7 @@ class JobRunner:
                 kind = (job.settings.embedding_backend or self.settings.embedding_backend or "ollama").strip()
                 url = (job.settings.embedding_url or self.settings.embedding_url or self.settings.ollama_url).strip()
                 probed = self.dimensions.dimension(backend, model, cache_key=f"{kind}|{url}|{model}")
-                if job.settings.ingest_target == IngestTarget.QDRANT_CLOUD:
+                if job.settings.ingest_target == IngestTarget.QDRANT_CLOUD and resolve_job_store(job.settings, self.settings) == "qdrant":
                     if job.settings.use_worker_qdrant:
                         self.ingestor.validate_identity(
                             url=job.settings.qdrant_url or "",
@@ -628,6 +656,8 @@ class JobRunner:
                             f"Collection {job.settings.qdrant_collection!r} has vector size {existing}, "
                             f"but {model} produces vectors of size {probed}. Refusing to upsert."
                         )
+                elif job.settings.ingest_target == IngestTarget.QDRANT_CLOUD:
+                    self._reject_store_dimension_mismatch(job, model, probed)
                 self._emit(job_id, f"Embedding {len(chunks)} chunks with {model}", 94)
                 texts = [
                     chunk.get("embedding_text") or chunk.get("text") or ""
@@ -802,7 +832,7 @@ class JobRunner:
                 qdrant_url=job.settings.qdrant_url,
                 qdrant_api_key=secret,
                 collection=job.settings.qdrant_collection,
-                read_store=job.settings.ingest_target == IngestTarget.QDRANT_CLOUD,
+                read_store=job.settings.ingest_target == IngestTarget.QDRANT_CLOUD and resolve_job_store(job.settings, self.settings) == "qdrant",
                 embeddings=self.backend_for(job.settings),
             )
             write_report(path, report)

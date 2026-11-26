@@ -299,6 +299,7 @@ def test_qdrant_cloud_upserts_and_hides_key_and_vectors(tmp_settings, pipeline, 
     assert result["ingest"]["collection"] == "documents"
     assert result["ingest"]["vector_size"] == 3
     assert result["ingest"]["distance"] == "cosine"
+    assert "store" not in result["ingest"]
     assert len(ingestor.calls) == 1
     call = ingestor.calls[0]
     assert call["api_key"] == API_KEY

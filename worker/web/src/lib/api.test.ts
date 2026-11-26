@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { APIError, WorkerAPI, buildJobSettings, decodeEvents, type JobOptions, type WorkerConfig } from './api';
+import { APIError, WorkerAPI, buildJobSettings, buildSearchRequest, decodeEvents, outputStoreLabel, type JobOptions, type WorkerConfig } from './api';
 const config: WorkerConfig = { embedding_backend: 'ollama', embedding_model: 'embed', qdrant_available: true, qdrant_label: 'Worker Qdrant', vlm_models: ['standard'] };
 const options: JobOptions = { mode: 'chunks', backend: 'ollama', model: 'embed', endpoint: '', vlm: 'standard', accelerator: 'cpu', collection: 'docs', hybrid: false, chunkTokens: 512 };
 function stream(parts: Uint8Array[]) { return new ReadableStream<Uint8Array>({ start(controller) { parts.forEach((part) => controller.enqueue(part)); controller.close(); } }); }
@@ -16,6 +16,17 @@ describe('worker settings', () => {
     expect(settings).not.toHaveProperty('qdrant_url');
     expect(settings).not.toHaveProperty('qdrant_api_key');
     expect(() => buildJobSettings({ ...options, mode: 'ingest' }, { ...config, qdrant_available: false })).toThrow('configured worker');
+  });
+  it('names another worker vector store without sending credentials', () => {
+    const selected = { ...config, vector_store: 'pgvector', vector_store_label: 'Postgres pgvector' };
+    const settings = buildJobSettings({ ...options, mode: 'ingest' }, selected);
+    expect(settings).toMatchObject({ vector_store: 'pgvector', use_worker_qdrant: true, qdrant_collection: 'docs' });
+    expect(settings).not.toHaveProperty('vector_store_url');
+    expect(settings).not.toHaveProperty('qdrant_url');
+    expect(buildSearchRequest('papers', { query: 'hello', backend: 'ollama', model: 'embed', endpoint: '', mode: 'dense' }, selected)).toMatchObject({ vector_store: 'pgvector', use_worker_qdrant: true });
+    expect(buildSearchRequest('papers', { query: 'hello', backend: 'ollama', model: 'embed', endpoint: '', mode: 'dense' }, config)).not.toHaveProperty('vector_store');
+    expect(outputStoreLabel(selected)).toBe('Postgres pgvector');
+    expect(outputStoreLabel(config)).toBe('Worker Qdrant');
   });
   it('requires an explicit safe endpoint when changing embedding provider', () => {
     expect(() => buildJobSettings({ ...options, mode: 'vectors', backend: 'openai' }, config)).toThrow('endpoint');
