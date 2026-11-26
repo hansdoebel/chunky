@@ -93,6 +93,8 @@ struct KeychainService {
 extension KeychainService {
     static let qdrantAPIKeyKey = "qdrant_api_key"
     static let qdrantURLKey = "qdrant_url"
+    static let vectorStoreURLKey = "vector_store_url"
+    static let vectorStoreAPIKeyKey = "vector_store_api_key"
     static let ollamaAPIKeyKey = "ollama_api_key"
     static let ollamaURLKey = "ollama_url"
     static let workerTokenKey = "worker_token"

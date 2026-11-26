@@ -1,4 +1,5 @@
 import Foundation
+import ChunkyVectorStore
 
 nonisolated protocol ChunkySearchProviding: Sendable {
     func listCollections() async throws -> [String]
@@ -98,6 +99,9 @@ nonisolated struct RetrievalServiceSearch: ChunkySearchProviding {
     var retrieval: any ChunkyRetrievalCalling
 
     func listCollections() async throws -> [String] {
+        if settings.activeVectorStore == .pgvector && settings.processingHost != .devbox {
+            return try await PgVectorBridge.store(url: settings.vectorStoreURL, distance: "cosine").listCollections()
+        }
         let route = RetrievalRequest.make(
             text: "collections",
             collection: settings.defaultCollection,

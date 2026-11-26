@@ -10,6 +10,7 @@
 		3A062E3F2F2C0E87003CDEAF /* Chunky.icon in Resources */ = {isa = PBXBuildFile; fileRef = 3A062E3E2F2C0E87003CDEAF /* Chunky.icon */; };
 		3A53CED72F2F77B300CAD968 /* QdrantCore in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CED62F2F77B300CAD968 /* QdrantCore */; };
 		3A53CED92F2F77B300CAD968 /* QdrantGRPC in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CED82F2F77B300CAD968 /* QdrantGRPC */; };
+		3A53CEE22F2F77B300CAD968 /* ChunkyVectorStore in Frameworks */ = {isa = PBXBuildFile; productRef = 3A53CEE12F2F77B300CAD968 /* ChunkyVectorStore */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -67,6 +68,7 @@
 			files = (
 				3A53CED92F2F77B300CAD968 /* QdrantGRPC in Frameworks */,
 				3A53CED72F2F77B300CAD968 /* QdrantCore in Frameworks */,
+				3A53CEE22F2F77B300CAD968 /* ChunkyVectorStore in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -152,6 +154,7 @@
 			packageProductDependencies = (
 				3A53CED62F2F77B300CAD968 /* QdrantCore */,
 				3A53CED82F2F77B300CAD968 /* QdrantGRPC */,
+				3A53CEE12F2F77B300CAD968 /* ChunkyVectorStore */,
 			);
 			productName = Chunky;
 			productReference = 3A062E122F2C0D27003CDEAF /* Chunky.app */;
@@ -237,6 +240,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				3A53CED52F2F77B300CAD968 /* XCLocalSwiftPackageReference "LocalPackages/qdrant-swift" */,
+				3A53CEE02F2F77B300CAD968 /* XCLocalSwiftPackageReference "LocalPackages/ChunkyVectorStore" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = 3A062E132F2C0D27003CDEAF /* Products */;
@@ -629,6 +633,10 @@
 			isa = XCLocalSwiftPackageReference;
 			relativePath = "LocalPackages/qdrant-swift";
 		};
+		3A53CEE02F2F77B300CAD968 /* XCLocalSwiftPackageReference "LocalPackages/ChunkyVectorStore" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = "LocalPackages/ChunkyVectorStore";
+		};
 /* End XCLocalSwiftPackageReference section */
 
 /* Begin XCSwiftPackageProductDependency section */
@@ -639,6 +647,11 @@
 		3A53CED82F2F77B300CAD968 /* QdrantGRPC */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = QdrantGRPC;
+		};
+		3A53CEE12F2F77B300CAD968 /* ChunkyVectorStore */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = 3A53CEE02F2F77B300CAD968 /* XCLocalSwiftPackageReference "LocalPackages/ChunkyVectorStore" */;
+			productName = ChunkyVectorStore;
 		};
 
 /* End XCSwiftPackageProductDependency section */

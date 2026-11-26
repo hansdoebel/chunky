@@ -2,6 +2,7 @@ import AppKit
 import Combine
 import SwiftUI
 import UniformTypeIdentifiers
+import ChunkyVectorStore
 
 extension String {
     fileprivate var expandingTildeInPath: String {
@@ -908,6 +909,34 @@ private struct PreferencesContent: View {
 
     private var qdrantTab: some View {
         Form {
+            Section {
+                Picker("Vector store", selection: $appState.settings.vectorStoreKind) {
+                    ForEach(VectorStoreKind.allCases, id: \.rawValue) { kind in
+                        Text(kind.displayName).tag(kind.rawValue)
+                    }
+                }
+                .disabled(appState.isProcessing)
+                if settings.activeVectorStore == .qdrant {
+                    Text("Qdrant stays the connection below. Its URL and API key are unchanged.")
+                        .font(.body).foregroundStyle(.secondary)
+                } else if settings.activeVectorStore.usesPostgresURL {
+                    ValidatedPreferenceField(title: "Postgres URL", value: vectorStoreURLBinding, kind: .secret, actionTitle: "Save")
+                    Text("Use a postgresql:// URL. The password stays in that URL in the Keychain. Example: postgresql://chunky:chunky@127.0.0.1:5432/chunks")
+                        .font(.body).foregroundStyle(.secondary)
+                    Text("Snapshots, the local Qdrant runtime, papers-first search, section expansion, tenant moves, and quantization stay on Qdrant.")
+                        .font(.body).foregroundStyle(.secondary)
+                } else {
+                    ValidatedPreferenceField(title: "Server URL", value: vectorStoreURLBinding, kind: .endpoint, actionTitle: "Save")
+                    ValidatedPreferenceField(title: "API key", value: vectorStoreKeyBinding, kind: .secret, allowEmpty: true)
+                    Text("\(settings.activeVectorStore.displayName) is reached through the worker. Set Processing host to Devbox. Credentials stay in the Keychain.")
+                        .font(.body).foregroundStyle(.secondary)
+                    Text("Snapshots, the local Qdrant runtime, papers-first search, section expansion, tenant moves, and quantization stay on Qdrant.")
+                        .font(.body).foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Vector store")
+            }
+            if settings.activeVectorStore == .qdrant {
             Section { LocalQdrantPane(automaticallyRefresh: automaticallyCheckConnections) }
             if let dashboard = cloudDashboardURL {
                 Section {
@@ -1021,6 +1050,7 @@ private struct PreferencesContent: View {
                     Text("Upload")
                 }
             }
+            }
         }
         .formStyle(.grouped)
         .padding()
@@ -1045,6 +1075,20 @@ private struct PreferencesContent: View {
             settings.qdrantURL = value
             appState.qdrantService = nil
             invalidateQdrantCheck()
+        })
+    }
+
+    private var vectorStoreURLBinding: Binding<String> {
+        Binding(get: { settings.vectorStoreURL }, set: { value in
+            guard value != settings.vectorStoreURL else { return }
+            settings.vectorStoreURL = value
+        })
+    }
+
+    private var vectorStoreKeyBinding: Binding<String> {
+        Binding(get: { settings.vectorStoreAPIKey }, set: { value in
+            guard value != settings.vectorStoreAPIKey else { return }
+            settings.vectorStoreAPIKey = value
         })
     }
 

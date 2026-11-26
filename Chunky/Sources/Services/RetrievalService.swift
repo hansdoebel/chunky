@@ -1,5 +1,6 @@
 import Foundation
 import QdrantCore
+import ChunkyVectorStore
 
 enum CollectionBrowse {
     static let pointLimit = 1000
@@ -28,11 +29,15 @@ enum RetrievalMode: String, CaseIterable, Identifiable, Sendable {
 enum RetrievalRoute: String, Sendable, Equatable {
     case localQdrant
     case worker
+    case pgvector
+    case unavailable
 
     var displayName: String {
         switch self {
         case .localQdrant: return "Local Qdrant"
         case .worker: return "Worker /v1/search"
+        case .pgvector: return "Postgres pgvector"
+        case .unavailable: return "Worker required"
         }
     }
 }
@@ -464,6 +469,10 @@ struct RetrievalRequest: Equatable, Sendable {
     var librarySearch: LibrarySearch = .active
     var rrfWeights: [Double]?
     var rerank: RerankConfig?
+    var vectorStore: String = VectorStoreKind.qdrant.rawValue
+    var vectorStoreURL: String = ""
+    var vectorStoreAPIKey: String = ""
+    var vectorStoreDistance: String = "cosine"
 
     static func make(
         text: String,
@@ -491,7 +500,17 @@ struct RetrievalRequest: Equatable, Sendable {
             ? settings.embeddingAPIURL
             : settings.ollamaURL
         let usesWorker = settings.usesWorkerCloud
-        let route: RetrievalRoute = usesWorker ? .worker : .localQdrant
+        let route: RetrievalRoute
+        switch StoreRouting.route(kind: settings.activeVectorStore, devbox: settings.processingHost == .devbox) {
+        case .qdrant:
+            route = usesWorker ? .worker : .localQdrant
+        case .pgvector:
+            route = .pgvector
+        case .worker:
+            route = .worker
+        case .needsWorker:
+            route = .unavailable
+        }
         let qdrantURL = usesWorker ? settings.qdrantCloudURL : settings.qdrantURL
         let qdrantAPIKey = settings.qdrantAPIKey
         return RetrievalRequest(
@@ -517,7 +536,11 @@ struct RetrievalRequest: Equatable, Sendable {
             libraryIDs: libraryIDs,
             librarySearch: librarySearch,
             rrfWeights: rrfWeights,
-            rerank: rerank
+            rerank: rerank,
+            vectorStore: settings.activeVectorStore.rawValue,
+            vectorStoreURL: settings.vectorStoreURL,
+            vectorStoreAPIKey: settings.vectorStoreAPIKey,
+            vectorStoreDistance: PgVectorBridge.distance(settings.qdrantDistanceMetric)
         )
     }
 
@@ -560,6 +583,10 @@ struct RetrievalRequest: Equatable, Sendable {
         }
         if route == .worker && !qdrantAPIKey.isEmpty {
             body["qdrant_api_key"] = qdrantAPIKey
+        }
+        let kind = VectorStoreKind.resolved(stored: vectorStore)
+        for (key, value) in WorkerStoreRequest.fields(kind: kind, url: vectorStoreURL, apiKey: vectorStoreAPIKey) {
+            body[key] = value
         }
         return body
     }
@@ -749,6 +776,7 @@ enum RetrievalError: LocalizedError, Equatable {
     case worker(status: Int, detail: String)
     case unreadableResponse
     case rerankFailed(String)
+    case unsupported(String)
 
     var errorDescription: String? {
         switch self {
@@ -773,6 +801,8 @@ enum RetrievalError: LocalizedError, Equatable {
         case .unreadableResponse:
             return "Search response was not a JSON object."
         case .rerankFailed(let detail):
+            return detail
+        case .unsupported(let detail):
             return detail
         }
     }
@@ -1167,6 +1197,11 @@ struct RetrievalService {
 
         let page: RetrievalPage
         switch request.route {
+        case .unavailable:
+            let name = VectorStoreKind.resolved(stored: request.vectorStore).displayName
+            throw RetrievalError.unsupported("\(name) search from this Mac goes through the worker. Set Processing host to Devbox and save a worker URL.")
+        case .pgvector:
+            page = try await searchPgVector(request)
         case .localQdrant:
             guard let index else { throw RetrievalError.notConnected }
             if request.papersFirst && request.expandPapers {
@@ -1318,6 +1353,51 @@ struct RetrievalService {
             embeddingDim: vector.count,
             collection: request.collection,
             route: .localQdrant
+        )
+    }
+
+    private func searchPgVector(_ request: RetrievalRequest) async throws -> RetrievalPage {
+        if request.papersFirst || request.expandPapers || request.expandSection {
+            throw RetrievalError.unsupported("Papers-first search and section expansion stay on Qdrant.")
+        }
+        guard !request.vectorStoreURL.isEmpty else {
+            throw RetrievalError.unsupported("Set the Postgres URL in Preferences.")
+        }
+        let capabilities = StoreCapabilities.of(.pgvector)
+        if request.mode == .hybrid && !capabilities.hybrid {
+            throw RetrievalError.unsupported("This store supports dense search.")
+        }
+        let vector = try await embedding.embed(
+            text: request.text,
+            backend: request.embeddingBackend,
+            model: request.embeddingModel,
+            ollamaURL: request.embeddingURL,
+            apiURL: request.embeddingURL
+        )
+        let store = try PgVectorBridge.store(url: request.vectorStoreURL, distance: request.vectorStoreDistance)
+        let hits = try await store.search(
+            collection: request.collection,
+            vector: vector.map(Double.init),
+            text: request.text,
+            mode: request.mode.rawValue,
+            limit: request.limit,
+            offset: request.offset,
+            filters: request.scopedFilters().map(PgVectorBridge.filter),
+            scoreThreshold: nil,
+            weights: request.rrfWeights
+        )
+        let mapped = hits.map(PgVectorBridge.hit)
+        let next = mapped.count == request.limit ? request.offset + request.limit : nil
+        return RetrievalPage(
+            hits: mapped,
+            limit: request.limit,
+            offset: request.offset,
+            nextOffset: next,
+            embeddingModel: request.embeddingModel,
+            embeddingBackend: request.embeddingBackend,
+            embeddingDim: vector.count,
+            collection: request.collection,
+            route: .pgvector
         )
     }
 

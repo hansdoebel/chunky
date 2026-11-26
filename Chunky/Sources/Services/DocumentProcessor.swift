@@ -2,6 +2,7 @@ import SwiftUI
 import Combine
 import CryptoKit
 import QdrantCore
+import ChunkyVectorStore
 
 class DocumentProcessor: ObservableObject {
     @Published var isProcessing: Bool = false
@@ -540,6 +541,29 @@ class DocumentProcessor: ObservableObject {
 
                 finishChunkOnly(job: job, settings: settings, started: jobStart, message: "Exported \(chunks.count) chunks to \(exportDir.lastPathComponent)")
                 return
+            }
+
+            switch StoreRouting.route(kind: settings.activeVectorStore, devbox: false) {
+            case .needsWorker(let kind):
+                throw QdrantError.operationFailed("\(kind.displayName) writes from this Mac go through the worker. Set Processing host to Devbox.")
+            case .pgvector:
+                try await processPgVector(
+                    job: job,
+                    chunks: chunks,
+                    settings: settings,
+                    ingestedAt: ISO8601DateFormatter().string(from: Date()),
+                    libraryID: libraryID
+                )
+                try? FileManager.default.removeItem(at: tempDir)
+                job.totalTime = CFAbsoluteTimeGetCurrent() - jobStart
+                job.statusMessage = "\(chunks.count) chunks"
+                job.metrics = JobMetrics.record(job: job, settings: settings, host: settings.processingHost.rawValue)
+                job.retainedChunks = chunks
+                await refreshVerification(job: job, settings: settings, chunks: chunks)
+                job.status = .completed
+                return
+            case .qdrant, .worker:
+                break
             }
 
             try FastEmbedCollectionIdentity.validate(collection: targetCollection(job: job, settings: settings), backend: settings.embeddingBackend, model: settings.embeddingModel, defaults: settings.defaults)
@@ -1181,6 +1205,48 @@ class DocumentProcessor: ObservableObject {
     }
 
     @MainActor
+    private func processPgVector(
+        job: ProcessingJob,
+        chunks: [ChunkingService.DocumentChunk],
+        settings: AppSettings,
+        ingestedAt: String,
+        libraryID: String
+    ) async throws {
+        guard !settings.vectorStoreURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            throw QdrantError.operationFailed("Set the Postgres URL in Preferences.")
+        }
+        let store = try PgVectorBridge.store(url: settings.vectorStoreURL, distance: PgVectorBridge.distance(settings.qdrantDistanceMetric))
+        let collection = targetCollection(job: job, settings: settings)
+        let library = LibraryFilter.assignedID(libraryID)
+        try await store.deleteSource(collection: collection, source: job.fileName, libraryID: library)
+        let ollama = LocalEmbeddingService(backend: settings.embeddingBackend, ollamaURL: settings.ollamaURL, apiURL: settings.embeddingAPIURL)
+        let batchSize = max(settings.embeddingBatchSize, 1)
+        var points: [ChunkPoint] = []
+        var index = 0
+        while index < chunks.count {
+            let end = min(index + batchSize, chunks.count)
+            let batch = Array(chunks[index..<end])
+            let embeddings = try await ollama.embedBatch(texts: batch.map { $0.embeddingText ?? $0.text }, model: settings.embeddingModel)
+            points.append(contentsOf: buildPoints(
+                chunks: batch,
+                embeddings: embeddings,
+                sparseVectors: sparseVectors(for: batch, hybrid: false),
+                settings: settings,
+                ingestedAt: ingestedAt,
+                sourcePath: job.sourceURL.path,
+                libraryID: libraryID
+            ))
+            index = end
+            job.progress = Double(index) / Double(max(chunks.count, 1))
+            job.statusMessage = "Embedding & uploading \(index)/\(chunks.count)..."
+        }
+        points = try await appendSummary(points: points, chunks: chunks, settings: settings, hybrid: false, ingestedAt: ingestedAt, sourcePath: job.sourceURL.path, libraryID: libraryID)
+        let records = points.map(PgVectorBridge.record)
+        let width = records.first?.vector.count ?? settings.embeddingDimensions
+        job.embeddedCount = try await store.upsert(collection: collection, points: records, vectorSize: width, batchSize: max(settings.qdrantBatchSize, 1))
+    }
+
+    @MainActor
     private func processStreaming(
         job: ProcessingJob,
         chunks: [ChunkingService.DocumentChunk],
@@ -1342,10 +1408,14 @@ class DocumentProcessor: ObservableObject {
         devboxService = DevboxWorkerService()
         let createOptions = CollectionPlanStore.options(collection: targetCollection(job: job, settings: settings), settings: settings)
         if mode == .full && createOptions.target == .qdrantCloud {
-            if settings.qdrantCloudURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.qdrantAPIKey.isEmpty {
+            let missingQdrant = settings.activeVectorStore == .qdrant && (settings.qdrantCloudURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty || settings.qdrantAPIKey.isEmpty)
+            let missingStore = settings.activeVectorStore != .qdrant && settings.vectorStoreURL.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            if missingQdrant || missingStore {
                 captureFailure(job: job, settings: settings, started: started)
                 job.status = .failed
-                job.statusMessage = "Set the Qdrant Cloud URL and API key before ingesting \(targetCollection(job: job, settings: settings))."
+                job.statusMessage = settings.activeVectorStore == .qdrant
+                    ? "Set the Qdrant Cloud URL and API key before ingesting \(targetCollection(job: job, settings: settings))."
+                    : "Set the \(settings.activeVectorStore.displayName) URL before ingesting \(targetCollection(job: job, settings: settings))."
                 return
             }
         }

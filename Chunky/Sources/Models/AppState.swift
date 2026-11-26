@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import ChunkyVectorStore
 
 class AppState: ObservableObject {
     @Published var jobs: [ProcessingJob] = []
@@ -396,10 +397,16 @@ class AppState: ObservableObject {
         guard !ids.isEmpty else { return }
 
         do {
+            let collectionName = collection ?? settings.defaultCollection
+            if settings.activeVectorStore == .pgvector && settings.processingHost != .devbox {
+                let store = try PgVectorBridge.store(url: settings.vectorStoreURL, distance: PgVectorBridge.distance(settings.qdrantDistanceMetric))
+                try await store.deletePoints(collection: collectionName, ids: ids)
+                await loadBrowserPoints()
+                return
+            }
             try await ensureQdrantConnection()
 
             guard let service = qdrantService else { return }
-            let collectionName = collection ?? settings.defaultCollection
 
             try await service.deletePoints(collectionName: collectionName, ids: ids)
 
@@ -413,6 +420,17 @@ class AppState: ObservableObject {
     @MainActor
     func fetchCollections() async {
 
+        if settings.activeVectorStore == .pgvector && settings.processingHost != .devbox {
+            do {
+                let names = try await PgVectorBridge.store(url: settings.vectorStoreURL, distance: "cosine").listCollections()
+                let collections = CollectionPlanStore.mergedNames(server: names)
+                availableCollections = collections.isEmpty ? ["documents"] : collections
+                qdrantConnectionError = nil
+            } catch {
+                qdrantConnectionError = error.localizedDescription
+            }
+            return
+        }
         guard !settings.qdrantURL.isEmpty else {
             let base = availableCollections.isEmpty ? ["documents"] : availableCollections
             let pending = CollectionPlanStore.mergedNames(server: base)
