@@ -37,7 +37,7 @@ Sources: [Soba Labs, 17 November 2026](https://sobalabs.ai/blog/most-used-vector
 
 ## Worker contract
 
-Qdrant, pgvector, and Weaviate are the registered stores. Milvus and Chroma register on this same contract.
+Qdrant, pgvector, Weaviate, and Milvus are the registered stores. Chroma registers on this same contract.
 
 `chunky_worker.vector_store` is the seam. A store describes a collection, upserts points (`id`, dense vector, payload), runs a dense query, lists collections, and scrolls a page of payloads. Hybrid query is optional. Filters use the same shape as `POST /v1/search`: match, text, any, empty, range, negate, and should. Qdrant implements the contract by delegating to the existing ingestor and searcher. The production Qdrant job and search path still calls those clients directly, so quantization, on-disk tiers, BM25 indexes, collection identity, papers-first, and section expansion are unchanged.
 
@@ -63,6 +63,10 @@ These stay on Qdrant until a store grows an equivalent that the app can trust:
 - Papers-first search, document summaries as a query mode, and section expansion.
 - Element-type alias expansion and the tenant payload index.
 - Verification's stored-point read and retrieval self-test.
+
+## Milvus
+
+`CHUNKY_VECTOR_STORE=milvus` and an HTTP(S) URL. The API key is a bearer token. Create uses the v2 quick collection API (`id` varchar, `vector` float vector) and records `chunky:<width>:<COSINE|L2|IP>` on the collection. Upsert sends the JSON payload in `body` plus the scalar filter fields. Dense search posts `/v2/vectordb/entities/search`. Cosine and inner-product results use Milvus's similarity value. L2 results are turned into `1 / (1 + distance)`. Hybrid search is refused. A collection without the Chunky description or vector width is refused.
 
 ## Weaviate
 
