@@ -90,7 +90,7 @@ Payload fields match the app: `text`, `source`, `page` (int), `year` (int), `hea
 
 Qdrant remains the default, and a request that omits `vector_store` keeps the existing Qdrant behavior. `CHUNKY_VECTOR_STORE` or `--vector-store` selects the store used when browser ingest and search set `use_worker_qdrant=true`. Those requests still reject client URLs and keys. A direct API call names `vector_store`, `vector_store_url`, and an optional `vector_store_api_key`. Unknown names are rejected. Qdrant itself continues to use `CHUNKY_QDRANT_URL` and `CHUNKY_QDRANT_API_KEY`.
 
-Registered stores are `qdrant` and `pgvector`. A pgvector URL is `postgresql://` and the worker needs `psycopg[binary]` installed. A non-Qdrant write keeps `ingest.target=qdrant_cloud` (the worker upserted) and sets `ingest.store`. Paper summaries, section expansion, snapshots, quantization, and Qdrant payload indexes stay on the Qdrant path. See [vector stores](../docs/vector-stores.md).
+Registered stores are `qdrant`, `pgvector`, and `weaviate`. A pgvector URL is `postgresql://` and the worker needs `psycopg[binary]` installed. A non-Qdrant write keeps `ingest.target=qdrant_cloud` (the worker upserted) and sets `ingest.store`. Paper summaries, section expansion, snapshots, quantization, and Qdrant payload indexes stay on the Qdrant path. See [vector stores](../docs/vector-stores.md).
 
 ## Verification
 

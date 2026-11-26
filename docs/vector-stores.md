@@ -37,7 +37,7 @@ Sources: [Soba Labs, 17 November 2026](https://sobalabs.ai/blog/most-used-vector
 
 ## Worker contract
 
-Qdrant and pgvector are the registered stores. Milvus, Chroma, and Weaviate register on this same contract.
+Qdrant, pgvector, and Weaviate are the registered stores. Milvus and Chroma register on this same contract.
 
 `chunky_worker.vector_store` is the seam. A store describes a collection, upserts points (`id`, dense vector, payload), runs a dense query, lists collections, and scrolls a page of payloads. Hybrid query is optional. Filters use the same shape as `POST /v1/search`: match, text, any, empty, range, negate, and should. Qdrant implements the contract by delegating to the existing ingestor and searcher. The production Qdrant job and search path still calls those clients directly, so quantization, on-disk tiers, BM25 indexes, collection identity, papers-first, and section expansion are unchanged.
 
@@ -63,6 +63,10 @@ These stay on Qdrant until a store grows an equivalent that the app can trust:
 - Papers-first search, document summaries as a query mode, and section expansion.
 - Element-type alias expansion and the tenant payload index.
 - Verification's stored-point read and retrieval self-test.
+
+## Weaviate
+
+`CHUNKY_VECTOR_STORE=weaviate` and an HTTP(S) `CHUNKY_VECTOR_STORE_URL`. The API key is sent as a bearer token. A collection named `documents` is the class `Documents`, created with `vectorizer: none` and a description `chunky:<width>:<distance>`. The full payload is stored as JSON in `body`, and the filterable scalars are first-class properties. Dense query uses `nearVector`. Hybrid query uses Weaviate's hybrid operator; the dense weight is `alpha` when `rrf_weights` is set. A class that Chunky did not create is refused.
 
 ## pgvector
 

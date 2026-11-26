@@ -805,8 +805,10 @@ register_vector_store("qdrant", _open_qdrant)
 
 def _load_adapters() -> None:
     from chunky_worker import pgvector_store as _pgvector_store
+    from chunky_worker import weaviate_store as _weaviate_store
 
     register_vector_store("pgvector", _pgvector_store.open_pgvector)
+    register_vector_store("weaviate", _weaviate_store.open_weaviate)
 
 
 _load_adapters()
