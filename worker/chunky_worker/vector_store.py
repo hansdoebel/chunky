@@ -804,6 +804,7 @@ register_vector_store("qdrant", _open_qdrant)
 
 
 def _load_adapters() -> None:
+    from chunky_worker import chroma_store as _chroma_store
     from chunky_worker import milvus_store as _milvus_store
     from chunky_worker import pgvector_store as _pgvector_store
     from chunky_worker import weaviate_store as _weaviate_store
@@ -811,6 +812,7 @@ def _load_adapters() -> None:
     register_vector_store("pgvector", _pgvector_store.open_pgvector)
     register_vector_store("weaviate", _weaviate_store.open_weaviate)
     register_vector_store("milvus", _milvus_store.open_milvus)
+    register_vector_store("chroma", _chroma_store.open_chroma)
 
 
 _load_adapters()
