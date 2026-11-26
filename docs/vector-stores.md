@@ -37,7 +37,7 @@ Sources: [Soba Labs, 17 November 2026](https://sobalabs.ai/blog/most-used-vector
 
 ## Worker contract
 
-Qdrant, pgvector, Weaviate, and Milvus are the registered stores. Chroma registers on this same contract.
+Qdrant, pgvector, Weaviate, Milvus, and Chroma are the registered stores.
 
 `chunky_worker.vector_store` is the seam. A store describes a collection, upserts points (`id`, dense vector, payload), runs a dense query, lists collections, and scrolls a page of payloads. Hybrid query is optional. Filters use the same shape as `POST /v1/search`: match, text, any, empty, range, negate, and should. Qdrant implements the contract by delegating to the existing ingestor and searcher. The production Qdrant job and search path still calls those clients directly, so quantization, on-disk tiers, BM25 indexes, collection identity, papers-first, and section expansion are unchanged.
 
@@ -63,6 +63,10 @@ These stay on Qdrant until a store grows an equivalent that the app can trust:
 - Papers-first search, document summaries as a query mode, and section expansion.
 - Element-type alias expansion and the tenant payload index.
 - Verification's stored-point read and retrieval self-test.
+
+## Chroma
+
+`CHUNKY_VECTOR_STORE=chroma` and an HTTP(S) URL. The API key is sent as `X-Chroma-Token` and as a bearer token. Collections live in the default tenant and database. Metadata records the width and `cosine`, `l2`, or `ip` distance. The payload is a JSON string in metadata, with scalar fields copied beside it so `where` filters work. Dense query uses the v2 query route. Cosine score is `1 - distance`, L2 is `1 / (1 + distance)`, and inner product uses the negated distance. Hybrid search is refused. A collection without that metadata is refused.
 
 ## Milvus
 
