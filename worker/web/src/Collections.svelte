@@ -155,7 +155,7 @@
 </script>
 
 {#if !config.qdrant_read_available}
-  <Card.Root class="card collection-unavailable"><h2>Connect a Qdrant target</h2><p>Collection browsing is unavailable until a safe Qdrant URL is configured on the worker. Its credentials stay on the server.</p></Card.Root>
+  <Card.Root class="card collection-unavailable"><h2>{config.vector_store && config.vector_store !== 'qdrant' ? `Connect a ${config.vector_store_label ?? config.vector_store} target` : 'Connect a Qdrant target'}</h2><p>{config.vector_store && config.vector_store !== 'qdrant' ? 'Collection browsing is unavailable until a safe vector store URL is configured on the worker. Its credentials stay on the server.' : 'Collection browsing is unavailable until a safe Qdrant URL is configured on the worker. Its credentials stay on the server.'}</p></Card.Root>
 {:else}
   <div class="collection-layout">
     <aside class="card collection-picker">

@@ -18,6 +18,8 @@ export type WorkerConfig = {
   qdrant_available: boolean;
   qdrant_read_available?: boolean;
   qdrant_label: string;
+  vector_store?: string;
+  vector_store_label?: string;
   vlm_models: string[];
 };
 export type JobPage = { jobs: Job[]; total: number; limit: number; offset: number };
@@ -60,6 +62,11 @@ export type SearchPage = {
   embedding_dim: number;
 };
 
+export function outputStoreLabel(config: WorkerConfig): string {
+  if (config.vector_store && config.vector_store !== 'qdrant') return config.vector_store_label || config.vector_store;
+  return config.qdrant_label;
+}
+
 function validateEmbeddingEndpoint(endpoint: string) {
   let url: URL;
   try { url = new URL(endpoint.trim()); } catch { throw new Error('Enter a valid HTTP(S) embedding endpoint.'); }
@@ -83,6 +90,7 @@ export function buildSearchRequest(collection: string, options: SearchOptions, c
     ...(options.endpoint.trim() ? { embedding_url: options.endpoint.trim() } : {}),
     ...(filters.length ? { filters } : {}),
     ...(papers ? { papers_first: true, expand_documents: options.resultKind === 'papers-with-passages' } : {}),
+    ...(config.vector_store && config.vector_store !== 'qdrant' ? { vector_store: config.vector_store } : {}),
     limit: 10, offset,
   };
 }
@@ -140,6 +148,7 @@ export function buildJobSettings(options: JobOptions, config: WorkerConfig): Rec
     body.use_worker_qdrant = true;
     body.qdrant_collection = options.collection.trim();
     body.qdrant_hybrid = options.hybrid;
+    if (config.vector_store && config.vector_store !== 'qdrant') body.vector_store = config.vector_store;
   }
   return body;
 }

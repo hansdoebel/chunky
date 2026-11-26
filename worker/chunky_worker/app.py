@@ -228,14 +228,19 @@ def create_app(
             return JSONResponse(status_code=exc.status_code, content=content)
         if request.use_worker_qdrant:
             _reject_secret(payload, settings.qdrant_api_key)
+            _reject_secret(payload, settings.vector_store_api_key)
         return JSONResponse(status_code=200, content=payload)
 
     @api.get("/v1/collections")
     def collections() -> JSONResponse:
         try:
-            url, key = worker_read_target(settings)
-            payload = searcher.list_collections(url=url, api_key=key)
-            _reject_secret(payload, key)
+            if _active_store(settings) != "qdrant":
+                payload = _store_collection_list(settings)
+            else:
+                url, key = worker_read_target(settings)
+                payload = searcher.list_collections(url=url, api_key=key)
+                _reject_secret(payload, key)
+            _reject_secret(payload, settings.vector_store_api_key)
             return JSONResponse(content=payload)
         except SearchError as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": str(exc), "error_type": exc.error_type})
@@ -246,21 +251,40 @@ def create_app(
             if not 1 <= limit <= 100:
                 raise SearchError("limit must be 1–100", status_code=422, error_type="invalid_limit")
             cursor = parse_scroll_offset(offset)
-            url, key = worker_read_target(settings)
-            payload = searcher.scroll_points(url=url, api_key=key, collection=collection, limit=limit, offset=cursor)
-            _reject_secret(payload, key)
+            if _active_store(settings) != "qdrant":
+                if isinstance(cursor, str):
+                    raise SearchError("offset must be a nonnegative integer", status_code=422, error_type="invalid_offset")
+                payload = _store_collection_page(settings, collection, limit, 0 if cursor is None else cursor)
+            else:
+                url, key = worker_read_target(settings)
+                payload = searcher.scroll_points(url=url, api_key=key, collection=collection, limit=limit, offset=cursor)
+                _reject_secret(payload, key)
+            _reject_secret(payload, settings.vector_store_api_key)
             return JSONResponse(content=payload)
         except SearchError as exc:
             return JSONResponse(status_code=exc.status_code, content={"detail": str(exc), "error_type": exc.error_type})
 
     @api.get("/v1/ui/config")
     def ui_config() -> dict:
+        kind = _active_store(settings)
+        if kind == "qdrant":
+            writable = _worker_qdrant_available(settings)
+            readable = _worker_qdrant_read_available(settings)
+            label = "Worker Qdrant"
+        else:
+            from chunky_worker.vector_store import store_label, store_url_configured
+
+            writable = store_url_configured(kind, settings.vector_store_url)
+            readable = writable
+            label = store_label(kind)
         return {
             "embedding_backend": settings.embedding_backend,
             "embedding_model": settings.embedding_model,
-            "qdrant_available": _worker_qdrant_available(settings),
-            "qdrant_read_available": _worker_qdrant_read_available(settings),
-            "qdrant_label": "Worker Qdrant",
+            "qdrant_available": writable,
+            "qdrant_read_available": readable,
+            "qdrant_label": label,
+            "vector_store": kind,
+            "vector_store_label": label,
             "vlm_models": ["standard", *TRANSFORMERS_VLM_MODELS],
         }
 
@@ -293,14 +317,31 @@ def create_app(
             raise HTTPException(status_code=400, detail=f"Invalid settings: {exc}") from exc
 
         if job_settings.use_worker_qdrant:
-            if job_settings.mode != JobMode.CHUNK_AND_EMBED or job_settings.ingest_target != IngestTarget.QDRANT_CLOUD:
-                raise HTTPException(status_code=400, detail="Worker Qdrant requires full processing and qdrant_cloud ingestion")
-            if job_settings.qdrant_url or job_settings.qdrant_api_key:
-                raise HTTPException(status_code=400, detail="Worker Qdrant does not accept client credentials or URLs")
-            if not _worker_qdrant_available(settings):
-                raise HTTPException(status_code=400, detail="Worker Qdrant is not configured with a safe URL and API key")
-            job_settings.qdrant_url = settings.qdrant_url
-            job_settings.qdrant_api_key = settings.qdrant_api_key
+            server_kind = _active_store(settings)
+            client_kind = (job_settings.vector_store or "").strip()
+            if client_kind and client_kind != server_kind:
+                raise HTTPException(status_code=400, detail="Worker vector store does not accept a client store override")
+            if server_kind != "qdrant":
+                from chunky_worker.vector_store import store_url_configured
+
+                if job_settings.mode != JobMode.CHUNK_AND_EMBED or job_settings.ingest_target != IngestTarget.QDRANT_CLOUD:
+                    raise HTTPException(status_code=400, detail="Worker vector store requires full processing and qdrant_cloud ingestion")
+                if job_settings.qdrant_url or job_settings.qdrant_api_key or job_settings.vector_store_url or job_settings.vector_store_api_key:
+                    raise HTTPException(status_code=400, detail="Worker vector store does not accept client credentials or URLs")
+                if not store_url_configured(server_kind, settings.vector_store_url):
+                    raise HTTPException(status_code=400, detail="Worker vector store is not configured with a safe URL")
+                job_settings.vector_store = server_kind
+                job_settings.vector_store_url = settings.vector_store_url
+                job_settings.vector_store_api_key = settings.vector_store_api_key
+            else:
+                if job_settings.mode != JobMode.CHUNK_AND_EMBED or job_settings.ingest_target != IngestTarget.QDRANT_CLOUD:
+                    raise HTTPException(status_code=400, detail="Worker Qdrant requires full processing and qdrant_cloud ingestion")
+                if job_settings.qdrant_url or job_settings.qdrant_api_key:
+                    raise HTTPException(status_code=400, detail="Worker Qdrant does not accept client credentials or URLs")
+                if not _worker_qdrant_available(settings):
+                    raise HTTPException(status_code=400, detail="Worker Qdrant is not configured with a safe URL and API key")
+                job_settings.qdrant_url = settings.qdrant_url
+                job_settings.qdrant_api_key = settings.qdrant_api_key
 
         original_name = file.filename or "upload.bin"
         job = store.create(original_name, job_settings)
@@ -649,6 +690,35 @@ def _log_startup(settings: Settings) -> None:
         gpu["arch_list"],
     )
 
+def _active_store(settings: Settings) -> str:
+    return (settings.vector_store or "qdrant").strip().lower() or "qdrant"
+
+
+def _store_endpoint(settings: Settings, collection: str):
+    from chunky_worker.vector_store import StoreEndpoint, StoreError, validate_store_url
+
+    kind = _active_store(settings)
+    try:
+        url = validate_store_url(kind, settings.vector_store_url)
+    except StoreError as exc:
+        from chunky_worker.search import SearchError
+
+        raise SearchError(str(exc), status_code=exc.status_code, error_type=exc.error_type) from None
+    return StoreEndpoint(url, settings.vector_store_api_key or "", collection, "cosine")
+
+
+def _store_collection_list(settings: Settings) -> dict:
+    from chunky_worker.vector_store import collection_names
+
+    return collection_names(_active_store(settings), _store_endpoint(settings, "documents"))
+
+
+def _store_collection_page(settings: Settings, collection: str, limit: int, offset: int) -> dict:
+    from chunky_worker.vector_store import collection_page
+
+    return collection_page(_active_store(settings), _store_endpoint(settings, collection), limit=limit, offset=offset, settings=settings)
+
+
 def _worker_qdrant_read_available(settings: Settings) -> bool:
     try:
         worker_read_target(settings)
@@ -673,6 +743,8 @@ def _job_payload(job: Job, *, include_embeddings: bool = True) -> dict:
         "error_type": job.error_type,
     }
     _reject_secret(body, job.settings.qdrant_api_key)
+    _reject_secret(body, job.settings.vector_store_api_key)
     if job.settings.use_worker_qdrant:
         body["settings"].pop("qdrant_url", None)
+        body["settings"].pop("vector_store_url", None)
     return body

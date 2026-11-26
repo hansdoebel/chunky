@@ -84,6 +84,9 @@ class SearchRequest(BaseModel):
     use_worker_qdrant: bool = False
     qdrant_url: str | None = None
     qdrant_api_key: str | None = Field(default=None, repr=False)
+    vector_store: str = ""
+    vector_store_url: str = ""
+    vector_store_api_key: str | None = Field(default=None, repr=False)
     embedding_model: str | None = None
     embedding_backend: str | None = None
     embedding_url: str | None = None
@@ -121,6 +124,19 @@ class SearchRequest(BaseModel):
         if len(value) != 2 or any(item < 0 for item in value):
             raise ValueError("rrf_weights must be two non-negative numbers")
         return value
+
+    @field_validator("vector_store")
+    @classmethod
+    def known_vector_store(cls, value: str) -> str:
+        text = (value or "").strip().lower()
+        if not text:
+            return ""
+        from chunky_worker.vector_store import StoreError, require_store
+
+        try:
+            return require_store(text)
+        except StoreError as exc:
+            raise ValueError(str(exc)) from None
 
     @field_validator("embedding_backend")
     @classmethod
@@ -539,6 +555,36 @@ def record_scope(filters: list[PayloadFilter], papers_first: bool) -> list[Paylo
         scoped.append(PayloadFilter(key="record_type", match="document", negate=True))
     return scoped
 
+def embed_query_vector(backend: EmbeddingBackend, model: str, text: str, api_key: str) -> list[float]:
+    try:
+        vectors = backend.embed([text], model)
+    except SearchError:
+        raise
+    except Exception as exc:
+        raise SearchError(
+            redact(f"Embedding request failed: {exc}", api_key),
+            status_code=502,
+            error_type="embedding_error",
+        ) from None
+    if len(vectors) != 1 or not isinstance(vectors[0], list) or not vectors[0]:
+        raise SearchError(
+            "Embedding backend returned no vector",
+            status_code=502,
+            error_type="embedding_error",
+        )
+    try:
+        vector = [float(value) for value in vectors[0]]
+    except (TypeError, ValueError):
+        raise SearchError(
+            "Embedding backend returned a non-numeric vector",
+            status_code=502,
+            error_type="embedding_error",
+        ) from None
+    if not all(math.isfinite(value) for value in vector):
+        raise SearchError("Embedding backend returned a non-finite vector", status_code=502, error_type="embedding_error")
+    return vector
+
+
 def run_search(
     request: SearchRequest,
     *,
@@ -546,6 +592,11 @@ def run_search(
     embeddings: EmbeddingBackend,
     searcher: QdrantSearcher,
 ) -> dict[str, Any]:
+    from chunky_worker.vector_store import resolve_search_store, search_collection
+
+    store_kind = resolve_search_store(request, settings)
+    if store_kind != "qdrant":
+        return search_collection(request, settings=settings, embeddings=embeddings, kind=store_kind)
     url, api_key = resolve_target(request, settings)
     collection = request.collection
     try:
@@ -589,32 +640,7 @@ def run_search(
                 "Use passage search or remove the DOI filter. Existing records were not changed.",
                 status_code=409, error_type="summary_doi_coverage_incomplete",
             )
-    try:
-        vectors = backend.embed([request.query], model)
-    except SearchError:
-        raise
-    except Exception as exc:
-        raise SearchError(
-            redact(f"Embedding request failed: {exc}", api_key),
-            status_code=502,
-            error_type="embedding_error",
-        ) from None
-    if len(vectors) != 1 or not isinstance(vectors[0], list) or not vectors[0]:
-        raise SearchError(
-            "Embedding backend returned no vector",
-            status_code=502,
-            error_type="embedding_error",
-        )
-    try:
-        vector = [float(value) for value in vectors[0]]
-    except (TypeError, ValueError):
-        raise SearchError(
-            "Embedding backend returned a non-numeric vector",
-            status_code=502,
-            error_type="embedding_error",
-        ) from None
-    if not all(math.isfinite(value) for value in vector):
-        raise SearchError("Embedding backend returned a non-finite vector", status_code=502, error_type="embedding_error")
+    vector = embed_query_vector(backend, model, request.query, api_key)
     expected_dimensions = expected_identity["dimensions"] if expected_identity is not None else layout.vector_size
     if expected_dimensions is not None and expected_dimensions != len(vector):
         raise SearchError(

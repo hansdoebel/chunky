@@ -19,6 +19,11 @@ def main() -> None:
     parser.add_argument("--host", default=os.environ.get("CHUNKY_WORKER_HOST", "127.0.0.1"))
     parser.add_argument("--port", type=int, default=int(os.environ.get("CHUNKY_WORKER_PORT", "8080")))
     parser.add_argument(
+        "--vector-store",
+        default=None,
+        help="Worker vector store (default: CHUNKY_VECTOR_STORE or qdrant).",
+    )
+    parser.add_argument(
         "--generate-token",
         action="store_true",
         help="Print a new bearer token and exit. Does not start the server.",
@@ -44,6 +49,14 @@ def main() -> None:
     settings = Settings.from_env()
     settings.host = args.host
     settings.port = args.port
+    if args.vector_store:
+        from chunky_worker.vector_store import StoreError, require_store
+
+        try:
+            settings.vector_store = require_store(args.vector_store)
+        except StoreError as exc:
+            print(str(exc), file=sys.stderr)
+            raise SystemExit(2) from exc
     try:
         require_token_when_exposed(settings)
     except BindWithoutTokenError as exc:
