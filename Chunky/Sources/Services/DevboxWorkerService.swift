@@ -1,4 +1,5 @@
 import Foundation
+import ChunkyVectorStore
 
 struct DevboxSSEEvent: Equatable {
     var type: String
@@ -171,6 +172,13 @@ enum DevboxJobPayload {
         if ingest == "qdrant_cloud" {
             body["qdrant_url"] = settings.qdrantCloudURL
             body["qdrant_api_key"] = settings.qdrantAPIKey
+            for (key, value) in WorkerStoreRequest.fields(
+                kind: settings.activeVectorStore,
+                url: settings.vectorStoreURL,
+                apiKey: settings.vectorStoreAPIKey
+            ) {
+                body[key] = value
+            }
         }
         if let offset = settings.journalPageOffset {
             body["page_offset"] = offset

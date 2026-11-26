@@ -1,5 +1,6 @@
 import SwiftUI
 import Combine
+import ChunkyVectorStore
 
 protocol SettingsSecretStore: AnyObject {
     func value(for key: String) -> String?
@@ -79,6 +80,20 @@ class AppSettings: ObservableObject {
     var qdrantURL: String {
         get { secret(KeychainService.qdrantURLKey, default: "http://localhost:6334") }
         set { setSecret(KeychainService.qdrantURLKey, newValue) }
+    }
+    @Published var vectorStoreKind: String {
+        didSet { defaults.set(vectorStoreKind, forKey: prefix + "vectorStore") }
+    }
+    var vectorStoreURL: String {
+        get { secret(KeychainService.vectorStoreURLKey) }
+        set { setSecret(KeychainService.vectorStoreURLKey, newValue) }
+    }
+    var vectorStoreAPIKey: String {
+        get { secret(KeychainService.vectorStoreAPIKeyKey) }
+        set { setSecret(KeychainService.vectorStoreAPIKeyKey, newValue) }
+    }
+    var activeVectorStore: VectorStoreKind {
+        VectorStoreKind.resolved(stored: vectorStoreKind)
     }
     @Published var defaultCollection: String {
         didSet { defaults.set(defaultCollection, forKey: prefix + "defaultCollection") }
@@ -464,6 +479,7 @@ class AppSettings: ObservableObject {
         self.embeddingConcurrency = defaults.object(forKey: prefix + "embeddingConcurrency") as? Int ?? 4
 
         self.defaultCollection = defaults.string(forKey: prefix + "defaultCollection") ?? "documents"
+        self.vectorStoreKind = defaults.string(forKey: prefix + "vectorStore") ?? VectorStoreKind.qdrant.rawValue
         self.qdrantBatchSize = defaults.object(forKey: prefix + "qdrantBatchSize") as? Int ?? 250
         self.qdrantTimeout = defaults.object(forKey: prefix + "qdrantTimeout") as? Int ?? 30
         self.qdrantDistanceMetric = defaults.string(forKey: prefix + "qdrantDistanceMetric") ?? DistanceMetric.cosine.rawValue

@@ -1,4 +1,5 @@
 import SwiftUI
+import ChunkyVectorStore
 
 struct CollectionBrowserView: View {
     @EnvironmentObject var appState: AppState
@@ -82,14 +83,17 @@ struct CollectionBrowserView: View {
                     .buttonStyle(.bordered)
                 Button("Move") { showMoveLibrary = true }
                     .buttonStyle(.bordered)
-                    .disabled(selectedIds.isEmpty)
+                    .disabled(selectedIds.isEmpty || !StoreCapabilities.of(appState.settings.activeVectorStore).tenantIndex)
                     .help("Move the selected points to the active library without embedding them again")
                 Button("Snapshots") { showSnapshots = true }
                     .buttonStyle(.bordered)
+                    .disabled(!StoreCapabilities.of(appState.settings.activeVectorStore).snapshots)
                 Button("Health") { showHealth = true }
                     .buttonStyle(.bordered)
+                    .disabled(!StoreCapabilities.of(appState.settings.activeVectorStore).snapshots)
                 Button("Packing") { showPacking = true }
                     .buttonStyle(.bordered)
+                    .disabled(!StoreCapabilities.of(appState.settings.activeVectorStore).quantization)
                 Button(action: { Task { await appState.loadBrowserPoints() } }) {
                     Image(systemName: "arrow.clockwise")
                         .foregroundStyle(.secondary)

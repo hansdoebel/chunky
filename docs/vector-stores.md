@@ -93,6 +93,8 @@ docker run -d --name chunky-pgvector \
 
 The connection URL is `postgresql://chunky:chunky@127.0.0.1:5432/chunks`. It belongs in the Keychain, not in the repo.
 
+Preferences has a Vector store picker. Qdrant is the default and keeps the existing gRPC URL and API key. pgvector saves a `postgresql://` URL in the Keychain. Weaviate, Milvus, and Chroma save an HTTP URL and API key in the Keychain and are used when Processing host is Devbox. Snapshots, the local Qdrant runtime, papers-first search, section expansion, tenant moves, and quantization stay disabled unless the store is Qdrant.
+
 Dense query uses cosine distance, L2, or inner product. Hybrid query fuses that ranking with a `simple` text search over `text` and `embedding_text` using reciprocal rank fusion. Filters become JSONB predicates. A collection whose width or distance does not match the request is refused.
 
 Unit tests inject a client. They do not start Postgres, Weaviate, Milvus, Chroma, or Qdrant.

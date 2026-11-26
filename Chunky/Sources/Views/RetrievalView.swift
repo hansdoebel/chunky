@@ -1,4 +1,5 @@
 import SwiftUI
+import ChunkyVectorStore
 
 struct RAGAnswerText: View {
     var text: String
@@ -118,6 +119,7 @@ struct RetrievalPlayground: View {
     var onSelectCitation: (RAGCitation) -> Void
     var onShowPDF: (RetrievalHit) -> Void = { _ in }
     var embeddingProblem: String? = nil
+    var storeCapabilities: StoreCapabilities = StoreCapabilities.of(.qdrant)
 
     var body: some View {
         HStack(alignment: .top, spacing: 0) {
@@ -151,7 +153,7 @@ struct RetrievalPlayground: View {
                 .padding(.vertical, 3)
                 .background(AppTheme.badgeBackgroundActive, in: Capsule())
             Picker("Mode", selection: $mode) {
-                ForEach(RetrievalMode.allCases) { item in
+                ForEach(RetrievalMode.allCases.filter { storeCapabilities.hybrid || $0 != .hybrid }) { item in
                     Text(item.displayName).tag(item.rawValue)
                 }
             }
@@ -256,10 +258,12 @@ struct RetrievalPlayground: View {
                 Text("formula").tag("formula")
             }
             Toggle("Papers first", isOn: $papersFirst)
+                .disabled(!storeCapabilities.papersFirst)
             if papersFirst {
                 Toggle("Expand to chunks", isOn: $expandPapers)
             }
             Toggle("Expand to section", isOn: $expandSection)
+                .disabled(!storeCapabilities.sectionExpansion)
             if expandSection {
                 TextField("Sibling ratio", text: $sectionRatio, prompt: Text("0.5"))
                     .textFieldStyle(.roundedBorder)
@@ -513,6 +517,7 @@ struct RetrievalScreen: View {
             libraryList: $libraryList,
             libraries: PaperLibrary.load(appState.settings.paperLibrariesJSON),
             papersFirst: $papersFirst,
+            storeCapabilities: StoreCapabilities.of(appState.settings.activeVectorStore),
             expandPapers: $expandPapers,
             expandSection: $expandSection,
             sectionRatio: $sectionRatio,
