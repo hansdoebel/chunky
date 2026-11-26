@@ -801,3 +801,12 @@ def _open_qdrant(**kwargs: Any) -> QdrantVectorStore:
 
 
 register_vector_store("qdrant", _open_qdrant)
+
+
+def _load_adapters() -> None:
+    from chunky_worker import pgvector_store as _pgvector_store
+
+    register_vector_store("pgvector", _pgvector_store.open_pgvector)
+
+
+_load_adapters()

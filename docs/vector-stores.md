@@ -37,7 +37,7 @@ Sources: [Soba Labs, 17 November 2026](https://sobalabs.ai/blog/most-used-vector
 
 ## Worker contract
 
-Qdrant is the registered store. pgvector, Milvus, Chroma, and Weaviate register on this same contract.
+Qdrant and pgvector are the registered stores. Milvus, Chroma, and Weaviate register on this same contract.
 
 `chunky_worker.vector_store` is the seam. A store describes a collection, upserts points (`id`, dense vector, payload), runs a dense query, lists collections, and scrolls a page of payloads. Hybrid query is optional. Filters use the same shape as `POST /v1/search`: match, text, any, empty, range, negate, and should. Qdrant implements the contract by delegating to the existing ingestor and searcher. The production Qdrant job and search path still calls those clients directly, so quantization, on-disk tiers, BM25 indexes, collection identity, papers-first, and section expansion are unchanged.
 
@@ -63,5 +63,11 @@ These stay on Qdrant until a store grows an equivalent that the app can trust:
 - Papers-first search, document summaries as a query mode, and section expansion.
 - Element-type alias expansion and the tenant payload index.
 - Verification's stored-point read and retrieval self-test.
+
+## pgvector
+
+`CHUNKY_VECTOR_STORE=pgvector` and `CHUNKY_VECTOR_STORE_URL=postgresql://...`. The URL may carry the database user and password; it is not returned on job responses. Install `psycopg[binary]` on the worker. The adapter creates `vector` if the role is allowed to, a `chunky_<collection>` table, an HNSW index, and a `chunky_collection_meta` row with the width and distance (`cosine`, `dot`, or `euclid`).
+
+Dense query uses cosine distance, L2, or inner product. Hybrid query fuses that ranking with a `simple` text search over `text` and `embedding_text` using reciprocal rank fusion. Filters become JSONB predicates. A collection whose width or distance does not match the request is refused.
 
 Unit tests inject a client. They do not start Postgres, Weaviate, Milvus, Chroma, or Qdrant.
