@@ -80,6 +80,19 @@ These stay on Qdrant until a store grows an equivalent that the app can trust:
 
 `CHUNKY_VECTOR_STORE=pgvector` and `CHUNKY_VECTOR_STORE_URL=postgresql://...`. The URL may carry the database user and password; it is not returned on job responses. Install `psycopg[binary]` on the worker. The adapter creates `vector` if the role is allowed to, a `chunky_<collection>` table, an HNSW index, and a `chunky_collection_meta` row with the width and distance (`cosine`, `dot`, or `euclid`).
 
+The Mac app uses the same SQL through `LocalPackages/ChunkyVectorStore` and PostgresNIO, so a local job does not need the worker. A local server:
+
+```bash
+docker run -d --name chunky-pgvector \
+  -p 127.0.0.1:5432:5432 \
+  -e POSTGRES_USER=chunky \
+  -e POSTGRES_PASSWORD=chunky \
+  -e POSTGRES_DB=chunks \
+  pgvector/pgvector:pg17
+```
+
+The connection URL is `postgresql://chunky:chunky@127.0.0.1:5432/chunks`. It belongs in the Keychain, not in the repo.
+
 Dense query uses cosine distance, L2, or inner product. Hybrid query fuses that ranking with a `simple` text search over `text` and `embedding_text` using reciprocal rank fusion. Filters become JSONB predicates. A collection whose width or distance does not match the request is refused.
 
 Unit tests inject a client. They do not start Postgres, Weaviate, Milvus, Chroma, or Qdrant.
